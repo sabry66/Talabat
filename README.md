@@ -31,6 +31,7 @@ python3 -m http.server 8000 -d public
 - Cloud Firestore لقاعدة البيانات اللحظية.
 - Firebase Hosting للاستضافة.
 - Leaflet + OpenStreetMap للخريطة.
+- خط Cairo جوه المشروع في `public/fonts` (رخصة OFL المجانية)، فمش محتاج Google Fonts.
 
 ## هيكل المشروع
 

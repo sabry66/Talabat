@@ -1,3 +1,12 @@
+/* خط Cairo متضمن في المشروع (رخصة OFL في fonts/OFL.txt) — كل الأوزان من 200 لـ 1000 في ملف واحد */
+@font-face {
+  font-family: 'Cairo';
+  src: url('../fonts/Cairo-Variable.woff2') format('woff2');
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --brand: #ff5a00;
   --brand-dark: #e04e00;
