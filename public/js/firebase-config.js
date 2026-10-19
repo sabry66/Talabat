@@ -5,12 +5,12 @@
 // طول ما apiKey فاضي، التطبيق بيشتغل في "الوضع التجريبي": كل البيانات بتتحفظ في المتصفح بس.
 // القيم دي مش سرية، عادي تتحط في الكود؛ الحماية الحقيقية في ملف firestore.rules.
 export const firebaseConfig = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyBnQ1Bgug3kQw6pScivzgD85oar3Z5C-Bs',
+  authDomain: 'arrivo-932e4.firebaseapp.com',
+  projectId: 'arrivo-932e4',
+  storageBucket: 'arrivo-932e4.firebasestorage.app',
+  messagingSenderId: '827504796401',
+  appId: '1:827504796401:web:3f3dfbc6e0f64dc4893f50',
 };
 
 // للمطورين: true لتشغيل التطبيق على Firebase Emulators على جهازك
