@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>طلباتي - اطلب أكلك المفضل</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a href="#/" class="logo">طلباتي<span>.</span></a>
+      <button class="address-btn" id="addressBtn" type="button">
+        <span class="muted">التوصيل إلى</span>
+        <strong id="addressLabel">القاهرة، مدينة نصر</strong>
+      </button>
+      <nav class="nav">
+        <a href="#/orders" class="nav-link">طلباتي</a>
+        <a href="#/cart" class="cart-link" aria-label="السلة">
+          🛒 <span class="badge" id="cartCount">0</span>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="app" class="container"></main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <footer class="footer">
+    <div class="container">© طلباتي — نموذج تجريبي لتطبيق توصيل طلبات</div>
+  </footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

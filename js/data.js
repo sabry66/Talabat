@@ -1,0 +1,160 @@
+// بيانات تجريبية للمطاعم والمنيو
+const CATEGORIES = [
+  { id: 'all', name: 'الكل', icon: '🍽️' },
+  { id: 'burger', name: 'برجر', icon: '🍔' },
+  { id: 'pizza', name: 'بيتزا', icon: '🍕' },
+  { id: 'shawarma', name: 'شاورما', icon: '🌯' },
+  { id: 'egyptian', name: 'أكل مصري', icon: '🥘' },
+  { id: 'chicken', name: 'فراخ', icon: '🍗' },
+  { id: 'sweets', name: 'حلويات', icon: '🍰' },
+  { id: 'coffee', name: 'قهوة', icon: '☕' },
+  { id: 'grocery', name: 'بقالة', icon: '🛒' },
+];
+
+const RESTAURANTS = [
+  {
+    id: 'burger-house', name: 'بيت البرجر', category: 'burger', emoji: '🍔', color: '#ffe3d1',
+    rating: 4.6, reviews: 1240, time: [25, 35], deliveryFee: 15, minOrder: 80,
+    tags: ['برجر', 'وجبات سريعة'], promo: 'خصم 20% على أول طلب',
+    menu: [
+      { section: 'الأكثر طلبًا', items: [
+        { id: 'bh1', name: 'كلاسيك برجر', desc: 'لحم بقري 150 جم، جبنة شيدر، خس، طماطم وصوص خاص', price: 120, emoji: '🍔' },
+        { id: 'bh2', name: 'دبل تشيز برجر', desc: 'قطعتين لحم، جبنة مضاعفة، بصل مكرمل', price: 175, emoji: '🍔' },
+      ]},
+      { section: 'برجر فراخ', items: [
+        { id: 'bh3', name: 'كرسبي تشيكن', desc: 'صدر فراخ مقرمش، كول سلو، صوص رانش', price: 110, emoji: '🍗' },
+        { id: 'bh4', name: 'سبايسي تشيكن', desc: 'فراخ حارة، هالبينو، جبنة', price: 115, emoji: '🌶️' },
+      ]},
+      { section: 'إضافات ومشروبات', items: [
+        { id: 'bh5', name: 'بطاطس كبيرة', desc: 'بطاطس مقرمشة مع ملح البحر', price: 40, emoji: '🍟' },
+        { id: 'bh6', name: 'حلقات بصل', desc: '8 قطع مع صوص باربكيو', price: 45, emoji: '🧅' },
+        { id: 'bh7', name: 'مشروب غازي', desc: 'كانز 330 مل', price: 20, emoji: '🥤' },
+      ]},
+    ],
+  },
+  {
+    id: 'pizza-roma', name: 'بيتزا روما', category: 'pizza', emoji: '🍕', color: '#ffd9d9',
+    rating: 4.4, reviews: 980, time: [30, 45], deliveryFee: 10, minOrder: 100,
+    tags: ['بيتزا', 'إيطالي'], promo: 'توصيل مجاني فوق 250 ج',
+    menu: [
+      { section: 'بيتزا', items: [
+        { id: 'pr1', name: 'مارجريتا', desc: 'صوص طماطم، موتزاريلا، ريحان', price: 130, emoji: '🍕' },
+        { id: 'pr2', name: 'بيبروني', desc: 'بيبروني بقري، موتزاريلا', price: 160, emoji: '🍕' },
+        { id: 'pr3', name: 'خضروات', desc: 'فلفل، زيتون، مشروم، بصل', price: 140, emoji: '🫑' },
+        { id: 'pr4', name: 'سي فود', desc: 'جمبري، كاليماري، تونة', price: 210, emoji: '🦐' },
+      ]},
+      { section: 'باستا', items: [
+        { id: 'pr5', name: 'ألفريدو فراخ', desc: 'فيتوتشيني بصوص كريمة وفراخ', price: 125, emoji: '🍝' },
+        { id: 'pr6', name: 'أرابياتا', desc: 'بيني بصوص طماطم حار', price: 95, emoji: '🍝' },
+      ]},
+    ],
+  },
+  {
+    id: 'shawarma-sham', name: 'شاورما الشام', category: 'shawarma', emoji: '🌯', color: '#fff0c7',
+    rating: 4.7, reviews: 2210, time: [20, 30], deliveryFee: 12, minOrder: 60,
+    tags: ['شاورما', 'سوري'], promo: null,
+    menu: [
+      { section: 'سندوتشات', items: [
+        { id: 'ss1', name: 'شاورما فراخ', desc: 'صاج، ثومية، مخلل', price: 55, emoji: '🌯' },
+        { id: 'ss2', name: 'شاورما لحمة', desc: 'صاج، طحينة، بقدونس', price: 70, emoji: '🌯' },
+        { id: 'ss3', name: 'فاهيتا', desc: 'فراخ متبلة، فلفل ألوان', price: 65, emoji: '🌮' },
+      ]},
+      { section: 'وجبات', items: [
+        { id: 'ss4', name: 'وجبة عربي فراخ', desc: 'شاورما مقطعة، بطاطس، ثومية، مخلل', price: 135, emoji: '🍽️' },
+        { id: 'ss5', name: 'فتة شاورما', desc: 'عيش محمص، أرز، صوص زبادي', price: 120, emoji: '🥣' },
+      ]},
+    ],
+  },
+  {
+    id: 'koshary-tahrir', name: 'كشري التحرير', category: 'egyptian', emoji: '🥘', color: '#e5f3d6',
+    rating: 4.5, reviews: 3100, time: [15, 25], deliveryFee: 8, minOrder: 40,
+    tags: ['كشري', 'أكل مصري'], promo: 'اطلب 2 والتالت هدية',
+    menu: [
+      { section: 'كشري', items: [
+        { id: 'kt1', name: 'كشري صغير', desc: 'أرز، مكرونة، عدس، صلصة، دقة', price: 30, emoji: '🥘' },
+        { id: 'kt2', name: 'كشري وسط', desc: 'الحجم المتوسط', price: 40, emoji: '🥘' },
+        { id: 'kt3', name: 'كشري كبير', desc: 'الحجم الكبير مع بصل زيادة', price: 55, emoji: '🥘' },
+      ]},
+      { section: 'حلو', items: [
+        { id: 'kt4', name: 'أرز بلبن', desc: 'بالمكسرات', price: 25, emoji: '🍮' },
+        { id: 'kt5', name: 'أم علي', desc: 'ساخنة بالقشطة', price: 35, emoji: '🥧' },
+      ]},
+    ],
+  },
+  {
+    id: 'crispy-chicken', name: 'كرسبي تشيكن', category: 'chicken', emoji: '🍗', color: '#fde2c4',
+    rating: 4.2, reviews: 760, time: [25, 40], deliveryFee: 15, minOrder: 90,
+    tags: ['فراخ', 'مقلي'], promo: null,
+    menu: [
+      { section: 'بوكسات', items: [
+        { id: 'cc1', name: 'بوكس 3 قطع', desc: '3 قطع فراخ، بطاطس، عيش، كول سلو', price: 115, emoji: '🍗' },
+        { id: 'cc2', name: 'بوكس 5 قطع', desc: '5 قطع فراخ، بطاطس كبيرة، 2 صوص', price: 170, emoji: '🍗' },
+        { id: 'cc3', name: 'استربس', desc: '6 قطع استربس مع صوص عسل وخردل', price: 105, emoji: '🍖' },
+      ]},
+      { section: 'عائلي', items: [
+        { id: 'cc4', name: 'باكت عائلي', desc: '12 قطعة، 2 بطاطس كبيرة، لتر بيبسي', price: 420, emoji: '🪣' },
+      ]},
+    ],
+  },
+  {
+    id: 'sweet-corner', name: 'ركن الحلويات', category: 'sweets', emoji: '🍰', color: '#f6dcf0',
+    rating: 4.8, reviews: 540, time: [30, 50], deliveryFee: 20, minOrder: 70,
+    tags: ['حلويات', 'كيك'], promo: 'خصم 15% يوم الجمعة',
+    menu: [
+      { section: 'كيك', items: [
+        { id: 'sc1', name: 'تشيز كيك', desc: 'بصوص الفراولة', price: 65, emoji: '🍰' },
+        { id: 'sc2', name: 'براونيز', desc: 'شوكولاتة غنية', price: 50, emoji: '🍫' },
+      ]},
+      { section: 'شرقي', items: [
+        { id: 'sc3', name: 'كنافة بالمانجو', desc: 'كنافة نابلسية بالمانجو والقشطة', price: 80, emoji: '🥭' },
+        { id: 'sc4', name: 'بسبوسة بالقشطة', desc: '4 قطع', price: 45, emoji: '🍯' },
+      ]},
+    ],
+  },
+  {
+    id: 'bean-cafe', name: 'بين كافيه', category: 'coffee', emoji: '☕', color: '#eadfd6',
+    rating: 4.3, reviews: 410, time: [15, 25], deliveryFee: 10, minOrder: 50,
+    tags: ['قهوة', 'مشروبات'], promo: null,
+    menu: [
+      { section: 'قهوة ساخنة', items: [
+        { id: 'bc1', name: 'لاتيه', desc: 'إسبريسو وحليب مبخر', price: 55, emoji: '☕' },
+        { id: 'bc2', name: 'كابتشينو', desc: 'رغوة كثيفة', price: 55, emoji: '☕' },
+        { id: 'bc3', name: 'قهوة تركي', desc: 'مظبوط أو زيادة', price: 35, emoji: '🫖' },
+      ]},
+      { section: 'مشروبات باردة', items: [
+        { id: 'bc4', name: 'آيس لاتيه', desc: 'قهوة مثلجة بالحليب', price: 60, emoji: '🧋' },
+        { id: 'bc5', name: 'سموذي فراولة', desc: 'فراولة طازة وزبادي', price: 65, emoji: '🍓' },
+      ]},
+    ],
+  },
+  {
+    id: 'quick-mart', name: 'كويك ماركت', category: 'grocery', emoji: '🛒', color: '#d8ecf7',
+    rating: 4.1, reviews: 300, time: [20, 30], deliveryFee: 5, minOrder: 100,
+    tags: ['بقالة', 'سوبر ماركت'], promo: 'توصيل في 30 دقيقة',
+    menu: [
+      { section: 'أساسيات', items: [
+        { id: 'qm1', name: 'لبن 1 لتر', desc: 'كامل الدسم', price: 38, emoji: '🥛' },
+        { id: 'qm2', name: 'عيش فينو', desc: '5 أرغفة', price: 15, emoji: '🥖' },
+        { id: 'qm3', name: 'بيض 10 حبات', desc: 'بيض أبيض', price: 55, emoji: '🥚' },
+      ]},
+      { section: 'خضار وفاكهة', items: [
+        { id: 'qm4', name: 'طماطم 1 كيلو', desc: 'طازة', price: 20, emoji: '🍅' },
+        { id: 'qm5', name: 'موز 1 كيلو', desc: 'مستورد', price: 35, emoji: '🍌' },
+      ]},
+    ],
+  },
+];
+
+// أكواد الخصم: نسبة مئوية أو مبلغ ثابت
+const PROMO_CODES = {
+  TALABAT20: { type: 'percent', value: 20, label: 'خصم 20%' },
+  WELCOME50: { type: 'fixed', value: 50, label: 'خصم 50 ج' },
+  FREEDEL: { type: 'delivery', value: 0, label: 'توصيل مجاني' },
+};
+
+const ORDER_STATUSES = [
+  { key: 'placed', label: 'تم استلام الطلب', icon: '📝' },
+  { key: 'preparing', label: 'جاري التحضير', icon: '👨‍🍳' },
+  { key: 'on_way', label: 'في الطريق إليك', icon: '🛵' },
+  { key: 'delivered', label: 'تم التوصيل', icon: '✅' },
+];
