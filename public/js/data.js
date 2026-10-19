@@ -1,5 +1,5 @@
-// بيانات تجريبية للمطاعم والمنيو
-const CATEGORIES = [
+// بيانات ثابتة: التصنيفات، المطاعم التجريبية، أكواد الخصم، وحالات الطلب
+export const CATEGORIES = [
   { id: 'all', name: 'الكل', icon: '🍽️' },
   { id: 'burger', name: 'برجر', icon: '🍔' },
   { id: 'pizza', name: 'بيتزا', icon: '🍕' },
@@ -11,7 +11,8 @@ const CATEGORIES = [
   { id: 'grocery', name: 'بقالة', icon: '🛒' },
 ];
 
-const RESTAURANTS = [
+// المطاعم التجريبية: بتتضاف تلقائيًا في الوضع التجريبي، أو من لوحة الأدمن بزرار واحد
+export const SEED_RESTAURANTS = [
   {
     id: 'burger-house', name: 'بيت البرجر', category: 'burger', emoji: '🍔', color: '#ffe3d1',
     rating: 4.6, reviews: 1240, time: [25, 35], deliveryFee: 15, minOrder: 80,
@@ -146,15 +147,33 @@ const RESTAURANTS = [
 ];
 
 // أكواد الخصم: نسبة مئوية أو مبلغ ثابت
-const PROMO_CODES = {
+export const PROMO_CODES = {
   TALABAT20: { type: 'percent', value: 20, label: 'خصم 20%' },
   WELCOME50: { type: 'fixed', value: 50, label: 'خصم 50 ج' },
   FREEDEL: { type: 'delivery', value: 0, label: 'توصيل مجاني' },
 };
 
-const ORDER_STATUSES = [
-  { key: 'placed', label: 'تم استلام الطلب', icon: '📝' },
-  { key: 'preparing', label: 'جاري التحضير', icon: '👨‍🍳' },
-  { key: 'on_way', label: 'في الطريق إليك', icon: '🛵' },
-  { key: 'delivered', label: 'تم التوصيل', icon: '✅' },
-];
+export const ORDER_STATUSES = {
+  placed: { label: 'تم استلام الطلب', icon: '📝' },
+  preparing: { label: 'جاري التحضير', icon: '👨‍🍳' },
+  on_way: { label: 'في الطريق إليك', icon: '🛵' },
+  delivered: { label: 'تم التوصيل', icon: '✅' },
+  cancelled: { label: 'ملغي', icon: '❌' },
+  rejected: { label: 'اعتذر المطعم', icon: '🚫' },
+};
+
+// مراحل الطلب الطبيعية بالترتيب
+export const ORDER_FLOW = ['placed', 'preparing', 'on_way', 'delivered'];
+export const FINAL_STATUSES = ['delivered', 'cancelled', 'rejected'];
+
+export const PAYMENT_LABELS = {
+  cash: '💵 كاش عند الاستلام',
+  card: '💳 بطاقة عند الاستلام (ماكينة مع المندوب)',
+};
+
+export const NEW_RESTAURANT = {
+  name: '', emoji: '🍽️', color: '#ffe3d1', category: 'burger', tags: [],
+  rating: null, reviews: 0, time: [20, 35], deliveryFee: 10, minOrder: 50, promo: '',
+  isOpen: true, ownerUid: null, ownerEmail: null,
+  menu: [{ section: 'الأصناف', items: [] }],
+};

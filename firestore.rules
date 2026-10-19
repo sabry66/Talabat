@@ -1,0 +1,82 @@
+rules_version = '2';
+
+// قواعد الحماية: مين يقدر يقرا ويكتب إيه في قاعدة البيانات.
+// - أي حد يشوف المطاعم والمنيو.
+// - العميل يشوف طلباته بس، ويقدر يلغي الطلب قبل ما المطعم يقبله.
+// - صاحب المطعم يشوف طلبات مطعمه بس، ويغير حالتها ويعدل المنيو.
+// - الأدمن يقدر يعمل كل حاجة.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function changedOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // أي حساب جديد بيبدأ عميل؛ الأدمن بس اللي يغير الدور
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'customer'
+        && request.resource.data.get('restaurantId', null) == null
+        && request.resource.data.email == request.auth.token.email.lower();
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid && changedOnly(['name', 'phone', 'address', 'location']));
+      allow delete: if isAdmin();
+    }
+
+    match /restaurants/{restaurantId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        || (signedIn()
+            && resource.data.get('ownerUid', null) == request.auth.uid
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                 .hasAny(['ownerUid', 'ownerEmail', 'rating', 'reviews']));
+    }
+
+    match /orders/{orderId} {
+      function restaurant() {
+        return get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data;
+      }
+
+      allow read: if signedIn() && (
+        resource.data.customerUid == request.auth.uid
+        || resource.data.ownerUid == request.auth.uid
+        || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.customerUid == request.auth.uid
+        && request.resource.data.status == 'placed'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.lines is list
+        && request.resource.data.lines.size() > 0
+        && request.resource.data.lines.size() <= 50
+        && exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
+        && restaurant().get('isOpen', true) == true
+        && request.resource.data.ownerUid == restaurant().get('ownerUid', null);
+
+      allow update: if isAdmin()
+        // صاحب المطعم: يغير الحالة بس
+        || (signedIn()
+            && resource.data.ownerUid == request.auth.uid
+            && changedOnly(['status', 'statusHistory', 'updatedAt'])
+            && request.resource.data.status in ['preparing', 'on_way', 'delivered', 'rejected'])
+        // العميل: يلغي قبل ما المطعم يقبل
+        || (signedIn()
+            && resource.data.customerUid == request.auth.uid
+            && resource.data.status == 'placed'
+            && request.resource.data.status == 'cancelled'
+            && changedOnly(['status', 'statusHistory', 'updatedAt']));
+    }
+  }
+}

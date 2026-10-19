@@ -1,0 +1,642 @@
+// تطبيق العميل: المطاعم، المنيو، السلة، الطلب، والتتبع (hash routing)
+import { backend, isDemo } from './backend/index.js';
+import { CATEGORIES, PROMO_CODES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
+import { Cart } from './cart.js';
+import { locationPicker } from './map.js';
+import {
+  fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
+  loader, demoBanner, renderAuthForm,
+} from './ui.js';
+
+const app = document.getElementById('app');
+
+// user: undefined = لسه بيحمّل، null = مش مسجل
+const state = { user: undefined, restaurants: null };
+// حالة صفحة الرئيسية (بحث / تصنيف / ترتيب)
+const ui = { query: '', category: 'all', sort: 'recommended' };
+let page = '';
+let cleanup = null;
+
+const findRestaurant = (id) => (state.restaurants || []).find((r) => r.id === id);
+const cartRestaurant = () => findRestaurant(Cart.restaurantId);
+
+function setCleanup(fn) {
+  if (cleanup) cleanup();
+  cleanup = fn;
+}
+
+// ---------- الهيدر ----------
+
+function updateHeader() {
+  document.getElementById('cartCount').textContent = Cart.count();
+  const u = state.user;
+  document.getElementById('addressLabel').textContent = u?.address || 'حدد عنوانك عند الطلب';
+  document.getElementById('userNav').innerHTML = u
+    ? `${u.role === 'admin' ? '<a href="admin.html" class="nav-link">🛠️ الأدمن</a>' : ''}
+       ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
+       <a href="#/orders" class="nav-link">طلباتي</a>
+       <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}</a>`
+    : u === null ? '<a href="#/login" class="nav-link">دخول</a>' : '';
+}
+
+// ---------- الرئيسية ----------
+
+function renderHome() {
+  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  const q = ui.query.trim();
+  let list = state.restaurants.filter((r) =>
+    (ui.category === 'all' || r.category === ui.category) &&
+    (!q || r.name.includes(q) || (r.tags || []).some((t) => t.includes(q)) ||
+      r.menu.some((s) => s.items.some((i) => i.name.includes(q)))));
+  if (ui.sort === 'rating') list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  if (ui.sort === 'time') list.sort((a, b) => a.time[0] - b.time[0]);
+  if (ui.sort === 'fee') list.sort((a, b) => a.deliveryFee - b.deliveryFee);
+  list.sort((a, b) => (b.isOpen !== false) - (a.isOpen !== false));
+
+  app.innerHTML = `
+    ${demoBanner(isDemo)}
+    <section class="hero">
+      <h1>جعان؟ اطلب أكلك المفضل وهيوصلك لحد الباب 🛵</h1>
+      <div class="search">
+        <input id="search" type="search" placeholder="دوّر على مطعم أو أكلة..." value="${esc(ui.query)}" autocomplete="off">
+      </div>
+    </section>
+
+    <section class="cats">
+      ${CATEGORIES.map((c) => `
+        <button class="cat ${ui.category === c.id ? 'active' : ''}" data-cat="${c.id}" type="button">
+          <span class="cat-icon">${c.icon}</span><span>${c.name}</span>
+        </button>`).join('')}
+    </section>
+
+    <div class="list-head">
+      <h2>${list.length} مطعم</h2>
+      <select id="sort" aria-label="ترتيب">
+        ${[['recommended', 'المقترح'], ['rating', 'الأعلى تقييمًا'], ['time', 'الأسرع توصيلًا'], ['fee', 'أقل رسوم توصيل']]
+          .map(([v, l]) => `<option value="${v}" ${ui.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+    </div>
+
+    <section class="grid">
+      ${list.length ? list.map(restaurantCard).join('')
+        : `<p class="empty">${state.restaurants.length ? 'مفيش نتائج مطابقة 😕' : 'مفيش مطاعم لسه. الأدمن يقدر يضيف مطاعم من لوحة الأدمن.'}</p>`}
+    </section>`;
+
+  document.getElementById('search').addEventListener('input', (e) => {
+    ui.query = e.target.value;
+    const pos = e.target.selectionStart;
+    renderHome();
+    const s = document.getElementById('search');
+    s.focus();
+    s.setSelectionRange(pos, pos);
+  });
+  app.querySelectorAll('.cat').forEach((b) => b.addEventListener('click', () => { ui.category = b.dataset.cat; renderHome(); }));
+  document.getElementById('sort').addEventListener('change', (e) => { ui.sort = e.target.value; renderHome(); });
+}
+
+function restaurantCard(r) {
+  const closed = r.isOpen === false;
+  return `
+    <a class="card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
+      <div class="card-cover" style="background:${esc(r.color)}">${esc(r.emoji)}
+        ${closed ? '<span class="closed-tag">مغلق الآن</span>' : r.promo ? `<span class="promo">${esc(r.promo)}</span>` : ''}
+      </div>
+      <div class="card-body">
+        <div class="card-title">
+          <h3>${esc(r.name)}</h3>
+          <span class="rating">${r.rating ? `⭐ ${r.rating}` : '🆕 جديد'}</span>
+        </div>
+        <p class="muted">${esc((r.tags || []).join(' • '))}</p>
+        <p class="meta">🕒 ${r.time[0]}-${r.time[1]} دقيقة • 🛵 ${fmt(r.deliveryFee)}</p>
+      </div>
+    </a>`;
+}
+
+// ---------- صفحة المطعم ----------
+
+function renderRestaurant(id) {
+  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  const r = findRestaurant(id);
+  if (!r) return renderNotFound();
+  const closed = r.isOpen === false;
+  const inCart = Cart.restaurantId === r.id;
+
+  app.innerHTML = `
+    <a href="#/" class="back">→ رجوع للمطاعم</a>
+    <section class="rest-header" style="background:${esc(r.color)}">
+      <div class="rest-emoji">${esc(r.emoji)}</div>
+      <div>
+        <h1>${esc(r.name)}</h1>
+        <p>${esc((r.tags || []).join(' • '))}</p>
+        <p class="meta">${r.rating ? `⭐ ${r.rating} (${Number(r.reviews || 0).toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة • 🛵 ${fmt(r.deliveryFee)} • الحد الأدنى ${fmt(r.minOrder)}</p>
+        ${r.promo ? `<span class="promo static">${esc(r.promo)}</span>` : ''}
+      </div>
+    </section>
+    ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>' : ''}
+
+    <nav class="sections-nav">
+      ${r.menu.map((s, i) => `<a href="#sec-${i}" data-scroll="sec-${i}">${esc(s.section)}</a>`).join('')}
+    </nav>
+
+    <div class="menu-layout">
+      <div class="menu">
+        ${r.menu.map((s, i) => `
+          <section class="menu-section" id="sec-${i}">
+            <h2>${esc(s.section)}</h2>
+            ${s.items.map((it) => {
+              const qty = inCart ? Cart.qty(it.id) : 0;
+              const can = !closed && isAvailable(it);
+              return `
+              <div class="item ${isAvailable(it) ? '' : 'unavailable'}">
+                <div class="item-info">
+                  <h3>${esc(it.name)}</h3>
+                  <p class="muted">${esc(it.desc)}</p>
+                  <strong>${fmt(it.price)}</strong>
+                </div>
+                <div class="item-side">
+                  <div class="item-img">${esc(it.emoji)}</div>
+                  ${!isAvailable(it) ? '<span class="muted small">غير متاح</span>'
+                    : qty ? `<div class="qty">
+                         <button data-dec="${it.id}" type="button" aria-label="نقص">−</button>
+                         <span>${qty}</span>
+                         <button data-inc="${it.id}" type="button" aria-label="زود" ${can ? '' : 'disabled'}>+</button>
+                       </div>`
+                    : `<button class="add-btn" data-add="${it.id}" type="button" ${can ? '' : 'disabled'}>+ إضافة</button>`}
+                </div>
+              </div>`;
+            }).join('')}
+          </section>`).join('')}
+      </div>
+      <aside class="side-cart">${miniCart()}</aside>
+    </div>`;
+
+  app.querySelectorAll('[data-scroll]').forEach((a) => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById(a.dataset.scroll).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+
+  const rerender = () => {
+    const y = window.scrollY;
+    renderRestaurant(id);
+    window.scrollTo(0, y);
+  };
+
+  app.querySelectorAll('[data-add], [data-inc]').forEach((b) => b.addEventListener('click', () => {
+    const itemId = b.dataset.add || b.dataset.inc;
+    if (!Cart.add(r.id, itemId)) {
+      const other = cartRestaurant();
+      if (!confirm(`السلة فيها أصناف من "${other?.name || 'مطعم تاني'}". تحب تفضّيها وتبدأ طلب جديد من "${r.name}"؟`)) return;
+      Cart.add(r.id, itemId, true);
+    }
+    toast('تمت الإضافة للسلة ✅');
+    rerender();
+  }));
+  app.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
+    Cart.setQty(b.dataset.dec, Cart.qty(b.dataset.dec) - 1);
+    rerender();
+  }));
+}
+
+function miniCart() {
+  const r = cartRestaurant();
+  const lines = Cart.lines(r);
+  if (!lines.length) return '<h3>سلتك</h3><p class="muted">السلة فاضية. ضيف أصناف من المنيو.</p>';
+  const t = Cart.totals(r);
+  return `
+    <h3>سلتك من ${esc(r.name)}</h3>
+    ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
+    <div class="mini-line total"><span>المجموع الفرعي</span><span>${fmt(t.subtotal)}</span></div>
+    <a href="#/cart" class="btn primary block">اذهب للسلة (${Cart.count()})</a>`;
+}
+
+// ---------- السلة ----------
+
+function renderCart() {
+  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  const r = cartRestaurant();
+  const lines = Cart.lines(r);
+  if (!lines.length) {
+    app.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🛒</div>
+        <h2>سلتك فاضية</h2>
+        <p class="muted">ابدأ بإضافة أكلك المفضل</p>
+        <a href="#/" class="btn primary">تصفح المطاعم</a>
+      </div>`;
+    return;
+  }
+  const t = Cart.totals(r);
+  const promo = Cart.promo;
+  const belowMin = t.subtotal < r.minOrder;
+  const closed = r.isOpen === false;
+  const blocked = belowMin || closed;
+
+  app.innerHTML = `
+    <h1 class="page-title">السلة</h1>
+    <div class="two-col">
+      <section class="panel">
+        <div class="panel-head">
+          <a href="#/restaurant/${r.id}"><strong>${esc(r.emoji)} ${esc(r.name)}</strong></a>
+          <button class="link danger" id="clearCart" type="button">تفضية السلة</button>
+        </div>
+        ${lines.map((l) => `
+          <div class="cart-line">
+            <div class="item-img sm">${esc(l.item.emoji)}</div>
+            <div class="grow">
+              <strong>${esc(l.item.name)}</strong>
+              <div class="muted">${fmt(l.item.price)}</div>
+            </div>
+            <div class="qty">
+              <button data-dec="${l.item.id}" type="button" aria-label="نقص">−</button>
+              <span>${l.qty}</span>
+              <button data-inc="${l.item.id}" type="button" aria-label="زود">+</button>
+            </div>
+            <strong class="line-total">${fmt(l.item.price * l.qty)}</strong>
+          </div>`).join('')}
+        <a href="#/restaurant/${r.id}" class="link">+ ضيف أصناف تانية</a>
+      </section>
+
+      <section class="panel">
+        <h3>كود الخصم</h3>
+        ${promo
+          ? `<div class="promo-applied">✅ ${promo} — ${PROMO_CODES[promo].label} <button class="link danger" id="removePromo" type="button">إزالة</button></div>`
+          : `<form class="promo-form" id="promoForm">
+               <input id="promoInput" placeholder="مثال: TALABAT20" autocomplete="off" dir="ltr">
+               <button class="btn" type="submit">تطبيق</button>
+             </form>
+             <p class="muted small">جرّب: TALABAT20 أو WELCOME50 أو FREEDEL</p>`}
+        ${summary(t)}
+        ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا، مش هتقدر تطلب دلوقتي.</p>' : ''}
+        ${belowMin ? `<p class="warn">الحد الأدنى للطلب ${fmt(r.minOrder)} — ضيف ${fmt(r.minOrder - t.subtotal)} كمان</p>` : ''}
+        <a href="#/checkout" class="btn primary block ${blocked ? 'disabled' : ''}" ${blocked ? 'aria-disabled="true"' : ''}>إتمام الطلب</a>
+      </section>
+    </div>`;
+
+  app.querySelectorAll('[data-inc]').forEach((b) => b.addEventListener('click', () => {
+    Cart.setQty(b.dataset.inc, Cart.qty(b.dataset.inc) + 1);
+    renderCart();
+  }));
+  app.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
+    Cart.setQty(b.dataset.dec, Cart.qty(b.dataset.dec) - 1);
+    renderCart();
+  }));
+  document.getElementById('clearCart').addEventListener('click', () => {
+    if (confirm('متأكد إنك عايز تفضّي السلة؟')) {
+      Cart.clear();
+      renderCart();
+    }
+  });
+  const form = document.getElementById('promoForm');
+  if (form) form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (Cart.applyPromo(document.getElementById('promoInput').value)) {
+      toast('تم تطبيق الكود 🎉');
+      renderCart();
+    } else toast('الكود غير صحيح');
+  });
+  const rm = document.getElementById('removePromo');
+  if (rm) rm.addEventListener('click', () => { Cart.removePromo(); renderCart(); });
+}
+
+function summary(t) {
+  return `
+    <div class="summary">
+      <div><span>المجموع الفرعي</span><span>${fmt(t.subtotal)}</span></div>
+      <div><span>رسوم التوصيل</span><span>${t.delivery ? fmt(t.delivery) : 'مجاني'}</span></div>
+      <div><span>رسوم الخدمة</span><span>${fmt(t.service)}</span></div>
+      ${t.discount ? `<div class="discount"><span>الخصم</span><span>− ${fmt(t.discount)}</span></div>` : ''}
+      <div class="grand"><span>الإجمالي</span><span>${fmt(t.total)}</span></div>
+    </div>`;
+}
+
+// ---------- إتمام الطلب ----------
+
+function renderCheckout() {
+  if (!state.restaurants || state.user === undefined) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login/checkout'; return; }
+  const r = cartRestaurant();
+  const lines = Cart.lines(r);
+  if (!lines.length || r.isOpen === false || Cart.totals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
+  const t = Cart.totals(r);
+  const u = state.user;
+  let location_ = u.location || null;
+
+  app.innerHTML = `
+    <h1 class="page-title">إتمام الطلب</h1>
+    <form class="two-col" id="checkoutForm">
+      <section class="panel">
+        <h3>📍 عنوان التوصيل</h3>
+        <div class="map-box" id="map"><span class="muted small">جاري تحميل الخريطة...</span></div>
+        <div class="map-actions">
+          <button type="button" class="btn small" id="locateBtn">📍 حدد موقعي الحالي</button>
+          <span class="muted small" id="locLabel">${location_ ? '✅ تم تحديد الموقع على الخريطة' : 'اضغط على الخريطة لتحديد مكانك (اختياري)'}</span>
+        </div>
+        <label>العنوان بالتفصيل
+          <textarea name="address" required rows="2" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(u.address)}</textarea>
+        </label>
+        <div class="form-grid">
+          <label>الاسم<input name="name" required value="${esc(u.name)}" autocomplete="name"></label>
+          <label>رقم الموبايل
+            <input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" value="${esc(u.phone)}" autocomplete="tel">
+          </label>
+        </div>
+        <label>ملاحظات للمطعم (اختياري)
+          <input name="notes" placeholder="مثال: من غير بصل">
+        </label>
+
+        <h3>💳 طريقة الدفع</h3>
+        <div class="pay-options">
+          ${Object.entries(PAYMENT_LABELS).map(([k, l], i) =>
+            `<label class="pay"><input type="radio" name="payment" value="${k}" ${i === 0 ? 'checked' : ''}> ${l}</label>`).join('')}
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3>ملخص الطلب — ${esc(r.name)}</h3>
+        ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
+        ${summary(t)}
+        <button class="btn primary block" type="submit" id="placeBtn">تأكيد الطلب • ${fmt(t.total)}</button>
+      </section>
+    </form>`;
+
+  const label = document.getElementById('locLabel');
+  let picker = null;
+  locationPicker(document.getElementById('map'), location_, (ll) => {
+    location_ = ll;
+    label.textContent = '✅ تم تحديد الموقع على الخريطة';
+  }).then((p) => {
+    if (page !== 'checkout') return p.destroy();
+    picker = p;
+    setCleanup(() => p.destroy());
+  }).catch(() => {
+    document.getElementById('map')?.replaceChildren('تعذر تحميل الخريطة. اكتب العنوان بالتفصيل.');
+  });
+  document.getElementById('locateBtn').addEventListener('click', () => {
+    if (!picker) return toast('الخريطة لسه بتحمّل');
+    picker.locate().catch((e) => toast(e.message));
+  });
+
+  document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const btn = document.getElementById('placeBtn');
+    const rest = cartRestaurant();
+    if (!rest || rest.isOpen === false) return toast('المطعم مش متاح دلوقتي');
+    const totals = Cart.totals(rest);
+    const order = {
+      customerUid: u.uid,
+      customerName: d.name.trim(),
+      customerPhone: d.phone.trim(),
+      restaurantId: rest.id,
+      restaurantName: rest.name,
+      restaurantEmoji: rest.emoji,
+      ownerUid: rest.ownerUid ?? null,
+      lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty })),
+      totals,
+      promo: Cart.promo,
+      address: d.address.trim(),
+      location: location_,
+      notes: d.notes.trim(),
+      payment: d.payment,
+      status: 'placed',
+      statusHistory: [{ status: 'placed', at: Date.now() }],
+    };
+    btn.disabled = true;
+    btn.textContent = 'جاري إرسال الطلب...';
+    try {
+      const id = await backend.createOrder(order);
+      backend.updateProfile(u.uid, { name: order.customerName, phone: order.customerPhone, address: order.address, location: location_ })
+        .catch(console.error);
+      Cart.clear();
+      toast('تم إرسال طلبك بنجاح 🎉');
+      location.hash = `#/order/${id}`;
+    } catch (err) {
+      console.error(err);
+      toast(errorMessage(err));
+      btn.disabled = false;
+      btn.textContent = `تأكيد الطلب • ${fmt(totals.total)}`;
+    }
+  });
+}
+
+// ---------- تتبع الطلب ----------
+
+function renderOrder(id) {
+  if (state.user === undefined) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login'; return; }
+  app.innerHTML = loader();
+  setCleanup(backend.watchOrder(id, (o) => {
+    if (!o) return renderNotFound();
+    drawOrder(o);
+  }));
+}
+
+function drawOrder(o) {
+  const step = ORDER_FLOW.indexOf(o.status);
+  const stopped = step === -1;
+  const done = o.status === 'delivered';
+  const remaining = o.status === 'on_way' ? '~15 دقيقة' : `~${o.status === 'preparing' ? 25 : 35} دقيقة`;
+  const historyAt = (s) => (o.statusHistory || []).find((h) => h.status === s)?.at;
+
+  app.innerHTML = `
+    <a href="#/orders" class="back">→ كل طلباتي</a>
+    <section class="panel track">
+      <div class="track-head">
+        <div>
+          <h1>طلب رقم #${shortId(o.id)}</h1>
+          <p class="muted">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)} • ${new Date(o.createdAt).toLocaleString('ar-EG')}</p>
+        </div>
+        ${stopped ? statusBadge(o.status)
+          : `<div class="eta">${done ? 'وصل! بالهنا والشفا 😋' : `الوصول خلال ${remaining}`}</div>`}
+      </div>
+      ${stopped ? `
+        <p class="warn">${o.status === 'rejected' ? 'للأسف المطعم مقدرش يقبل طلبك دلوقتي. جرّب تطلب من مطعم تاني.' : 'تم إلغاء الطلب.'}</p>` : `
+        <div class="rider ${o.status === 'on_way' ? 'moving' : ''}">${ORDER_STATUSES[o.status].icon}</div>
+        <ol class="steps">
+          ${ORDER_FLOW.map((s, i) => `
+            <li class="${i < step ? 'done' : ''} ${i === step ? 'current' : ''}">
+              <span class="dot">${i <= step ? ORDER_STATUSES[s].icon : ''}</span>
+              <span>${ORDER_STATUSES[s].label}</span>
+              ${historyAt(s) ? `<span class="muted small">${new Date(historyAt(s)).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })}</span>` : ''}
+            </li>`).join('')}
+        </ol>
+        ${o.status === 'placed' ? '<p class="muted small center">مستنيين المطعم يأكد طلبك... الصفحة بتتحدث لوحدها.</p>' : ''}`}
+    </section>
+
+    <div class="two-col">
+      <section class="panel">
+        <h3>تفاصيل الطلب</h3>
+        ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
+        ${summary(o.totals)}
+      </section>
+      <section class="panel">
+        <h3>التوصيل</h3>
+        <p>📍 ${esc(o.address)}</p>
+        <p>📞 <span dir="ltr">${esc(o.customerPhone)}</span></p>
+        <p>${paymentLabel(o.payment)}</p>
+        ${o.notes ? `<p>📝 ${esc(o.notes)}</p>` : ''}
+        ${o.status === 'placed' ? '<button class="btn block danger-outline" id="cancelOrder" type="button">إلغاء الطلب</button>' : ''}
+        <button class="btn block" id="reorder" type="button">🔁 اطلب نفس الطلب تاني</button>
+      </section>
+    </div>`;
+
+  document.getElementById('reorder').addEventListener('click', () => reorder(o));
+  const cancel = document.getElementById('cancelOrder');
+  if (cancel) cancel.addEventListener('click', async () => {
+    if (!confirm('متأكد إنك عايز تلغي الطلب؟')) return;
+    cancel.disabled = true;
+    try {
+      await backend.setOrderStatus(o.id, 'cancelled');
+      toast('تم إلغاء الطلب');
+    } catch (err) {
+      toast(errorMessage(err));
+      cancel.disabled = false;
+    }
+  });
+}
+
+function reorder(o) {
+  const r = findRestaurant(o.restaurantId);
+  if (!r) return toast('المطعم ده مش متاح دلوقتي');
+  if (Cart.count() && Cart.restaurantId !== o.restaurantId && !confirm('السلة الحالية فيها أصناف من مطعم تاني. تحب تستبدلها؟')) return;
+  Cart.clear();
+  const available = new Set(r.menu.flatMap((s) => s.items).filter(isAvailable).map((i) => i.id));
+  o.lines.filter((l) => available.has(l.id)).forEach((l) => {
+    Cart.add(o.restaurantId, l.id);
+    Cart.setQty(l.id, l.qty);
+  });
+  if (!Cart.count()) return toast('الأصناف دي مش متاحة دلوقتي');
+  location.hash = '#/cart';
+}
+
+// ---------- طلباتي ----------
+
+function renderOrders() {
+  if (state.user === undefined) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login/orders'; return; }
+  app.innerHTML = loader();
+  setCleanup(backend.watchOrders({ customerUid: state.user.uid }, (orders) => {
+    if (!orders.length) {
+      app.innerHTML = `
+        <div class="empty-state">
+          <div class="big">🧾</div>
+          <h2>لسه مفيش طلبات</h2>
+          <a href="#/" class="btn primary">اطلب دلوقتي</a>
+        </div>`;
+      return;
+    }
+    app.innerHTML = `
+      <h1 class="page-title">طلباتي</h1>
+      <div class="orders">
+        ${orders.map((o) => `
+          <a class="panel order-row" href="#/order/${o.id}">
+            <div class="item-img sm">${esc(o.restaurantEmoji)}</div>
+            <div class="grow">
+              <strong>${esc(o.restaurantName)}</strong>
+              <div class="muted small">#${shortId(o.id)} • ${new Date(o.createdAt).toLocaleDateString('ar-EG')} • ${o.lines.reduce((a, l) => a + l.qty, 0)} صنف</div>
+            </div>
+            ${statusBadge(o.status)}
+            <strong>${fmt(o.totals.total)}</strong>
+          </a>`).join('')}
+      </div>`;
+  }));
+}
+
+// ---------- الحساب ----------
+
+function renderLogin(mode, next) {
+  if (state.user === undefined) { app.innerHTML = loader(); return; }
+  if (state.user) { location.hash = `#/${next || ''}`; return; }
+  app.innerHTML = '<div id="authBox"></div>';
+  renderAuthForm(document.getElementById('authBox'), {
+    backend, isDemo, mode,
+    title: next === 'checkout' ? 'سجّل دخولك عشان تكمل الطلب' : '',
+    onDone: () => {
+      toast('أهلًا بيك 👋');
+      location.hash = `#/${next || ''}`;
+    },
+  });
+}
+
+function renderAccount() {
+  if (state.user === undefined) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login/account'; return; }
+  const u = state.user;
+  app.innerHTML = `
+    <h1 class="page-title">حسابي</h1>
+    <form class="panel narrow" id="profileForm">
+      <p class="muted" dir="ltr">${esc(u.email)}</p>
+      <label>الاسم<input name="name" required value="${esc(u.name)}"></label>
+      <label>رقم الموبايل<input name="phone" type="tel" pattern="01[0-9]{9}" value="${esc(u.phone)}" inputmode="numeric"></label>
+      <label>العنوان<textarea name="address" rows="2">${esc(u.address)}</textarea></label>
+      <button class="btn primary block" type="submit">حفظ</button>
+      <button class="btn block" type="button" id="logout">تسجيل الخروج</button>
+    </form>`;
+  document.getElementById('profileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await backend.updateProfile(u.uid, { name: d.name.trim(), phone: d.phone.trim(), address: d.address.trim(), location: u.location });
+      toast('تم الحفظ ✅');
+    } catch (err) {
+      toast(errorMessage(err));
+    }
+  });
+  document.getElementById('logout').addEventListener('click', async () => {
+    await backend.signOut();
+    location.hash = '#/';
+  });
+}
+
+function renderNotFound() {
+  app.innerHTML = '<div class="empty-state"><div class="big">🤷</div><h2>الصفحة مش موجودة</h2><a href="#/" class="btn primary">الرئيسية</a></div>';
+}
+
+// ---------- التنقل ----------
+
+function router() {
+  setCleanup(null);
+  const [, name = '', id] = (location.hash || '#/').slice(1).split('/');
+  page = name;
+  switch (name) {
+    case '': renderHome(); break;
+    case 'restaurant': renderRestaurant(id); break;
+    case 'cart': renderCart(); break;
+    case 'checkout': renderCheckout(); break;
+    case 'orders': renderOrders(); break;
+    case 'order': renderOrder(id); break;
+    case 'login': renderLogin('login', id); break;
+    case 'register': renderLogin('register', id); break;
+    case 'account': renderAccount(); break;
+    default: renderNotFound();
+  }
+  updateHeader();
+}
+
+window.addEventListener('hashchange', () => {
+  router();
+  window.scrollTo(0, 0);
+});
+Cart.subscribe(updateHeader);
+
+backend.watchRestaurants((list) => {
+  const first = state.restaurants === null;
+  state.restaurants = list;
+  // صفحات بتعتمد على بيانات المطاعم بس، فنحدثها لما المطاعم تتغير
+  if (first || ['', 'restaurant', 'cart'].includes(page)) {
+    const y = window.scrollY;
+    router();
+    window.scrollTo(0, y);
+  }
+});
+
+backend.onAuth((user) => {
+  const prev = state.user;
+  if (JSON.stringify(prev) === JSON.stringify(user)) return;
+  state.user = user;
+  updateHeader();
+  // نعيد الرسم لو حالة الدخول اتغيرت أو الصفحة بتعرض بيانات الحساب
+  if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid || page === 'account') router();
+});
+
+router();
