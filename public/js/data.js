@@ -14,8 +14,9 @@ export const CATEGORIES = [
 // المطاعم التجريبية: بتتضاف تلقائيًا في الوضع التجريبي، أو من لوحة الأدمن بزرار واحد
 export const SEED_RESTAURANTS = [
   {
-    id: 'burger-house', name: 'بيت البرجر', category: 'burger', emoji: '🍔', color: '#ffe3d1',
-    rating: 4.6, reviews: 1240, time: [25, 35], deliveryFee: 15, minOrder: 80,
+    id: 'burger-house', address: 'مدينة نصر، شارع عباس العقاد', phone: '0225550000', location: { lat: 30.0626, lng: 31.344 },
+    name: 'بيت البرجر', category: 'burger', emoji: '🍔', color: '#ffe3d1',
+    rating: 4.6, reviews: 1240, time: [25, 35], minOrder: 80,
     tags: ['برجر', 'وجبات سريعة'], promo: 'خصم 20% على أول طلب',
     menu: [
       { section: 'الأكثر طلبًا', items: [
@@ -34,8 +35,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'pizza-roma', name: 'بيتزا روما', category: 'pizza', emoji: '🍕', color: '#ffd9d9',
-    rating: 4.4, reviews: 980, time: [30, 45], deliveryFee: 10, minOrder: 100,
+    id: 'pizza-roma', address: 'مصر الجديدة، الكوربة', phone: '0225550000', location: { lat: 30.089, lng: 31.324 },
+    name: 'بيتزا روما', category: 'pizza', emoji: '🍕', color: '#ffd9d9',
+    rating: 4.4, reviews: 980, time: [30, 45], minOrder: 100,
     tags: ['بيتزا', 'إيطالي'], promo: 'توصيل مجاني فوق 250 ج',
     menu: [
       { section: 'بيتزا', items: [
@@ -51,8 +53,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'shawarma-sham', name: 'شاورما الشام', category: 'shawarma', emoji: '🌯', color: '#fff0c7',
-    rating: 4.7, reviews: 2210, time: [20, 30], deliveryFee: 12, minOrder: 60,
+    id: 'shawarma-sham', address: 'المعادي، شارع 9', phone: '0225550000', location: { lat: 29.9602, lng: 31.2569 },
+    name: 'شاورما الشام', category: 'shawarma', emoji: '🌯', color: '#fff0c7',
+    rating: 4.7, reviews: 2210, time: [20, 30], minOrder: 60,
     tags: ['شاورما', 'سوري'], promo: null,
     menu: [
       { section: 'سندوتشات', items: [
@@ -67,8 +70,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'koshary-tahrir', name: 'كشري التحرير', category: 'egyptian', emoji: '🥘', color: '#e5f3d6',
-    rating: 4.5, reviews: 3100, time: [15, 25], deliveryFee: 8, minOrder: 40,
+    id: 'koshary-tahrir', address: 'وسط البلد، ميدان التحرير', phone: '0225550000', location: { lat: 30.0444, lng: 31.2357 },
+    name: 'كشري التحرير', category: 'egyptian', emoji: '🥘', color: '#e5f3d6',
+    rating: 4.5, reviews: 3100, time: [15, 25], minOrder: 40,
     tags: ['كشري', 'أكل مصري'], promo: 'اطلب 2 والتالت هدية',
     menu: [
       { section: 'كشري', items: [
@@ -83,8 +87,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'crispy-chicken', name: 'كرسبي تشيكن', category: 'chicken', emoji: '🍗', color: '#fde2c4',
-    rating: 4.2, reviews: 760, time: [25, 40], deliveryFee: 15, minOrder: 90,
+    id: 'crispy-chicken', address: 'مدينة نصر، مكرم عبيد', phone: '0225550000', location: { lat: 30.056, lng: 31.346 },
+    name: 'كرسبي تشيكن', category: 'chicken', emoji: '🍗', color: '#fde2c4',
+    rating: 4.2, reviews: 760, time: [25, 40], minOrder: 90,
     tags: ['فراخ', 'مقلي'], promo: null,
     menu: [
       { section: 'بوكسات', items: [
@@ -98,8 +103,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'sweet-corner', name: 'ركن الحلويات', category: 'sweets', emoji: '🍰', color: '#f6dcf0',
-    rating: 4.8, reviews: 540, time: [30, 50], deliveryFee: 20, minOrder: 70,
+    id: 'sweet-corner', address: 'الزمالك، شارع 26 يوليو', phone: '0225550000', location: { lat: 30.0609, lng: 31.2197 },
+    name: 'ركن الحلويات', category: 'sweets', emoji: '🍰', color: '#f6dcf0',
+    rating: 4.8, reviews: 540, time: [30, 50], minOrder: 70,
     tags: ['حلويات', 'كيك'], promo: 'خصم 15% يوم الجمعة',
     menu: [
       { section: 'كيك', items: [
@@ -113,8 +119,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'bean-cafe', name: 'بين كافيه', category: 'coffee', emoji: '☕', color: '#eadfd6',
-    rating: 4.3, reviews: 410, time: [15, 25], deliveryFee: 10, minOrder: 50,
+    id: 'bean-cafe', address: 'التجمع الخامس، شارع التسعين', phone: '0225550000', location: { lat: 30.028, lng: 31.47 },
+    name: 'بين كافيه', category: 'coffee', emoji: '☕', color: '#eadfd6',
+    rating: 4.3, reviews: 410, time: [15, 25], minOrder: 50,
     tags: ['قهوة', 'مشروبات'], promo: null,
     menu: [
       { section: 'قهوة ساخنة', items: [
@@ -129,8 +136,9 @@ export const SEED_RESTAURANTS = [
     ],
   },
   {
-    id: 'quick-mart', name: 'كويك ماركت', category: 'grocery', emoji: '🛒', color: '#d8ecf7',
-    rating: 4.1, reviews: 300, time: [20, 30], deliveryFee: 5, minOrder: 100,
+    id: 'quick-mart', address: 'مصر الجديدة، الميرغني', phone: '0225550000', location: { lat: 30.087, lng: 31.33 },
+    name: 'كويك ماركت', category: 'grocery', emoji: '🛒', color: '#d8ecf7',
+    rating: 4.1, reviews: 300, time: [20, 30], minOrder: 100,
     tags: ['بقالة', 'سوبر ماركت'], promo: 'توصيل في 30 دقيقة',
     menu: [
       { section: 'أساسيات', items: [
@@ -148,22 +156,23 @@ export const SEED_RESTAURANTS = [
 
 // أكواد الخصم: نسبة مئوية أو مبلغ ثابت
 export const PROMO_CODES = {
-  TALABAT20: { type: 'percent', value: 20, label: 'خصم 20%' },
+  ARRIVO20: { type: 'percent', value: 20, label: 'خصم 20%' },
   WELCOME50: { type: 'fixed', value: 50, label: 'خصم 50 ج' },
-  FREEDEL: { type: 'delivery', value: 0, label: 'توصيل مجاني' },
+  FREEDEL: { type: 'delivery', value: 0, label: 'توصيل مجاني' }, // الخصم = رسوم التوصيل
 };
 
 export const ORDER_STATUSES = {
   placed: { label: 'تم استلام الطلب', icon: '📝' },
   preparing: { label: 'جاري التحضير', icon: '👨‍🍳' },
-  on_way: { label: 'في الطريق إليك', icon: '🛵' },
+  ready: { label: 'جاهز للتسليم', icon: '📦' },
+  on_way: { label: 'مع المندوب في الطريق', icon: '🛵' },
   delivered: { label: 'تم التوصيل', icon: '✅' },
   cancelled: { label: 'ملغي', icon: '❌' },
   rejected: { label: 'اعتذر المطعم', icon: '🚫' },
 };
 
 // مراحل الطلب الطبيعية بالترتيب
-export const ORDER_FLOW = ['placed', 'preparing', 'on_way', 'delivered'];
+export const ORDER_FLOW = ['placed', 'preparing', 'ready', 'on_way', 'delivered'];
 export const FINAL_STATUSES = ['delivered', 'cancelled', 'rejected'];
 
 export const PAYMENT_LABELS = {
@@ -173,7 +182,28 @@ export const PAYMENT_LABELS = {
 
 export const NEW_RESTAURANT = {
   name: '', emoji: '🍽️', color: '#ffe3d1', category: 'burger', tags: [],
-  rating: null, reviews: 0, time: [20, 35], deliveryFee: 10, minOrder: 50, promo: '',
+  rating: null, reviews: 0, time: [20, 35], minOrder: 50, promo: '',
   isOpen: true, ownerUid: null, ownerEmail: null,
   menu: [{ section: 'الأصناف', items: [] }],
+};
+
+// إعدادات المنصة (الأدمن بيغيرها من لوحة الأدمن ← المناطق والنسب)
+// كل نسبة: { type: 'percent' | 'fixed', value }
+export const DEFAULT_SETTINGS = {
+  zones: {}, // { zoneId: { name, fee, active } }
+  rates: {
+    driverShare: { type: 'percent', value: 30 }, // نصيب المندوب من رسوم التوصيل، والباقي للمنصة
+    commission: { type: 'percent', value: 0 }, // عمولة المنصة على سعر الأكل
+    serviceFee: { type: 'percent', value: 0 }, // رسوم خدمة على العميل
+    driverPaysRestaurant: true, // المندوب بيدفع للمطعم كاش وقت الاستلام
+  },
+};
+
+export const SAMPLE_ZONES = {
+  nasr_city: { name: 'مدينة نصر', fee: 25, active: true },
+  heliopolis: { name: 'مصر الجديدة', fee: 30, active: true },
+  downtown: { name: 'وسط البلد', fee: 30, active: true },
+  maadi: { name: 'المعادي', fee: 40, active: true },
+  zamalek: { name: 'الزمالك', fee: 35, active: true },
+  new_cairo: { name: 'التجمع الخامس', fee: 45, active: true },
 };

@@ -1,6 +1,7 @@
 // باك إند Firebase: تسجيل الدخول (Authentication) وقاعدة البيانات اللحظية (Firestore).
 // الحماية (مين يقرا/يكتب إيه) موجودة في firestore.rules.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { withDefaults } from '../finance.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, updateProfile as updateAuthProfile, connectAuthEmulator,
@@ -8,6 +9,7 @@ import {
 import {
   getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, serverTimestamp,
+  runTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const toMillis = (t) => (t && typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.now());
@@ -18,6 +20,7 @@ const toOrder = (snap) => {
   return o;
 };
 const withoutId = ({ id, ...rest }) => rest;
+const CLAIMABLE = ['preparing', 'ready'];
 
 export function createBackend(config, { useEmulators }) {
   const app = initializeApp(config);
@@ -31,6 +34,7 @@ export function createBackend(config, { useEmulators }) {
   const users = collection(db, 'users');
   const restaurants = collection(db, 'restaurants');
   const orders = collection(db, 'orders');
+  const settingsDoc = doc(db, 'settings', 'app');
   let signingUp = false;
 
   const logError = (cb, fallback) => (err) => {
@@ -134,6 +138,19 @@ export function createBackend(config, { useEmulators }) {
       await batch.commit();
     },
 
+    watchSettings(cb) {
+      return onSnapshot(settingsDoc, (s) => cb({ ...withDefaults(s.data()), exists: s.exists() }), logError(cb, withDefaults()));
+    },
+
+    saveSettings: (settings) => setDoc(settingsDoc, { zones: settings.zones, rates: settings.rates }),
+
+    watchUsersByRole(role, cb) {
+      return onSnapshot(query(users, where('role', '==', role)),
+        (s) => cb(s.docs.map((d) => ({ ...d.data(), uid: d.id }))), logError(cb, []));
+    },
+
+    setUserRole: (uid, role) => updateDoc(doc(users, uid), { role, restaurantId: null }),
+
     async createOrder(order) {
       return (await addDoc(orders, { ...order, createdAt: serverTimestamp() })).id;
     },
@@ -142,13 +159,34 @@ export function createBackend(config, { useEmulators }) {
       return onSnapshot(doc(orders, id), (s) => cb(s.exists() ? toOrder(s) : null), logError(cb, null));
     },
 
-    // filter: { customerUid } أو { ownerUid } أو {} لكل الطلبات (للأدمن)
+    // filter: { customerUid } أو { ownerUid } أو { driverUid } أو {} لكل الطلبات (للأدمن)
     watchOrders(filter, cb) {
       const q = filter.customerUid ? query(orders, where('customerUid', '==', filter.customerUid))
         : filter.ownerUid ? query(orders, where('ownerUid', '==', filter.ownerUid))
-          : query(orders, orderBy('createdAt', 'desc'), limit(500));
+          : filter.driverUid ? query(orders, where('driverUid', '==', filter.driverUid))
+            : query(orders, orderBy('createdAt', 'desc'), limit(1000));
       return onSnapshot(q, (s) => cb(s.docs.map(toOrder).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
     },
+
+    // الأوردرات اللي مستنية مندوب (بتتجهز أو جاهزة ومحدش أخدها)
+    watchAvailableOrders(cb) {
+      const q = query(orders, where('driverUid', '==', null), where('status', 'in', CLAIMABLE));
+      return onSnapshot(q, (s) => cb(s.docs.map(toOrder).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
+    },
+
+    // transaction عشان مندوبين اتنين ميخدوش نفس الأوردر
+    claimOrder(id, driver) {
+      return runTransaction(db, async (tx) => {
+        const ref = doc(orders, id);
+        const o = (await tx.get(ref)).data();
+        if (!o || o.driverUid || !CLAIMABLE.includes(o.status)) {
+          throw Object.assign(new Error('taken'), { code: 'order-taken' });
+        }
+        tx.update(ref, { driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, claimedAt: Date.now() });
+      });
+    },
+
+    releaseOrder: (id) => updateDoc(doc(orders, id), { driverUid: null, driverName: null, driverPhone: null, claimedAt: null }),
 
     setOrderStatus(id, status) {
       return updateDoc(doc(orders, id), {

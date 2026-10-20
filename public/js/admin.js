@@ -1,26 +1,45 @@
-// لوحة الأدمن: إحصائيات، إدارة المطاعم وربطها بأصحابها، ومتابعة كل الطلبات
+// لوحة الأدمن: الإحصائيات، الحسابات، المطاعم، المناطق والنسب، المندوبين، والطلبات
 import { backend, isDemo } from './backend/index.js';
-import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES } from './data.js';
+import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
+import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
-  renderAuthForm, renderDashNav, statusBadge,
+  renderAuthForm, renderDashNav, statusBadge, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
 let user;
 let restaurants = null;
 let orders = null;
+let settings = null;
+let drivers = [];
 let tab = 'overview';
 let editing = null; // id المطعم اللي بيتعدل، أو 'new'
 let orderFilter = 'active';
+let period = 'today';
 let unsubs = [];
+let settingsCreated = false;
+
+const TABS = [
+  ['overview', '📊 نظرة عامة'],
+  ['finance', '💰 الحسابات'],
+  ['restaurants', '🏪 المطاعم'],
+  ['zones', '📍 المناطق والنسب'],
+  ['drivers', '🛵 المندوبين'],
+  ['orders', '📋 الطلبات'],
+];
+
+// الصفحات اللي فيها فورم، مش بنعيد رسمها لما البيانات تتغير عشان منمسحش اللي الأدمن بيكتبه
+const isEditing = () => editing || tab === 'zones';
 
 function stop() {
   unsubs.forEach((u) => u());
   unsubs = [];
   restaurants = null;
   orders = null;
+  settings = null;
+  drivers = [];
   editing = null;
 }
 
@@ -37,7 +56,7 @@ function start() {
       <div class="empty-state">
         <div class="big">🔒</div>
         <h2>الصفحة دي للأدمن بس</h2>
-        <p class="muted">لو إنت صاحب التطبيق، شوف ملف SETUP.md (خطوة "خلّي حسابك أدمن").</p>
+        <p class="muted">لو إنت صاحب المنصة، شوف ملف SETUP.md (خطوة "خلّي حسابك أدمن").</p>
         <a href="index.html" class="btn">الرجوع للتطبيق</a>
       </div>`;
     return;
@@ -47,22 +66,38 @@ function start() {
     <div class="tabs" id="tabs"></div>
     <div id="tabBody">${loader()}</div>`;
   drawTabs();
+  const refresh = () => { if (!isEditing()) drawTab(); };
   unsubs.push(backend.watchRestaurants((list) => {
     restaurants = list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-    if (!editing) drawTab();
+    refresh();
   }));
   unsubs.push(backend.watchOrders({}, (list) => {
     orders = list;
     drawTabs();
-    if (!editing) drawTab();
+    refresh();
+  }));
+  unsubs.push(backend.watchSettings((s) => {
+    const first = settings === null;
+    settings = s;
+    // أول مرة: نعمل مستند الإعدادات بالقيم الافتراضية (لازم يكون موجود عشان الطلبات تشتغل)
+    if (s.exists === false && !settingsCreated) {
+      settingsCreated = true;
+      backend.saveSettings(withDefaults()).catch((e) => toast(errorMessage(e)));
+    }
+    if (first || tab !== 'zones') refresh();
+  }));
+  unsubs.push(backend.watchUsersByRole('driver', (list) => {
+    drivers = list;
+    refresh();
   }));
 }
 
 function drawTabs() {
   const active = (orders || []).filter((o) => !FINAL_STATUSES.includes(o.status)).length;
   const el = document.getElementById('tabs');
-  el.innerHTML = [['overview', '📊 نظرة عامة'], ['restaurants', '🏪 المطاعم'], ['orders', `📋 الطلبات ${active ? `<span class="badge static">${active}</span>` : ''}`]]
-    .map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}</button>`).join('');
+  if (!el) return;
+  el.innerHTML = TABS.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}${
+    k === 'orders' && active ? ` <span class="badge static">${active}</span>` : ''}</button>`).join('');
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     tab = b.dataset.tab;
     editing = null;
@@ -73,11 +108,29 @@ function drawTabs() {
 
 function drawTab() {
   const body = document.getElementById('tabBody');
-  if (!restaurants || !orders) { body.innerHTML = loader(); return; }
-  if (tab === 'overview') drawOverview(body);
-  else if (tab === 'restaurants') drawRestaurants(body);
-  else drawOrders(body);
+  if (!body) return;
+  if (!restaurants || !orders || !settings) { body.innerHTML = loader(); return; }
+  ({
+    overview: drawOverview, finance: drawFinance, restaurants: drawRestaurants,
+    zones: drawZones, drivers: drawDrivers, orders: drawOrders,
+  })[tab](body);
 }
+
+const inPeriod = (o) => {
+  if (period === 'all') return true;
+  if (period === 'today') return isToday(o.createdAt);
+  const days = period === 'week' ? 7 : 30;
+  return o.createdAt >= Date.now() - days * 86400000;
+};
+
+const periodChips = () => `
+  <div class="chips">
+    ${[['today', 'النهارده'], ['week', 'آخر 7 أيام'], ['month', 'آخر 30 يوم'], ['all', 'الكل']]
+      .map(([k, l]) => `<button type="button" class="chip ${period === k ? 'active' : ''}" data-period="${k}">${l}</button>`).join('')}
+  </div>`;
+
+const bindPeriod = (body) => body.querySelectorAll('[data-period]').forEach((b) =>
+  b.addEventListener('click', () => { period = b.dataset.period; drawTab(); }));
 
 // ---------- نظرة عامة ----------
 
@@ -85,36 +138,106 @@ function drawOverview(body) {
   const today = orders.filter((o) => isToday(o.createdAt));
   const delivered = today.filter((o) => o.status === 'delivered');
   const active = orders.filter((o) => !FINAL_STATUSES.includes(o.status));
+  const waitingDriver = active.filter((o) => !o.driverUid && ['preparing', 'ready'].includes(o.status));
   const open = restaurants.filter((r) => r.isOpen !== false).length;
-  const byRestaurant = {};
-  today.filter((o) => !['cancelled', 'rejected'].includes(o.status)).forEach((o) => {
-    byRestaurant[o.restaurantName] ??= { count: 0, total: 0 };
-    byRestaurant[o.restaurantName].count++;
-    byRestaurant[o.restaurantName].total += o.totals.total;
-  });
-  const top = Object.entries(byRestaurant).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
 
   body.innerHTML = `
     <div class="stats">
       <div class="stat"><span>طلبات النهارده</span><strong>${today.length}</strong></div>
-      <div class="stat"><span>مبيعات النهارده (اتوصلت)</span><strong>${fmt(delivered.reduce((s, o) => s + o.totals.total, 0))}</strong></div>
+      <div class="stat"><span>مبيعات النهارده (اتوصلت)</span><strong>${fmt(sum(delivered, (o) => o.totals.total))}</strong></div>
+      <div class="stat accent"><span>ربح المنصة النهارده</span><strong>${fmt(sum(delivered, (o) => orderSplit(o).platform))}</strong></div>
       <div class="stat"><span>طلبات شغالة دلوقتي</span><strong>${active.length}</strong></div>
+      <div class="stat ${waitingDriver.length ? 'warn-stat' : ''}"><span>مستنية مندوب</span><strong>${waitingDriver.length}</strong></div>
       <div class="stat"><span>مطاعم مفتوحة</span><strong>${open} / ${restaurants.length}</strong></div>
-      <div class="stat"><span>كل الطلبات</span><strong>${orders.length}</strong></div>
+      <div class="stat"><span>المندوبين</span><strong>${drivers.length}</strong></div>
     </div>
-    <div class="two-col">
-      <section class="panel">
-        <h3>أكتر المطاعم طلبًا النهارده</h3>
-        ${top.length ? `<table class="table"><thead><tr><th>المطعم</th><th>الطلبات</th><th>القيمة</th></tr></thead><tbody>
-          ${top.map(([name, s]) => `<tr><td>${esc(name)}</td><td>${s.count}</td><td>${fmt(s.total)}</td></tr>`).join('')}
-        </tbody></table>` : '<p class="muted small">لسه مفيش طلبات النهارده.</p>'}
-      </section>
-      <section class="panel">
-        <h3>آخر الطلبات</h3>
-        ${orders.slice(0, 6).map((o) => `
-          <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
-      </section>
-    </div>`;
+    ${!Object.keys(settings.zones).length ? '<p class="warn">⚠️ مفيش مناطق توصيل لسه، فالعملاء مش هيقدروا يطلبوا. روح "المناطق والنسب" وضيف مناطق.</p>' : ''}
+    ${!drivers.length ? '<p class="warn">⚠️ مفيش مندوبين لسه. روح "المندوبين" وضيف مندوب بإيميله.</p>' : ''}
+    <section class="panel">
+      <h3>آخر الطلبات</h3>
+      ${orders.slice(0, 8).map((o) => `
+        <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${esc(o.driverName)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
+    </section>`;
+}
+
+// ---------- الحسابات ----------
+
+function drawFinance(body) {
+  const list = orders.filter((o) => o.status === 'delivered' && inPeriod(o));
+  const splits = list.map((o) => ({ o, s: orderSplit(o) }));
+  const total = (fn) => sum(splits, fn);
+
+  const byRestaurant = {};
+  const byDriver = {};
+  splits.forEach(({ o, s }) => {
+    const r = byRestaurant[o.restaurantId] ??= { name: o.restaurantName, count: 0, sales: 0, commission: 0, net: 0, due: 0 };
+    r.count++;
+    r.sales += o.totals.subtotal;
+    r.commission += s.commission;
+    r.net += s.restaurant;
+    r.due += s.restaurantDue;
+    const key = o.driverUid || 'none';
+    const d = byDriver[key] ??= { name: o.driverName || 'بدون مندوب', ids: [], earn: 0, owes: 0 };
+    d.ids.push(shortId(o.id));
+    d.earn += s.driver;
+    d.owes += s.driverOwes;
+  });
+  const r = settings.rates;
+
+  body.innerHTML = `
+    <div class="list-head"><h2>الحسابات (الطلبات اللي اتوصلت بس)</h2>${periodChips()}</div>
+    <div class="stats">
+      <div class="stat"><span>عدد الأوردرات</span><strong>${list.length}</strong></div>
+      <div class="stat"><span>إجمالي اللي دفعه العملاء</span><strong>${fmt(total(({ o }) => o.totals.total))}</strong></div>
+      <div class="stat accent"><span>💰 ربح المنصة</span><strong>${fmt(total(({ s }) => s.platform))}</strong></div>
+      <div class="stat"><span>🏪 حق المطاعم</span><strong>${fmt(total(({ s }) => s.restaurant))}</strong></div>
+      <div class="stat"><span>🛵 حق المندوبين</span><strong>${fmt(total(({ s }) => s.driver))}</strong></div>
+    </div>
+
+    <section class="panel">
+      <h3>🏪 المطاعم</h3>
+      ${Object.keys(byRestaurant).length ? `<div class="table-wrap flat"><table class="table">
+        <thead><tr><th>المطعم</th><th>الأوردرات</th><th>المبيعات</th><th>عمولة المنصة</th><th>صافي المطعم</th><th>${r.driverPaysRestaurant ? 'اتدفع للمطعم مع المندوب' : 'لسه للمطعم'}</th></tr></thead>
+        <tbody>${Object.values(byRestaurant).sort((a, b) => b.count - a.count).map((x) => `
+          <tr><td><b>${esc(x.name)}</b></td><td>${x.count}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td>
+          <td><b>${fmt(x.net)}</b></td><td>${r.driverPaysRestaurant ? '✅' : fmt(x.due)}</td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="muted small">مفيش أوردرات في الفترة دي.</p>'}
+    </section>
+
+    <section class="panel">
+      <h3>🛵 المندوبين</h3>
+      ${Object.keys(byDriver).length ? `<div class="table-wrap flat"><table class="table">
+        <thead><tr><th>المندوب</th><th>الأوردرات</th><th>أرقام الأوردرات</th><th>مكسبه</th><th>كاش معاه للمنصة</th></tr></thead>
+        <tbody>${Object.values(byDriver).sort((a, b) => b.ids.length - a.ids.length).map((x) => `
+          <tr><td><b>${esc(x.name)}</b></td><td>${x.ids.length}</td>
+          <td class="ids">${x.ids.map((id) => `<span class="chip static">#${id}</span>`).join(' ')}</td>
+          <td><b>${fmt(x.earn)}</b></td><td>${x.owes >= 0 ? fmt(x.owes) : `<span class="muted">المنصة عليها ${fmt(-x.owes)}</span>`}</td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="muted small">مفيش.</p>'}
+    </section>
+
+    <section class="panel">
+      <h3>تفاصيل كل أوردر</h3>
+      ${splits.length ? `<div class="table-wrap flat"><table class="table">
+        <thead><tr><th>الأوردر</th><th>المطعم</th><th>المنطقة</th><th>المندوب</th><th>الأكل</th><th>التوصيل</th><th>الخصم</th><th>الإجمالي</th><th>المطعم</th><th>المندوب</th><th>المنصة</th></tr></thead>
+        <tbody>${splits.map(({ o, s }) => `
+          <tr><td>#${shortId(o.id)}</td><td>${esc(o.restaurantName)}</td><td>${esc(o.zoneName || '')}</td><td>${esc(o.driverName || '—')}</td>
+          <td>${fmt(o.totals.subtotal)}</td><td>${fmt(o.totals.delivery)}</td><td>${o.totals.discount ? fmt(o.totals.discount) : '—'}</td>
+          <td>${fmt(o.totals.total)}</td><td>${fmt(s.restaurant)}</td><td>${fmt(s.driver)}</td><td><b>${fmt(s.platform)}</b></td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="muted small">مفيش.</p>'}
+    </section>
+
+    <section class="panel formula">
+      <h3>🧮 المعادلة الحالية</h3>
+      <ul>
+        <li>المندوب بياخد <b>${rateLabel(r.driverShare)}</b> من رسوم التوصيل، والباقي للمنصة.</li>
+        <li>عمولة المنصة على سعر الأكل: <b>${rateLabel(r.commission)}</b>.</li>
+        <li>رسوم الخدمة على العميل: <b>${rateLabel(r.serviceFee)}</b> (بتروح للمنصة).</li>
+        <li>الخصومات (أكواد الخصم) بتتخصم من ربح المنصة.</li>
+        <li>${r.driverPaysRestaurant ? 'المندوب بيدفع للمطعم تمن الأكل وقت الاستلام، ويسلّم الباقي للمنصة.' : 'المندوب بيسلّم كل الكاش للمنصة، والمنصة بتحاسب المطاعم.'}</li>
+      </ul>
+      <p class="muted small">كل أوردر بيتحسب بالنسب اللي كانت شغالة وقت ما اتطلب. غيّر النسب من "المناطق والنسب".</p>
+    </section>`;
+  bindPeriod(body);
 }
 
 // ---------- المطاعم ----------
@@ -132,14 +255,16 @@ function drawRestaurants(body) {
     ${restaurants.length ? '' : '<p class="muted">مفيش مطاعم لسه. ابدأ بالمطاعم التجريبية (8 مطاعم بالمنيو بتاعها) وعدّل عليها، أو ضيف مطعمك.</p>'}
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>المطعم</th><th>الحالة</th><th>صاحب المطعم</th><th>أصناف</th><th></th></tr></thead>
+        <thead><tr><th>المطعم</th><th>الحالة</th><th>صاحب المطعم</th><th>أصناف</th><th>أوردرات</th><th></th></tr></thead>
         <tbody>
           ${restaurants.map((r) => `
             <tr>
-              <td><strong>${esc(r.emoji)} ${esc(r.name)}</strong></td>
+              <td><span class="mini-logo" style="background:${esc(r.color)}">${restaurantLogo(r, 36)}</span> <strong>${esc(r.name)}</strong>
+                ${r.address ? '' : '<br><span class="small warn-text">⚠️ مفيش عنوان للمندوب</span>'}</td>
               <td><button class="chip" data-toggle="${r.id}" type="button">${r.isOpen !== false ? '🟢 مفتوح' : '🔴 مغلق'}</button></td>
               <td class="small" dir="ltr">${r.ownerEmail ? esc(r.ownerEmail) : '<span class="muted">—</span>'}</td>
               <td>${r.menu.reduce((n, s) => n + s.items.length, 0)}</td>
+              <td>${orders.filter((o) => o.restaurantId === r.id && o.status === 'delivered').length}</td>
               <td class="row-actions">
                 <button class="btn small" data-edit="${r.id}" type="button">تعديل</button>
                 <button class="btn small" data-owner="${r.id}" type="button">ربط صاحب</button>
@@ -200,7 +325,7 @@ function drawEditor(body) {
 async function seedRestaurants() {
   try {
     for (const r of SEED_RESTAURANTS) {
-      await backend.createRestaurant({ ...r, isOpen: true, ownerUid: null, ownerEmail: null }, r.id);
+      await backend.createRestaurant({ ...r, isOpen: true, logo: '', ownerUid: null, ownerEmail: null }, r.id);
     }
     toast('تمت إضافة المطاعم التجريبية ✅');
   } catch (e) {
@@ -209,17 +334,193 @@ async function seedRestaurants() {
 }
 
 async function assignOwner(r) {
-  const email = prompt(`إيميل صاحب "${r.name}"\n(لازم يكون عامل حساب في التطبيق الأول):`, r.ownerEmail || '');
+  const email = prompt(`إيميل صاحب "${r.name}"\n(لازم يكون عامل حساب في الموقع الأول):`, r.ownerEmail || '');
   if (!email || !email.trim()) return;
   try {
     const u = await backend.findUserByEmail(email);
     if (!u) return toast('مفيش حساب بالإيميل ده. خلّي صاحب المطعم يعمل حساب الأول.');
+    if (u.role === 'driver') return toast('الحساب ده مندوب. شيله من المندوبين الأول.');
     if (u.restaurantId && u.restaurantId !== r.id && !confirm('الحساب ده مربوط بمطعم تاني، هيتفك ربطه منه. تكمل؟')) return;
     await backend.assignOwner(r.id, u);
     toast(`تم ربط ${u.name || u.email} بـ ${r.name} ✅`);
   } catch (e) {
     toast(errorMessage(e));
   }
+}
+
+// ---------- المناطق والنسب ----------
+
+function drawZones(body) {
+  const draft = JSON.parse(JSON.stringify(withDefaults(settings)));
+  const zoneRows = () => Object.entries(draft.zones).map(([id, z]) => `
+    <tr>
+      <td><input data-zone="${id}" data-zf="name" value="${esc(z.name)}" required aria-label="اسم المنطقة"></td>
+      <td><input data-zone="${id}" data-zf="fee" type="number" min="0" step="any" value="${z.fee}" required aria-label="سعر التوصيل"></td>
+      <td><label class="check"><input type="checkbox" data-zone="${id}" data-zf="active" ${z.active !== false ? 'checked' : ''}> متاحة</label></td>
+      <td><button type="button" class="icon-btn danger" data-del-zone="${id}" aria-label="حذف">🗑️</button></td>
+    </tr>`).join('');
+
+  const rateField = (key, title, hint) => {
+    const rt = draft.rates[key];
+    return `
+      <div class="rate-field">
+        <b>${title}</b>
+        <div class="rate-inputs">
+          <select data-rate="${key}" data-rf="type" aria-label="نوع">
+            <option value="percent" ${rt.type === 'percent' ? 'selected' : ''}>نسبة %</option>
+            <option value="fixed" ${rt.type === 'fixed' ? 'selected' : ''}>مبلغ ثابت (ج.م)</option>
+          </select>
+          <input data-rate="${key}" data-rf="value" type="number" min="0" step="any" value="${rt.value}" required aria-label="القيمة">
+        </div>
+        <span class="muted small">${hint}</span>
+      </div>`;
+  };
+
+  const example = () => {
+    const fee = 30;
+    const driver = applyRate(draft.rates.driverShare, fee);
+    return `مثال: لو التوصيل ${fmt(fee)} ← المندوب ياخد ${fmt(driver)} والمنصة ${fmt(fee - driver)}`;
+  };
+
+  const draw = () => {
+    body.innerHTML = `
+      <form id="settingsForm" class="editor">
+        <section class="panel">
+          <div class="list-head">
+            <h3>📍 مناطق التوصيل وأسعارها</h3>
+            <div class="row-actions">
+              ${Object.keys(draft.zones).length ? '' : '<button type="button" class="btn small" id="sampleZones">➕ مناطق القاهرة التجريبية</button>'}
+              <button type="button" class="btn small primary" id="addZone">+ منطقة جديدة</button>
+            </div>
+          </div>
+          <p class="muted small">العميل بيختار منطقته وقت الطلب، وسعر التوصيل بيتحدد منها.</p>
+          ${Object.keys(draft.zones).length ? `<div class="table-wrap flat"><table class="table zones">
+            <thead><tr><th>المنطقة</th><th>سعر التوصيل (ج.م)</th><th>الحالة</th><th></th></tr></thead>
+            <tbody>${zoneRows()}</tbody></table></div>` : '<p class="warn">مفيش مناطق. العملاء مش هيقدروا يطلبوا لحد ما تضيف مناطق.</p>'}
+        </section>
+
+        <section class="panel">
+          <h3>🧮 النسب وتقسيم الفلوس</h3>
+          <div class="rates-grid">
+            ${rateField('driverShare', '🛵 نصيب المندوب من رسوم التوصيل', 'والباقي من رسوم التوصيل للمنصة.')}
+            ${rateField('commission', '🏪 عمولة المنصة على سعر الأكل', 'بتتخصم من حق المطعم. خليها 0 لو مفيش عمولة.')}
+            ${rateField('serviceFee', '🧾 رسوم خدمة على العميل', 'بتتضاف على فاتورة العميل وتروح للمنصة. خليها 0 لو مش عايزها.')}
+          </div>
+          <p class="example" id="example">${example()}</p>
+          <label class="check"><input type="checkbox" id="driverPays" ${draft.rates.driverPaysRestaurant ? 'checked' : ''}>
+            المندوب بيدفع للمطعم تمن الأكل كاش وقت الاستلام</label>
+          <p class="muted small">التغيير بيسري على الأوردرات الجديدة بس، والقديمة بتفضل بحسابها.</p>
+        </section>
+        <div class="editor-actions">
+          <button class="btn primary" type="submit">💾 حفظ المناطق والنسب</button>
+        </div>
+      </form>`;
+
+    const sync = () => {
+      body.querySelectorAll('[data-zone]').forEach((inp) => {
+        const z = draft.zones[inp.dataset.zone];
+        const f = inp.dataset.zf;
+        z[f] = f === 'active' ? inp.checked : f === 'fee' ? Number(inp.value) : inp.value.trim();
+      });
+      body.querySelectorAll('[data-rate]').forEach((inp) => {
+        const rt = draft.rates[inp.dataset.rate];
+        rt[inp.dataset.rf] = inp.dataset.rf === 'value' ? Number(inp.value) : inp.value;
+      });
+      draft.rates.driverPaysRestaurant = body.querySelector('#driverPays').checked;
+    };
+    const redraw = (fn) => () => { sync(); fn(); draw(); };
+
+    body.querySelector('#addZone').addEventListener('click', redraw(() => {
+      draft.zones['z' + Date.now().toString(36)] = { name: '', fee: 25, active: true };
+    }));
+    body.querySelector('#sampleZones')?.addEventListener('click', redraw(() => {
+      Object.assign(draft.zones, JSON.parse(JSON.stringify(SAMPLE_ZONES)));
+    }));
+    body.querySelectorAll('[data-del-zone]').forEach((b) => b.addEventListener('click', redraw(() => {
+      delete draft.zones[b.dataset.delZone];
+    })));
+    body.querySelectorAll('[data-rate]').forEach((inp) => inp.addEventListener('input', () => {
+      sync();
+      body.querySelector('#example').textContent = example();
+    }));
+
+    body.querySelector('#settingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      sync();
+      if (!e.target.checkValidity()) return e.target.reportValidity();
+      const pct = ['driverShare', 'commission', 'serviceFee'].find((k) => draft.rates[k].type === 'percent' && draft.rates[k].value > 100);
+      if (pct) return toast('النسبة مينفعش تزيد عن 100%');
+      try {
+        await backend.saveSettings(draft);
+        toast('تم حفظ المناطق والنسب ✅');
+      } catch (err) {
+        toast(errorMessage(err));
+      }
+    });
+  };
+  draw();
+}
+
+// ---------- المندوبين ----------
+
+function drawDrivers(body) {
+  const stats = (uid) => {
+    const mine = orders.filter((o) => o.driverUid === uid);
+    const delivered = mine.filter((o) => o.status === 'delivered');
+    const today = delivered.filter((o) => isToday(o.createdAt));
+    return {
+      active: mine.filter((o) => !FINAL_STATUSES.includes(o.status)).length,
+      today: today.length,
+      earnToday: sum(today, (o) => orderSplit(o).driver),
+      total: delivered.length,
+      owes: sum(delivered, (o) => orderSplit(o).driverOwes),
+    };
+  };
+
+  body.innerHTML = `
+    <div class="list-head">
+      <h2>${drivers.length} مندوب</h2>
+      <button class="btn primary" id="addDriver" type="button">+ إضافة مندوب</button>
+    </div>
+    <p class="muted small">المندوب يعمل حساب عادي من الموقع، وبعدين تضيفه هنا بإيميله. وهو يفتح صفحة المندوبين: <a href="delivery.html" target="_blank">delivery.html</a></p>
+    ${drivers.length ? `<div class="table-wrap"><table class="table">
+      <thead><tr><th>المندوب</th><th>الموبايل</th><th>معاه دلوقتي</th><th>وصّل النهارده</th><th>مكسبه النهارده</th><th>كل أوردراته</th><th>كاش معاه للمنصة</th><th></th></tr></thead>
+      <tbody>${drivers.map((d) => {
+        const s = stats(d.uid);
+        return `<tr>
+          <td><b>${esc(d.name)}</b><br><span class="small muted" dir="ltr">${esc(d.email)}</span></td>
+          <td><a href="tel:${esc(d.phone)}" dir="ltr">${esc(d.phone)}</a></td>
+          <td>${s.active}</td><td>${s.today}</td><td>${fmt(s.earnToday)}</td><td>${s.total}</td>
+          <td><b>${fmt(s.owes)}</b></td>
+          <td><button class="btn small danger-outline" data-remove="${d.uid}" type="button">شيله</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>` : '<p class="muted">مفيش مندوبين لسه.</p>'}`;
+
+  body.querySelector('#addDriver').addEventListener('click', async () => {
+    const email = prompt('إيميل المندوب\n(لازم يكون عامل حساب في الموقع الأول):');
+    if (!email || !email.trim()) return;
+    try {
+      const u = await backend.findUserByEmail(email);
+      if (!u) return toast('مفيش حساب بالإيميل ده. خلّي المندوب يعمل حساب الأول.');
+      if (u.role === 'admin') return toast('ده حساب أدمن، مينفعش يبقى مندوب.');
+      if (u.role === 'driver') return toast('الحساب ده مندوب أصلًا.');
+      if (u.restaurantId && !confirm('الحساب ده صاحب مطعم، هيتفك ربطه بالمطعم. تكمل؟')) return;
+      await backend.setUserRole(u.uid, 'driver');
+      toast(`تمت إضافة ${u.name || u.email} كمندوب ✅`);
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  });
+  body.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
+    const d = drivers.find((x) => x.uid === b.dataset.remove);
+    if (!confirm(`شيل ${d.name} من المندوبين؟`)) return;
+    try {
+      await backend.setUserRole(d.uid, 'customer');
+      toast('تم');
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  }));
 }
 
 // ---------- الطلبات ----------
@@ -239,22 +540,23 @@ function drawOrders(body) {
     </div>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>الطلب</th><th>الوقت</th><th>المطعم</th><th>العميل</th><th>الأصناف</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
+        <thead><tr><th>الطلب</th><th>الوقت</th><th>المطعم</th><th>العميل</th><th>المنطقة</th><th>المندوب</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
         <tbody>
           ${list.map((o) => `
             <tr>
               <td>#${shortId(o.id)}</td>
               <td class="small">${new Date(o.createdAt).toLocaleString('ar-EG')}</td>
-              <td>${esc(o.restaurantEmoji)} ${esc(o.restaurantName)}</td>
+              <td>${esc(o.restaurantName)}</td>
               <td class="small">${esc(o.customerName)}<br><a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a></td>
-              <td class="small">${o.lines.map((l) => `${l.qty}× ${esc(l.name)}`).join('<br>')}</td>
+              <td class="small">${esc(o.zoneName || '')}</td>
+              <td class="small">${o.driverName ? esc(o.driverName) : '<span class="muted">—</span>'}</td>
               <td>${fmt(o.totals.total)}</td>
               <td>
                 <select data-order="${o.id}" aria-label="حالة الطلب">
                   ${Object.entries(ORDER_STATUSES).map(([k, s]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('')}
                 </select>
               </td>
-            </tr>`).join('') || '<tr><td colspan="7" class="center muted">مفيش طلبات</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="8" class="center muted">مفيش طلبات</td></tr>'}
         </tbody>
       </table>
     </div>`;

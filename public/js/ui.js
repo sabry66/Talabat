@@ -1,5 +1,6 @@
 // أدوات مشتركة بين صفحات التطبيق ولوحة المطعم ولوحة الأدمن
 import { ORDER_STATUSES, PAYMENT_LABELS } from './data.js';
+import { thumb } from './upload.js';
 
 export const fmt = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ج.م`;
 
@@ -53,6 +54,7 @@ export function errorMessage(e) {
     'auth/operation-not-allowed': 'لازم تفعّل تسجيل الدخول بالإيميل من Firebase Console',
     'auth/configuration-not-found': 'لازم تفعّل Authentication من Firebase Console',
     'permission-denied': 'مش مسموحلك تعمل العملية دي',
+    'order-taken': 'الأوردر ده مندوب تاني أخده',
     unavailable: 'مفيش اتصال بالسيرفر، جرب تاني',
   };
   return map[code] || `حصل خطأ: ${e?.message || e}`;
@@ -74,6 +76,16 @@ export function beep() {
     });
   } catch { /* الصوت غير متاح */ }
 }
+
+// لوجو المطعم لو موجود، وإلا الإيموجي
+export const restaurantLogo = (r, size = 120) => (r.logo
+  ? `<img class="logo-img" src="${esc(thumb(r.logo, size * 2))}" alt="${esc(r.name)}" loading="lazy">`
+  : esc(r.emoji));
+
+// صورة الصنف لو موجودة، وإلا الإيموجي
+export const itemImage = (it, size = 84) => (it.image
+  ? `<img src="${esc(thumb(it.image, size * 2))}" alt="${esc(it.name)}" loading="lazy">`
+  : esc(it.emoji));
 
 export const loader = () => '<div class="loader" aria-label="جاري التحميل"></div>';
 
@@ -108,6 +120,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
             <p class="muted small">حسابات تجريبية (كلمة السر 123456):</p>
             <button type="button" class="chip" data-demo="customer@demo.com">👤 عميل</button>
             <button type="button" class="chip" data-demo="owner@demo.com">🍔 صاحب مطعم</button>
+            <button type="button" class="chip" data-demo="driver@demo.com">🛵 مندوب</button>
             <button type="button" class="chip" data-demo="admin@demo.com">🛠️ أدمن</button>
           </div>` : ''}
       </div>`;
@@ -165,8 +178,10 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
       ${o.notes ? `<p class="note">📝 ${esc(o.notes)}</p>` : ''}
       <div class="small">
         👤 ${esc(o.customerName)} • <a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a><br>
-        📍 ${esc(o.address)} ${map ? `<a href="${map}" target="_blank" rel="noopener">(الخريطة)</a>` : ''}
+        📍 ${o.zoneName ? `<b>${esc(o.zoneName)}</b> — ` : ''}${esc(o.address)} ${map ? `<a href="${map}" target="_blank" rel="noopener">(الخريطة)</a>` : ''}
       </div>
+      ${o.driverUid ? `<div class="driver-tag small">🛵 المندوب: ${esc(o.driverName)} • <a href="tel:${esc(o.driverPhone)}" dir="ltr">${esc(o.driverPhone)}</a></div>`
+        : ['preparing', 'ready'].includes(o.status) ? '<div class="driver-tag waiting small">⏳ مستني مندوب ياخده</div>' : ''}
       <footer>
         <strong>${fmt(o.totals.total)}</strong>
         <span class="small muted">${paymentLabel(o.payment)}</span>

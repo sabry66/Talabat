@@ -2,9 +2,10 @@
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
+import { orderSplit, sum } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
-  renderAuthForm, renderDashNav, orderCard,
+  renderAuthForm, renderDashNav, orderCard, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -21,8 +22,7 @@ const NEXT_ACTIONS = {
     { status: 'preparing', label: '✅ قبول وابدأ التحضير', cls: 'primary' },
     { status: 'rejected', label: 'رفض', cls: 'danger-outline' },
   ],
-  preparing: [{ status: 'on_way', label: '🛵 خرج للتوصيل', cls: 'primary' }],
-  on_way: [{ status: 'delivered', label: '✅ تم التوصيل', cls: 'primary' }],
+  preparing: [{ status: 'ready', label: '📦 تم التجهيز - جاهز للتسليم', cls: 'primary' }],
 };
 
 function stop() {
@@ -100,7 +100,7 @@ function drawHead() {
   const open = r.isOpen !== false;
   document.getElementById('dashHead').innerHTML = `
     <section class="dash-head" style="background:${esc(r.color)}">
-      <div class="rest-emoji sm">${esc(r.emoji)}</div>
+      <div class="rest-emoji sm">${restaurantLogo(r, 64)}</div>
       <div class="grow">
         <h1>${esc(r.name)}</h1>
         <span class="status ${open ? 'delivered' : 'cancelled'}">${open ? '🟢 مفتوح ويستقبل طلبات' : '🔴 مغلق'}</span>
@@ -164,13 +164,15 @@ function drawOrders() {
   body.innerHTML = `
     <div class="stats">
       <div class="stat"><span>طلبات النهارده</span><strong>${today.length}</strong></div>
-      <div class="stat"><span>اتوصلت</span><strong>${delivered.length}</strong></div>
-      <div class="stat"><span>مبيعات النهارده</span><strong>${fmt(delivered.reduce((s, o) => s + o.totals.subtotal, 0))}</strong></div>
+      <div class="stat"><span>اتوصلت النهارده</span><strong>${delivered.length}</strong></div>
+      <div class="stat"><span>مبيعات النهارده</span><strong>${fmt(sum(delivered, (o) => o.totals.subtotal))}</strong></div>
+      <div class="stat"><span>صافي ليك النهارده</span><strong>${fmt(sum(delivered, (o) => orderSplit(o).restaurant))}</strong></div>
     </div>
     <div class="board">
       ${column('placed', '🔔 طلبات جديدة')}
       ${column('preparing', '👨‍🍳 قيد التحضير')}
-      ${column('on_way', '🛵 في الطريق')}
+      ${column('ready', '📦 جاهز - مستني المندوب')}
+      ${column('on_way', '🛵 مع المندوب')}
     </div>
     <section class="panel">
       <h3>آخر الطلبات المنتهية</h3>

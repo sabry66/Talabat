@@ -1,8 +1,10 @@
 // السلة: محفوظة في المتصفح. الأسعار بتتحسب من المنيو الحالي للمطعم عشان لو السعر اتغير.
 import { PROMO_CODES } from './data.js';
 import { isAvailable } from './ui.js';
+import { orderTotals } from './finance.js';
 
 const KEY = 'talabaty_cart_v2';
+const ZONE_KEY = 'arrivo_zone'; // منطقة التوصيل اللي العميل اختارها آخر مرة
 const empty = () => ({ restaurantId: null, items: {}, promo: null });
 
 function load() {
@@ -22,6 +24,11 @@ export const Cart = {
   subscribe: (fn) => listeners.push(fn),
   get restaurantId() { return cart.restaurantId; },
   get promo() { return cart.promo; },
+  get zoneId() { try { return localStorage.getItem(ZONE_KEY); } catch { return null; } },
+  setZone(id) {
+    try { localStorage.setItem(ZONE_KEY, id); } catch { /* التخزين غير متاح */ }
+    listeners.forEach((fn) => fn());
+  },
   qty: (itemId) => cart.items[itemId] || 0,
   count: () => Object.values(cart.items).reduce((a, b) => a + b, 0),
 
@@ -70,17 +77,10 @@ export const Cart = {
       .filter((l) => l.item && isAvailable(l.item));
   },
 
-  totals(restaurant) {
+  // settings = إعدادات المنصة (المناطق والنسب)
+  totals(restaurant, settings) {
     const subtotal = this.lines(restaurant).reduce((s, l) => s + l.item.price * l.qty, 0);
-    let delivery = restaurant ? Number(restaurant.deliveryFee) || 0 : 0;
-    let discount = 0;
-    const promo = cart.promo && PROMO_CODES[cart.promo];
-    if (promo) {
-      if (promo.type === 'percent') discount = Math.round(subtotal * promo.value / 100);
-      else if (promo.type === 'fixed') discount = Math.min(promo.value, subtotal);
-      else if (promo.type === 'delivery') delivery = 0;
-    }
-    const service = Math.round(subtotal * 0.05);
-    return { subtotal, delivery, discount, service, total: subtotal + delivery + service - discount };
+    const zone = settings.zones[this.zoneId];
+    return orderTotals(subtotal, { zone: zone && zone.active !== false ? zone : null, rates: settings.rates, promo: cart.promo });
   },
 };

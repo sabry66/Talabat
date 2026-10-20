@@ -1,9 +1,10 @@
 // الوضع التجريبي: قاعدة بيانات وهمية في localStorage بنفس واجهة باك إند Firebase.
 // البيانات بتتزامن بين التابات، والدخول لكل تاب لوحده: تقدر تفتح التطبيق كعميل في تاب
 // ولوحة المطعم كصاحب مطعم في تاب تاني.
-import { SEED_RESTAURANTS } from '../data.js';
+import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES } from '../data.js';
+import { withDefaults } from '../finance.js';
 
-const DB_KEY = 'talabaty_demo_db_v1';
+const DB_KEY = 'arrivo_demo_db_v1';
 const SESSION_KEY = 'talabaty_demo_session';
 
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -22,13 +23,15 @@ function seed() {
     'u-admin': user('u-admin', 'admin@demo.com', 'مدير التطبيق', 'admin'),
     'u-owner': user('u-owner', 'owner@demo.com', 'صاحب بيت البرجر', 'restaurant', 'burger-house'),
     'u-customer': user('u-customer', 'customer@demo.com', 'عميل تجريبي', 'customer'),
+    'u-driver': user('u-driver', 'driver@demo.com', 'مندوب تجريبي', 'driver'),
   };
   const restaurants = {};
   for (const r of SEED_RESTAURANTS) {
     const owned = r.id === 'burger-house';
     restaurants[r.id] = { ...clone(r), isOpen: true, ownerUid: owned ? 'u-owner' : null, ownerEmail: owned ? 'owner@demo.com' : null };
   }
-  return { users, restaurants, orders: {} };
+  const settings = { ...clone(DEFAULT_SETTINGS), zones: clone(SAMPLE_ZONES) };
+  return { users, restaurants, orders: {}, settings };
 }
 
 let cache = null;
@@ -164,6 +167,24 @@ export function createBackend() {
       commit();
     },
 
+    watchSettings(cb) {
+      return watch(() => withDefaults(db().settings), cb);
+    },
+
+    async saveSettings(settings) {
+      db().settings = clone(settings);
+      commit();
+    },
+
+    watchUsersByRole(role, cb) {
+      return watch(() => Object.values(db().users).filter((u) => u.role === role).map(publicUser), cb);
+    },
+
+    async setUserRole(uid, role) {
+      Object.assign(db().users[uid], { role, restaurantId: null });
+      commit();
+    },
+
     async createOrder(order) {
       const id = newId();
       db().orders[id] = { ...clone(order), id, createdAt: Date.now() };
@@ -175,11 +196,30 @@ export function createBackend() {
       return watch(() => db().orders[id] || null, cb);
     },
 
-    // filter: { customerUid } أو { ownerUid } أو {} لكل الطلبات (للأدمن)
+    // filter: { customerUid } أو { ownerUid } أو { driverUid } أو {} لكل الطلبات (للأدمن)
     watchOrders(filter, cb) {
       return watch(() => sortByNewest(Object.values(db().orders).filter((o) =>
         (!filter.customerUid || o.customerUid === filter.customerUid) &&
-        (!filter.ownerUid || o.ownerUid === filter.ownerUid))), cb);
+        (!filter.ownerUid || o.ownerUid === filter.ownerUid) &&
+        (!filter.driverUid || o.driverUid === filter.driverUid))), cb);
+    },
+
+    // الأوردرات اللي مستنية مندوب (بتتجهز أو جاهزة ومحدش أخدها)
+    watchAvailableOrders(cb) {
+      return watch(() => sortByNewest(Object.values(db().orders)
+        .filter((o) => !o.driverUid && ['preparing', 'ready'].includes(o.status))), cb);
+    },
+
+    async claimOrder(id, driver) {
+      const o = db().orders[id];
+      if (o.driverUid || !['preparing', 'ready'].includes(o.status)) throw authError('permission-denied');
+      Object.assign(o, { driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, claimedAt: Date.now() });
+      commit();
+    },
+
+    async releaseOrder(id) {
+      Object.assign(db().orders[id], { driverUid: null, driverName: null, driverPhone: null, claimedAt: null });
+      commit();
     },
 
     async setOrderStatus(id, status) {

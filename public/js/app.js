@@ -3,22 +3,47 @@ import { backend, isDemo } from './backend/index.js';
 import { CATEGORIES, PROMO_CODES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
 import { Cart } from './cart.js';
 import { locationPicker } from './map.js';
+import { activeZones } from './finance.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
-  loader, demoBanner, renderAuthForm,
+  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage,
 } from './ui.js';
 
 const app = document.getElementById('app');
 
 // user: undefined = لسه بيحمّل، null = مش مسجل
-const state = { user: undefined, restaurants: null };
+const state = { user: undefined, restaurants: null, settings: null };
 // حالة صفحة الرئيسية (بحث / تصنيف / ترتيب)
 const ui = { query: '', category: 'all', sort: 'recommended' };
 let page = '';
 let cleanup = null;
+let refreshCheckout = null;
 
 const findRestaurant = (id) => (state.restaurants || []).find((r) => r.id === id);
 const cartRestaurant = () => findRestaurant(Cart.restaurantId);
+const cartTotals = (r) => Cart.totals(r, state.settings);
+const currentZone = () => {
+  const z = state.settings?.zones[Cart.zoneId];
+  return z && z.active !== false ? { id: Cart.zoneId, ...z } : null;
+};
+const minZoneFee = () => {
+  const fees = activeZones(state.settings).map((z) => z.fee);
+  return fees.length ? Math.min(...fees) : null;
+};
+const deliveryMeta = () => (minZoneFee() !== null ? ` • 🛵 التوصيل من ${fmt(minZoneFee())}` : '');
+
+// اختيار منطقة التوصيل (سعر التوصيل بيتحدد منها)
+function zoneSelect() {
+  const zones = activeZones(state.settings);
+  if (!zones.length) return '<p class="warn">التوصيل مش متاح لسه، مفيش مناطق توصيل متضافة.</p>';
+  return `
+    <label>📍 منطقة التوصيل
+      <select id="zoneSelect" required>
+        <option value="">اختار منطقتك</option>
+        ${zones.map((z) => `<option value="${z.id}" ${Cart.zoneId === z.id ? 'selected' : ''}>${esc(z.name)} — توصيل ${fmt(z.fee)}</option>`).join('')}
+      </select>
+    </label>`;
+}
 
 function setCleanup(fn) {
   if (cleanup) cleanup();
@@ -34,6 +59,7 @@ function updateHeader() {
   document.getElementById('userNav').innerHTML = u
     ? `${u.role === 'admin' ? '<a href="admin.html" class="nav-link">🛠️ الأدمن</a>' : ''}
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
+       ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
        <a href="#/orders" class="nav-link">طلباتي</a>
        <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}</a>`
     : u === null ? '<a href="#/login" class="nav-link">دخول</a>' : '';
@@ -42,7 +68,7 @@ function updateHeader() {
 // ---------- الرئيسية ----------
 
 function renderHome() {
-  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const q = ui.query.trim();
   let list = state.restaurants.filter((r) =>
     (ui.category === 'all' || r.category === ui.category) &&
@@ -50,7 +76,6 @@ function renderHome() {
       r.menu.some((s) => s.items.some((i) => i.name.includes(q)))));
   if (ui.sort === 'rating') list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
   if (ui.sort === 'time') list.sort((a, b) => a.time[0] - b.time[0]);
-  if (ui.sort === 'fee') list.sort((a, b) => a.deliveryFee - b.deliveryFee);
   list.sort((a, b) => (b.isOpen !== false) - (a.isOpen !== false));
 
   app.innerHTML = `
@@ -72,7 +97,7 @@ function renderHome() {
     <div class="list-head">
       <h2>${list.length} مطعم</h2>
       <select id="sort" aria-label="ترتيب">
-        ${[['recommended', 'المقترح'], ['rating', 'الأعلى تقييمًا'], ['time', 'الأسرع توصيلًا'], ['fee', 'أقل رسوم توصيل']]
+        ${[['recommended', 'المقترح'], ['rating', 'الأعلى تقييمًا'], ['time', 'الأسرع توصيلًا']]
           .map(([v, l]) => `<option value="${v}" ${ui.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
       </select>
     </div>
@@ -98,7 +123,7 @@ function restaurantCard(r) {
   const closed = r.isOpen === false;
   return `
     <a class="card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
-      <div class="card-cover" style="background:${esc(r.color)}">${esc(r.emoji)}
+      <div class="card-cover" style="background:${esc(r.color)}">${restaurantLogo(r, 140)}
         ${closed ? '<span class="closed-tag">مغلق الآن</span>' : r.promo ? `<span class="promo">${esc(r.promo)}</span>` : ''}
       </div>
       <div class="card-body">
@@ -107,7 +132,7 @@ function restaurantCard(r) {
           <span class="rating">${r.rating ? `⭐ ${r.rating}` : '🆕 جديد'}</span>
         </div>
         <p class="muted">${esc((r.tags || []).join(' • '))}</p>
-        <p class="meta">🕒 ${r.time[0]}-${r.time[1]} دقيقة • 🛵 ${fmt(r.deliveryFee)}</p>
+        <p class="meta">🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()}</p>
       </div>
     </a>`;
 }
@@ -115,7 +140,7 @@ function restaurantCard(r) {
 // ---------- صفحة المطعم ----------
 
 function renderRestaurant(id) {
-  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const r = findRestaurant(id);
   if (!r) return renderNotFound();
   const closed = r.isOpen === false;
@@ -124,11 +149,11 @@ function renderRestaurant(id) {
   app.innerHTML = `
     <a href="#/" class="back">→ رجوع للمطاعم</a>
     <section class="rest-header" style="background:${esc(r.color)}">
-      <div class="rest-emoji">${esc(r.emoji)}</div>
+      <div class="rest-emoji">${restaurantLogo(r, 110)}</div>
       <div>
         <h1>${esc(r.name)}</h1>
         <p>${esc((r.tags || []).join(' • '))}</p>
-        <p class="meta">${r.rating ? `⭐ ${r.rating} (${Number(r.reviews || 0).toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة • 🛵 ${fmt(r.deliveryFee)} • الحد الأدنى ${fmt(r.minOrder)}</p>
+        <p class="meta">${r.rating ? `⭐ ${r.rating} (${Number(r.reviews || 0).toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
         ${r.promo ? `<span class="promo static">${esc(r.promo)}</span>` : ''}
       </div>
     </section>
@@ -154,7 +179,7 @@ function renderRestaurant(id) {
                   <strong>${fmt(it.price)}</strong>
                 </div>
                 <div class="item-side">
-                  <div class="item-img">${esc(it.emoji)}</div>
+                  <div class="item-img">${itemImage(it)}</div>
                   ${!isAvailable(it) ? '<span class="muted small">غير متاح</span>'
                     : qty ? `<div class="qty">
                          <button data-dec="${it.id}" type="button" aria-label="نقص">−</button>
@@ -201,7 +226,7 @@ function miniCart() {
   const r = cartRestaurant();
   const lines = Cart.lines(r);
   if (!lines.length) return '<h3>سلتك</h3><p class="muted">السلة فاضية. ضيف أصناف من المنيو.</p>';
-  const t = Cart.totals(r);
+  const t = cartTotals(r);
   return `
     <h3>سلتك من ${esc(r.name)}</h3>
     ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
@@ -212,7 +237,7 @@ function miniCart() {
 // ---------- السلة ----------
 
 function renderCart() {
-  if (!state.restaurants) { app.innerHTML = loader(); return; }
+  if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const r = cartRestaurant();
   const lines = Cart.lines(r);
   if (!lines.length) {
@@ -225,7 +250,7 @@ function renderCart() {
       </div>`;
     return;
   }
-  const t = Cart.totals(r);
+  const t = cartTotals(r);
   const promo = Cart.promo;
   const belowMin = t.subtotal < r.minOrder;
   const closed = r.isOpen === false;
@@ -241,7 +266,7 @@ function renderCart() {
         </div>
         ${lines.map((l) => `
           <div class="cart-line">
-            <div class="item-img sm">${esc(l.item.emoji)}</div>
+            <div class="item-img sm">${itemImage(l.item, 52)}</div>
             <div class="grow">
               <strong>${esc(l.item.name)}</strong>
               <div class="muted">${fmt(l.item.price)}</div>
@@ -257,15 +282,16 @@ function renderCart() {
       </section>
 
       <section class="panel">
+        ${zoneSelect()}
         <h3>كود الخصم</h3>
         ${promo
           ? `<div class="promo-applied">✅ ${promo} — ${PROMO_CODES[promo].label} <button class="link danger" id="removePromo" type="button">إزالة</button></div>`
           : `<form class="promo-form" id="promoForm">
-               <input id="promoInput" placeholder="مثال: TALABAT20" autocomplete="off" dir="ltr">
+               <input id="promoInput" placeholder="مثال: ARRIVO20" autocomplete="off" dir="ltr">
                <button class="btn" type="submit">تطبيق</button>
              </form>
-             <p class="muted small">جرّب: TALABAT20 أو WELCOME50 أو FREEDEL</p>`}
-        ${summary(t)}
+             <p class="muted small">جرّب: ARRIVO20 أو WELCOME50 أو FREEDEL</p>`}
+        ${summary(t, currentZone())}
         ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا، مش هتقدر تطلب دلوقتي.</p>' : ''}
         ${belowMin ? `<p class="warn">الحد الأدنى للطلب ${fmt(r.minOrder)} — ضيف ${fmt(r.minOrder - t.subtotal)} كمان</p>` : ''}
         <a href="#/checkout" class="btn primary block ${blocked ? 'disabled' : ''}" ${blocked ? 'aria-disabled="true"' : ''}>إتمام الطلب</a>
@@ -296,14 +322,17 @@ function renderCart() {
   });
   const rm = document.getElementById('removePromo');
   if (rm) rm.addEventListener('click', () => { Cart.removePromo(); renderCart(); });
+  document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); renderCart(); });
 }
 
-function summary(t) {
+// zone = null لما المنطقة لسه متختارتش في السلة أو الدفع، ومن غيرها لطلب اتعمل خلاص
+function summary(t, zone) {
+  const delivery = zone === null ? '<span class="muted">اختار منطقتك</span>' : t.delivery ? fmt(t.delivery) : 'مجاني';
   return `
     <div class="summary">
       <div><span>المجموع الفرعي</span><span>${fmt(t.subtotal)}</span></div>
-      <div><span>رسوم التوصيل</span><span>${t.delivery ? fmt(t.delivery) : 'مجاني'}</span></div>
-      <div><span>رسوم الخدمة</span><span>${fmt(t.service)}</span></div>
+      <div><span>رسوم التوصيل${zone?.name ? ` (${esc(zone.name)})` : ''}</span><span>${delivery}</span></div>
+      ${t.service ? `<div><span>رسوم الخدمة</span><span>${fmt(t.service)}</span></div>` : ''}
       ${t.discount ? `<div class="discount"><span>الخصم</span><span>− ${fmt(t.discount)}</span></div>` : ''}
       <div class="grand"><span>الإجمالي</span><span>${fmt(t.total)}</span></div>
     </div>`;
@@ -312,12 +341,12 @@ function summary(t) {
 // ---------- إتمام الطلب ----------
 
 function renderCheckout() {
-  if (!state.restaurants || state.user === undefined) { app.innerHTML = loader(); return; }
+  if (!state.restaurants || !state.settings || state.user === undefined) { app.innerHTML = loader(); return; }
   if (!state.user) { location.hash = '#/login/checkout'; return; }
   const r = cartRestaurant();
   const lines = Cart.lines(r);
-  if (!lines.length || r.isOpen === false || Cart.totals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
-  const t = Cart.totals(r);
+  if (!lines.length || r.isOpen === false || cartTotals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
+  const t = cartTotals(r);
   const u = state.user;
   let location_ = u.location || null;
 
@@ -326,6 +355,7 @@ function renderCheckout() {
     <form class="two-col" id="checkoutForm">
       <section class="panel">
         <h3>📍 عنوان التوصيل</h3>
+        ${zoneSelect()}
         <div class="map-box" id="map"><span class="muted small">جاري تحميل الخريطة...</span></div>
         <div class="map-actions">
           <button type="button" class="btn small" id="locateBtn">📍 حدد موقعي الحالي</button>
@@ -354,10 +384,20 @@ function renderCheckout() {
       <section class="panel">
         <h3>ملخص الطلب — ${esc(r.name)}</h3>
         ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
-        ${summary(t)}
+        <div id="checkoutSummary">${summary(t, currentZone())}</div>
         <button class="btn primary block" type="submit" id="placeBtn">تأكيد الطلب • ${fmt(t.total)}</button>
       </section>
     </form>`;
+
+  // تحديث الملخص لما المنطقة أو الأسعار تتغير من غير ما نمسح اللي العميل كتبه
+  refreshCheckout = () => {
+    const rest = cartRestaurant();
+    if (!rest) return;
+    const tt = cartTotals(rest);
+    document.getElementById('checkoutSummary').innerHTML = summary(tt, currentZone());
+    document.getElementById('placeBtn').textContent = `تأكيد الطلب • ${fmt(tt.total)}`;
+  };
+  document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
 
   const label = document.getElementById('locLabel');
   let picker = null;
@@ -382,7 +422,9 @@ function renderCheckout() {
     const btn = document.getElementById('placeBtn');
     const rest = cartRestaurant();
     if (!rest || rest.isOpen === false) return toast('المطعم مش متاح دلوقتي');
-    const totals = Cart.totals(rest);
+    const zone = currentZone();
+    if (!zone) return toast('اختار منطقة التوصيل الأول');
+    const totals = cartTotals(rest);
     const order = {
       customerUid: u.uid,
       customerName: d.name.trim(),
@@ -390,7 +432,16 @@ function renderCheckout() {
       restaurantId: rest.id,
       restaurantName: rest.name,
       restaurantEmoji: rest.emoji,
+      restaurantAddress: rest.address || '',
+      restaurantPhone: rest.phone || '',
+      restaurantLocation: rest.location || null,
       ownerUid: rest.ownerUid ?? null,
+      zoneId: zone.id,
+      zoneName: zone.name,
+      rates: state.settings.rates,
+      driverUid: null,
+      driverName: null,
+      driverPhone: null,
       lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty })),
       totals,
       promo: Cart.promo,
@@ -435,7 +486,7 @@ function drawOrder(o) {
   const step = ORDER_FLOW.indexOf(o.status);
   const stopped = step === -1;
   const done = o.status === 'delivered';
-  const remaining = o.status === 'on_way' ? '~15 دقيقة' : `~${o.status === 'preparing' ? 25 : 35} دقيقة`;
+  const remaining = `~${{ placed: 40, preparing: 30, ready: 20, on_way: 15 }[o.status] || 30} دقيقة`;
   const historyAt = (s) => (o.statusHistory || []).find((h) => h.status === s)?.at;
 
   app.innerHTML = `
@@ -460,6 +511,7 @@ function drawOrder(o) {
               ${historyAt(s) ? `<span class="muted small">${new Date(historyAt(s)).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })}</span>` : ''}
             </li>`).join('')}
         </ol>
+        ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
         ${o.status === 'placed' ? '<p class="muted small center">مستنيين المطعم يأكد طلبك... الصفحة بتتحدث لوحدها.</p>' : ''}`}
     </section>
 
@@ -471,7 +523,7 @@ function drawOrder(o) {
       </section>
       <section class="panel">
         <h3>التوصيل</h3>
-        <p>📍 ${esc(o.address)}</p>
+        <p>📍 ${o.zoneName ? `${esc(o.zoneName)} — ` : ''}${esc(o.address)}</p>
         <p>📞 <span dir="ltr">${esc(o.customerPhone)}</span></p>
         <p>${paymentLabel(o.payment)}</p>
         ${o.notes ? `<p>📝 ${esc(o.notes)}</p>` : ''}
@@ -623,6 +675,17 @@ backend.watchRestaurants((list) => {
   const first = state.restaurants === null;
   state.restaurants = list;
   // صفحات بتعتمد على بيانات المطاعم بس، فنحدثها لما المطاعم تتغير
+  if (first || ['', 'restaurant', 'cart'].includes(page)) {
+    const y = window.scrollY;
+    router();
+    window.scrollTo(0, y);
+  }
+});
+
+backend.watchSettings((settings) => {
+  const first = state.settings === null;
+  state.settings = settings;
+  if (page === 'checkout' && !first && refreshCheckout) return refreshCheckout();
   if (first || ['', 'restaurant', 'cart'].includes(page)) {
     const y = window.scrollY;
     router();

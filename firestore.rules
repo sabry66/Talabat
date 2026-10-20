@@ -3,8 +3,9 @@ rules_version = '2';
 // قواعد الحماية: مين يقدر يقرا ويكتب إيه في قاعدة البيانات.
 // - أي حد يشوف المطاعم والمنيو.
 // - العميل يشوف طلباته بس، ويقدر يلغي الطلب قبل ما المطعم يقبله.
-// - صاحب المطعم يشوف طلبات مطعمه بس، ويغير حالتها ويعدل المنيو.
-// - الأدمن يقدر يعمل كل حاجة.
+// - صاحب المطعم يشوف طلبات مطعمه بس، ويقبلها ويجهزها ويعدل المنيو.
+// - المندوب يشوف الأوردرات اللي مستنية مندوب، وياخدها ويوصلها.
+// - الأدمن يقدر يعمل كل حاجة، وهو بس اللي يغير المناطق والنسب.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -16,6 +17,12 @@ service cloud.firestore {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isDriver() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
     }
 
     function changedOnly(keys) {
@@ -34,6 +41,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // إعدادات المنصة: المناطق وأسعار التوصيل والنسب
+    match /settings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /restaurants/{restaurantId} {
       allow read: if true;
       allow create, delete: if isAdmin();
@@ -49,10 +62,21 @@ service cloud.firestore {
         return get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data;
       }
 
+      function settings() {
+        return get(/databases/$(database)/documents/settings/app).data;
+      }
+
+      function driverFields() {
+        return ['driverUid', 'driverName', 'driverPhone', 'claimedAt'];
+      }
+
       allow read: if signedIn() && (
         resource.data.customerUid == request.auth.uid
         || resource.data.ownerUid == request.auth.uid
-        || isAdmin());
+        || isAdmin()
+        || (isDriver() && (
+              resource.data.driverUid == request.auth.uid
+              || (resource.data.driverUid == null && resource.data.status in ['preparing', 'ready']))));
 
       allow create: if signedIn()
         && request.resource.data.customerUid == request.auth.uid
@@ -63,14 +87,40 @@ service cloud.firestore {
         && request.resource.data.lines.size() <= 50
         && exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
         && restaurant().get('isOpen', true) == true
-        && request.resource.data.ownerUid == restaurant().get('ownerUid', null);
+        && request.resource.data.ownerUid == restaurant().get('ownerUid', null)
+        && request.resource.data.driverUid == null
+        // رسوم التوصيل لازم تكون سعر المنطقة، والنسب هي نسب المنصة الحالية
+        && exists(/databases/$(database)/documents/settings/app)
+        && request.resource.data.rates == settings().rates
+        && request.resource.data.zoneId in settings().zones
+        && settings().zones[request.resource.data.zoneId].get('active', true) == true
+        && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee;
 
       allow update: if isAdmin()
-        // صاحب المطعم: يغير الحالة بس
+        // صاحب المطعم: يقبل أو يرفض، وبعدين "جاهز للتسليم"
         || (signedIn()
             && resource.data.ownerUid == request.auth.uid
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
-            && request.resource.data.status in ['preparing', 'on_way', 'delivered', 'rejected'])
+            && ((resource.data.status == 'placed' && request.resource.data.status in ['preparing', 'rejected'])
+                || (resource.data.status == 'preparing' && request.resource.data.status == 'ready')))
+        // المندوب: ياخد أوردر محدش أخده
+        || (isDriver()
+            && resource.data.driverUid == null
+            && resource.data.status in ['preparing', 'ready']
+            && request.resource.data.driverUid == request.auth.uid
+            && changedOnly(driverFields()))
+        // المندوب: يسيب الأوردر قبل ما يستلمه
+        || (isDriver()
+            && resource.data.driverUid == request.auth.uid
+            && resource.data.status in ['preparing', 'ready']
+            && request.resource.data.driverUid == null
+            && changedOnly(driverFields()))
+        // المندوب: استلم من المطعم، وبعدين وصّل
+        || (isDriver()
+            && resource.data.driverUid == request.auth.uid
+            && changedOnly(['status', 'statusHistory', 'updatedAt'])
+            && ((resource.data.status == 'ready' && request.resource.data.status == 'on_way')
+                || (resource.data.status == 'on_way' && request.resource.data.status == 'delivered')))
         // العميل: يلغي قبل ما المطعم يقبل
         || (signedIn()
             && resource.data.customerUid == request.auth.uid

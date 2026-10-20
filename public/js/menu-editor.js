@@ -1,19 +1,26 @@
 // محرر بيانات المطعم والمنيو: بيستخدمه صاحب المطعم والأدمن
 import { CATEGORIES } from './data.js';
-import { esc } from './ui.js';
+import { esc, toast, restaurantLogo, itemImage } from './ui.js';
+import { uploadImage, uploadsEnabled } from './upload.js';
+import { locationPicker } from './map.js';
 
 const newItemId = () => 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-const EDITABLE = ['name', 'emoji', 'color', 'category', 'tags', 'time', 'deliveryFee', 'minOrder', 'promo', 'isOpen', 'menu'];
+const EDITABLE = ['name', 'emoji', 'color', 'logo', 'category', 'tags', 'time', 'minOrder', 'promo',
+  'address', 'phone', 'location', 'isOpen', 'menu'];
 
 // showOpenToggle: false في لوحة المطعم لأن الفتح والقفل ليه زرار لوحده فوق
 export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel = 'حفظ التعديلات', showOpenToggle = true }) {
   const fields = showOpenToggle ? EDITABLE : EDITABLE.filter((k) => k !== 'isOpen');
-  const draft = JSON.parse(JSON.stringify(Object.fromEntries(fields.map((k) => [k, restaurant[k]]))));
+  const draft = JSON.parse(JSON.stringify(Object.fromEntries(fields.map((k) => [k, restaurant[k] ?? null]))));
   draft.tags ||= [];
   draft.time ||= [20, 35];
   draft.menu ||= [];
   draft.promo ||= '';
+  draft.address ||= '';
+  draft.phone ||= '';
+  draft.logo ||= '';
+  let picker = null;
 
   // يقرا كل الحقول من الصفحة ويحطها في draft قبل أي إعادة رسم
   function sync() {
@@ -29,7 +36,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         draft.tags = v.split(/[،,]/).map((t) => t.trim()).filter(Boolean);
       } else if (f === 'timeMin' || f === 'timeMax') {
         draft.time[f === 'timeMin' ? 0 : 1] = Number(v);
-      } else if (f === 'deliveryFee' || f === 'minOrder') {
+      } else if (f === 'minOrder') {
         draft[f] = Number(v);
       } else {
         draft[f] = v;
@@ -37,23 +44,43 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
     });
   }
 
+  const canUpload = uploadsEnabled();
+
   const itemRow = (it, si, ii) => `
     <div class="edit-item ${it.available === false ? 'off' : ''}">
-      <input class="emoji-in" data-f="emoji" data-sec="${si}" data-item="${ii}" value="${esc(it.emoji || '🍽️')}" aria-label="أيقونة">
+      <label class="item-photo ${canUpload ? '' : 'disabled'}" title="${canUpload ? 'صورة الصنف' : 'رفع الصور مش متظبط'}">
+        ${itemImage(it, 52)}
+        ${canUpload ? `<input type="file" accept="image/*" data-item-photo="${si}:${ii}" hidden>` : ''}
+        <span class="photo-badge">📷</span>
+      </label>
       <div class="grow edit-item-fields">
         <input data-f="name" data-sec="${si}" data-item="${ii}" value="${esc(it.name)}" placeholder="اسم الصنف" required>
         <input data-f="desc" data-sec="${si}" data-item="${ii}" value="${esc(it.desc)}" placeholder="الوصف">
       </div>
+      <input class="emoji-in" data-f="emoji" data-sec="${si}" data-item="${ii}" value="${esc(it.emoji || '🍽️')}" aria-label="أيقونة لو مفيش صورة" title="أيقونة لو مفيش صورة">
       <input class="price-in" type="number" min="1" step="any" data-f="price" data-sec="${si}" data-item="${ii}" value="${it.price ?? ''}" placeholder="السعر" required aria-label="السعر">
       <label class="check"><input type="checkbox" data-f="available" data-sec="${si}" data-item="${ii}" ${it.available !== false ? 'checked' : ''}> متاح</label>
+      ${it.image ? `<button type="button" class="icon-btn" data-del-photo="${si}:${ii}" title="شيل الصورة" aria-label="شيل الصورة">🖼️✕</button>` : ''}
       <button type="button" class="icon-btn danger" data-del-item="${si}:${ii}" aria-label="حذف الصنف">🗑️</button>
     </div>`;
 
   function draw() {
+    if (picker) picker.destroy();
+    picker = null;
     el.innerHTML = `
       <form class="editor" id="editorForm" novalidate>
         <section class="panel">
           <h3>بيانات المطعم</h3>
+          <div class="logo-edit">
+            <div class="logo-preview" style="background:${esc(draft.color || '#eee')}">${restaurantLogo(draft, 96)}</div>
+            <div>
+              ${canUpload ? `
+                <label class="btn small">📷 ${draft.logo ? 'غيّر اللوجو' : 'ارفع لوجو المطعم'}<input type="file" accept="image/*" id="logoInput" hidden></label>
+                ${draft.logo ? '<button type="button" class="link danger" id="delLogo">شيل اللوجو</button>' : ''}`
+              : '<p class="muted small">رفع الصور مش متظبط لسه (Cloudinary). لحد ما يتظبط بيظهر الإيموجي.</p>'}
+              <p class="muted small">صورة مربعة واضحة، وهتتصغّر لوحدها.</p>
+            </div>
+          </div>
           <div class="form-grid">
             <label>اسم المطعم<input data-f="name" value="${esc(draft.name)}" required></label>
             <label>التصنيف
@@ -62,15 +89,18 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
                   `<option value="${c.id}" ${draft.category === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('')}
               </select>
             </label>
-            <label>أيقونة (إيموجي)<input data-f="emoji" value="${esc(draft.emoji)}"></label>
+            <label>أيقونة (لو مفيش لوجو)<input data-f="emoji" value="${esc(draft.emoji)}"></label>
             <label>لون الخلفية<input type="color" data-f="color" value="${esc(draft.color || '#ffe3d1')}"></label>
             <label>الكلمات المميزة (افصل بفاصلة)<input data-f="tags" value="${esc(draft.tags.join('، '))}" placeholder="برجر، وجبات سريعة"></label>
             <label>عرض (اختياري)<input data-f="promo" value="${esc(draft.promo)}" placeholder="خصم 20% على أول طلب"></label>
-            <label>وقت التوصيل من (دقيقة)<input type="number" min="1" data-f="timeMin" value="${draft.time[0]}" required></label>
+            <label>وقت التحضير والتوصيل من (دقيقة)<input type="number" min="1" data-f="timeMin" value="${draft.time[0]}" required></label>
             <label>إلى (دقيقة)<input type="number" min="1" data-f="timeMax" value="${draft.time[1]}" required></label>
-            <label>رسوم التوصيل (ج.م)<input type="number" min="0" step="any" data-f="deliveryFee" value="${draft.deliveryFee}" required></label>
-            <label>الحد الأدنى للطلب (ج.م)<input type="number" min="0" step="any" data-f="minOrder" value="${draft.minOrder}" required></label>
+            <label>الحد الأدنى للطلب (ج.م)<input type="number" min="0" step="any" data-f="minOrder" value="${draft.minOrder ?? 0}" required></label>
+            <label>تليفون المطعم<input data-f="phone" type="tel" value="${esc(draft.phone)}" inputmode="numeric" dir="ltr"></label>
           </div>
+          <label>عنوان المطعم (المندوب هيستلم منه)<input data-f="address" value="${esc(draft.address)}" placeholder="المنطقة، الشارع، علامة مميزة" required></label>
+          <div class="map-box small-map" id="restMap"><span class="muted small">جاري تحميل الخريطة...</span></div>
+          <p class="muted small" id="restLoc">${draft.location ? '✅ مكان المطعم متحدد على الخريطة' : 'اضغط على الخريطة لتحديد مكان المطعم بالظبط (عشان المندوب يوصله)'}</p>
           ${showOpenToggle ? `<label class="check"><input type="checkbox" data-f="isOpen" ${draft.isOpen !== false ? 'checked' : ''}> المطعم مفتوح ويستقبل طلبات</label>` : ''}
         </section>
 
@@ -92,11 +122,43 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         </div>
       </form>`;
 
+    locationPicker(el.querySelector('#restMap'), draft.location, (ll) => {
+      draft.location = ll;
+      el.querySelector('#restLoc').textContent = '✅ مكان المطعم متحدد على الخريطة';
+    }).then((p) => { picker = p; }).catch(() => {
+      el.querySelector('#restMap')?.replaceChildren('تعذر تحميل الخريطة');
+    });
+
     const redraw = (change) => () => {
       sync();
       change();
       draw();
     };
+    // رفع صورة: نعرض "جاري الرفع" ونعيد الرسم بعد ما تخلص
+    const upload = async (input, apply) => {
+      const file = input.files[0];
+      if (!file) return;
+      sync();
+      toast('جاري رفع الصورة... ⏳');
+      try {
+        apply(await uploadImage(file));
+        toast('تم رفع الصورة ✅ (متنساش تحفظ)');
+        draw();
+      } catch (err) {
+        toast(err.message);
+      }
+    };
+
+    el.querySelector('#logoInput')?.addEventListener('change', (e) => upload(e.target, (url) => { draft.logo = url; }));
+    el.querySelector('#delLogo')?.addEventListener('click', redraw(() => { draft.logo = ''; }));
+    el.querySelectorAll('[data-item-photo]').forEach((inp) => inp.addEventListener('change', () => {
+      const [si, ii] = inp.dataset.itemPhoto.split(':').map(Number);
+      upload(inp, (url) => { draft.menu[si].items[ii].image = url; });
+    }));
+    el.querySelectorAll('[data-del-photo]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const [si, ii] = b.dataset.delPhoto.split(':').map(Number);
+      delete draft.menu[si].items[ii].image;
+    })));
     el.querySelector('#addSec').addEventListener('click', redraw(() => draft.menu.push({ section: 'قسم جديد', items: [] })));
     el.querySelectorAll('[data-add-item]').forEach((b) => b.addEventListener('click', redraw(() =>
       draft.menu[+b.dataset.addItem].items.push({ id: newItemId(), name: '', desc: '', price: '', emoji: '🍽️', available: true }))));
@@ -117,7 +179,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       sync();
       const errEl = el.querySelector('#editorError');
       if (!form.checkValidity()) {
-        errEl.textContent = 'كمّل البيانات الناقصة: الاسم وسعر كل صنف مطلوبين.';
+        errEl.textContent = 'كمّل البيانات الناقصة: اسم المطعم وعنوانه، واسم وسعر كل صنف.';
         errEl.hidden = false;
         form.reportValidity();
         return;

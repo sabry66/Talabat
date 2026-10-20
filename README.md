@@ -1,10 +1,13 @@
-# طلباتي 🛵
+# أريفو Arrivo 🛵
 
-تطبيق ويب كامل لطلب الأكل والتوصيل، شبه "طلبات"، ببلاش بالكامل على Firebase.
+<img src="public/img/logo.png" alt="أريفو" width="120">
+
+منصة توصيل أكل كاملة (عملاء، مطاعم، مندوبين، وأدمن)، ببلاش بالكامل على Firebase.
 
 - **تطبيق العميل:** بحث، تصنيفات، منيو، سلة، أكواد خصم، تحديد العنوان على الخريطة، وتتبع الطلب لحظيًا.
-- **لوحة المطعم:** الطلبات بتوصل بصوت تنبيه، قبول ورفض وتغيير الحالة، تعديل المنيو والأسعار، وفتح وقفل المطعم.
-- **لوحة الأدمن:** إحصائيات، إضافة المطاعم وربطها بأصحابها، ومتابعة كل الطلبات.
+- **لوحة المطعم:** الطلبات بتوصل بصوت تنبيه، قبول ورفض و"جاهز للتسليم"، تعديل المنيو والأسعار، صور الأصناف ولوجو المطعم، وفتح وقفل المطعم.
+- **صفحة المندوب:** الأوردرات المتاحة بتنبيه، مكان الاستلام والتسليم على الخريطة، المبلغ اللي هيحصّله ومكسبه، وسجل أوردراته.
+- **لوحة الأدمن:** الحسابات (ربح المنصة، وحق كل مطعم وكل مندوب بأرقام الأوردرات)، مناطق التوصيل وأسعارها، النسب، المطاعم، المندوبين، والطلبات.
 
 ## 👈 ابدأ من هنا: [دليل التشغيل SETUP.md](SETUP.md)
 
@@ -20,6 +23,7 @@ python3 -m http.server 8000 -d public
 |---|---|
 | `customer@demo.com` | `/` |
 | `owner@demo.com` | `/restaurant.html` |
+| `driver@demo.com` | `/delivery.html` |
 | `admin@demo.com` | `/admin.html` |
 
 افتح كل حساب في تاب لوحده، وجرّب تطلب من تاب العميل وتستقبل الطلب في تاب المطعم.
@@ -31,6 +35,7 @@ python3 -m http.server 8000 -d public
 - Cloud Firestore لقاعدة البيانات اللحظية.
 - Firebase Hosting للاستضافة.
 - Leaflet + OpenStreetMap للخريطة.
+- Cloudinary لصور المطاعم والأصناف.
 - خط Cairo جوه المشروع في `public/fonts` (رخصة OFL المجانية)، فمش محتاج Google Fonts.
 
 ## هيكل المشروع
@@ -39,16 +44,21 @@ python3 -m http.server 8000 -d public
 public/
   index.html             تطبيق العميل
   restaurant.html        لوحة المطعم
+  delivery.html          صفحة المندوب
   admin.html             لوحة الأدمن
+  img/                   لوجو أريفو
   css/style.css
   js/
-    firebase-config.js   ⚙️ إعدادات Firebase (حطها هنا)
+    firebase-config.js   ⚙️ إعدادات Firebase
+    cloudinary-config.js ⚙️ إعدادات رفع الصور
+    finance.js           حسابات الفلوس وتقسيمها
     backend/             Firebase أو الوضع التجريبي، بنفس الواجهة
     app.js               صفحات العميل
     restaurant-dashboard.js
+    delivery.js
     admin.js
     menu-editor.js       محرر المنيو (للمطعم والأدمن)
-    cart.js, map.js, ui.js, data.js
+    cart.js, map.js, upload.js, ui.js, data.js
 firestore.rules          قواعد الحماية
 firebase.json            إعدادات الاستضافة
 ```
