@@ -3,6 +3,7 @@ import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum } from './finance.js';
+import { renderJoin } from './join.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
   renderAuthForm, renderDashNav, orderCard, restaurantLogo,
@@ -38,17 +39,12 @@ function start() {
   renderDashNav(user, backend);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
-    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'دخول أصحاب المطاعم' });
+    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'أصحاب المطاعم: سجّل دخول أو اعمل حساب جديد عشان تسجّل مطعمك' });
     return;
   }
   if (!user.restaurantId) {
-    root.innerHTML = `
-      <div class="empty-state">
-        <div class="big">🏪</div>
-        <h2>الحساب ده مش مربوط بمطعم</h2>
-        <p class="muted">ابعت إيميلك (<span dir="ltr">${esc(user.email)}</span>) لأدمن التطبيق عشان يربطه بمطعمك.</p>
-        <a href="index.html" class="btn">الرجوع للتطبيق</a>
-      </div>`;
+    root.innerHTML = `${demoBanner(isDemo)}<div id="joinBox"></div>`;
+    unsubs.push(renderJoin(document.getElementById('joinBox'), { backend, user, type: 'restaurant' }));
     return;
   }
   root.innerHTML = loader();
@@ -149,6 +145,7 @@ function drawTab() {
 
 function drawOrders() {
   const body = document.getElementById('tabBody');
+  const empty = !restaurant.menu.some((sec) => sec.items.length);
   const today = orders.filter((o) => isToday(o.createdAt));
   const delivered = today.filter((o) => o.status === 'delivered');
   const column = (status, title) => {
@@ -162,6 +159,7 @@ function drawOrders() {
   const finished = orders.filter((o) => FINAL_STATUSES.includes(o.status)).slice(0, 20);
 
   body.innerHTML = `
+    ${empty ? '<p class="warn">👋 أهلًا بيك في أريفو! ابدأ من "🍽️ المنيو والإعدادات": ضيف أصنافك وصورها ومكان المطعم على الخريطة، وبعدين اضغط "افتح المطعم". المطعم مش هيظهر للعملاء غير لما يبقى فيه أصناف.</p>' : ''}
     <div class="stats">
       <div class="stat"><span>طلبات النهارده</span><strong>${today.length}</strong></div>
       <div class="stat"><span>اتوصلت النهارده</span><strong>${delivered.length}</strong></div>

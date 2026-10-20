@@ -47,6 +47,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // طلبات الانضمام: كل واحد يقدّم طلبه بنفسه (قيد المراجعة بس)، والأدمن بس اللي يوافق أو يرفض
+    match /applications/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isAdmin()
+        || (signedIn() && request.auth.uid == uid
+            && request.resource.data.uid == uid
+            && request.resource.data.status == 'pending'
+            && request.resource.data.type in ['driver', 'restaurant']);
+      allow delete: if isAdmin();
+    }
+
     match /restaurants/{restaurantId} {
       allow read: if true;
       allow create, delete: if isAdmin();

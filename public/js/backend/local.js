@@ -31,7 +31,7 @@ function seed() {
     restaurants[r.id] = { ...clone(r), isOpen: true, ownerUid: owned ? 'u-owner' : null, ownerEmail: owned ? 'owner@demo.com' : null };
   }
   const settings = { ...clone(DEFAULT_SETTINGS), zones: clone(SAMPLE_ZONES) };
-  return { users, restaurants, orders: {}, settings };
+  return { users, restaurants, orders: {}, settings, applications: {} };
 }
 
 let cache = null;
@@ -182,6 +182,42 @@ export function createBackend() {
 
     async setUserRole(uid, role) {
       Object.assign(db().users[uid], { role, restaurantId: null });
+      commit();
+    },
+
+    // طلبات الانضمام كمندوب أو مطعم
+    async submitApplication(user, data) {
+      db().applications ||= {};
+      db().applications[user.uid] = { ...clone(data), uid: user.uid, email: user.email, status: 'pending', createdAt: Date.now() };
+      commit();
+    },
+
+    watchMyApplication(uid, cb) {
+      return watch(() => (db().applications || {})[uid] || null, cb);
+    },
+
+    watchApplications(cb) {
+      return watch(() => sortByNewest(Object.values(db().applications || {}).filter((a) => a.status === 'pending')), cb);
+    },
+
+    async approveDriver(uid) {
+      Object.assign(db().users[uid], { role: 'driver', restaurantId: null });
+      Object.assign(db().applications[uid], { status: 'approved', reviewedAt: Date.now() });
+      commit();
+    },
+
+    async approveRestaurant(uid, restaurant) {
+      const d = db();
+      const id = 'r-' + newId();
+      d.restaurants[id] = { ...clone(restaurant), id, ownerUid: uid, ownerEmail: d.users[uid].email };
+      Object.assign(d.users[uid], { role: 'restaurant', restaurantId: id });
+      Object.assign(d.applications[uid], { status: 'approved', reviewedAt: Date.now() });
+      commit();
+      return id;
+    },
+
+    async rejectApplication(uid) {
+      Object.assign(db().applications[uid], { status: 'rejected', reviewedAt: Date.now() });
       commit();
     },
 

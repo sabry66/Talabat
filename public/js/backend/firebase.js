@@ -35,6 +35,7 @@ export function createBackend(config, { useEmulators }) {
   const restaurants = collection(db, 'restaurants');
   const orders = collection(db, 'orders');
   const settingsDoc = doc(db, 'settings', 'app');
+  const applications = collection(db, 'applications');
   let signingUp = false;
 
   const logError = (cb, fallback) => (err) => {
@@ -150,6 +151,41 @@ export function createBackend(config, { useEmulators }) {
     },
 
     setUserRole: (uid, role) => updateDoc(doc(users, uid), { role, restaurantId: null }),
+
+    // طلبات الانضمام كمندوب أو مطعم (مستند واحد لكل مستخدم)
+    submitApplication: (user, data) => setDoc(doc(applications, user.uid), {
+      ...data, uid: user.uid, email: user.email, status: 'pending', createdAt: Date.now(),
+    }),
+
+    watchMyApplication(uid, cb) {
+      return onSnapshot(doc(applications, uid), (s) => cb(s.exists() ? s.data() : null), logError(cb, null));
+    },
+
+    watchApplications(cb) {
+      return onSnapshot(query(applications, where('status', '==', 'pending')),
+        (s) => cb(s.docs.map((d) => d.data()).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
+    },
+
+    approveDriver(uid) {
+      const batch = writeBatch(db);
+      batch.update(doc(users, uid), { role: 'driver', restaurantId: null });
+      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now() });
+      return batch.commit();
+    },
+
+    // بيعمل المطعم ويربطه بصاحب الطلب في خطوة واحدة
+    async approveRestaurant(uid, restaurant) {
+      const user = (await getDoc(doc(users, uid))).data();
+      const ref = doc(restaurants);
+      const batch = writeBatch(db);
+      batch.set(ref, { ...withoutId(restaurant), ownerUid: uid, ownerEmail: user.email });
+      batch.update(doc(users, uid), { role: 'restaurant', restaurantId: ref.id });
+      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now() });
+      await batch.commit();
+      return ref.id;
+    },
+
+    rejectApplication: (uid) => updateDoc(doc(applications, uid), { status: 'rejected', reviewedAt: Date.now() }),
 
     async createOrder(order) {
       return (await addDoc(orders, { ...order, createdAt: serverTimestamp() })).id;

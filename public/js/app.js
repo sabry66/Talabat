@@ -70,7 +70,8 @@ function updateHeader() {
 function renderHome() {
   if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const q = ui.query.trim();
-  let list = state.restaurants.filter((r) =>
+  // المطاعم اللي لسه مضافلهاش أصناف مش بتظهر للعملاء
+  let list = state.restaurants.filter((r) => r.menu.some((sec) => sec.items.length) &&
     (ui.category === 'all' || r.category === ui.category) &&
     (!q || r.name.includes(q) || (r.tags || []).some((t) => t.includes(q)) ||
       r.menu.some((s) => s.items.some((i) => i.name.includes(q)))));

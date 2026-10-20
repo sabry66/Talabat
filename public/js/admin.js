@@ -1,6 +1,7 @@
 // لوحة الأدمن: الإحصائيات، الحسابات، المطاعم، المناطق والنسب، المندوبين، والطلبات
 import { backend, isDemo } from './backend/index.js';
-import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES } from './data.js';
+import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES, CATEGORIES } from './data.js';
+import { VEHICLES } from './join.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
@@ -14,6 +15,7 @@ let restaurants = null;
 let orders = null;
 let settings = null;
 let drivers = [];
+let applications = [];
 let tab = 'overview';
 let editing = null; // id المطعم اللي بيتعدل، أو 'new'
 let orderFilter = 'active';
@@ -23,6 +25,7 @@ let settingsCreated = false;
 
 const TABS = [
   ['overview', '📊 نظرة عامة'],
+  ['requests', '📥 طلبات الانضمام'],
   ['finance', '💰 الحسابات'],
   ['restaurants', '🏪 المطاعم'],
   ['zones', '📍 المناطق والنسب'],
@@ -40,6 +43,7 @@ function stop() {
   orders = null;
   settings = null;
   drivers = [];
+  applications = [];
   editing = null;
 }
 
@@ -86,6 +90,11 @@ function start() {
     }
     if (first || tab !== 'zones') refresh();
   }));
+  unsubs.push(backend.watchApplications((list) => {
+    applications = list;
+    drawTabs();
+    refresh();
+  }));
   unsubs.push(backend.watchUsersByRole('driver', (list) => {
     drivers = list;
     refresh();
@@ -97,7 +106,8 @@ function drawTabs() {
   const el = document.getElementById('tabs');
   if (!el) return;
   el.innerHTML = TABS.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}${
-    k === 'orders' && active ? ` <span class="badge static">${active}</span>` : ''}</button>`).join('');
+    k === 'orders' && active ? ` <span class="badge static">${active}</span>` : ''}${
+    k === 'requests' && applications.length ? ` <span class="badge static">${applications.length}</span>` : ''}</button>`).join('');
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     tab = b.dataset.tab;
     editing = null;
@@ -111,7 +121,7 @@ function drawTab() {
   if (!body) return;
   if (!restaurants || !orders || !settings) { body.innerHTML = loader(); return; }
   ({
-    overview: drawOverview, finance: drawFinance, restaurants: drawRestaurants,
+    overview: drawOverview, requests: drawRequests, finance: drawFinance, restaurants: drawRestaurants,
     zones: drawZones, drivers: drawDrivers, orders: drawOrders,
   })[tab](body);
 }
@@ -151,6 +161,7 @@ function drawOverview(body) {
       <div class="stat"><span>مطاعم مفتوحة</span><strong>${open} / ${restaurants.length}</strong></div>
       <div class="stat"><span>المندوبين</span><strong>${drivers.length}</strong></div>
     </div>
+    ${applications.length ? `<p class="warn">📥 فيه ${applications.length} طلب انضمام مستني موافقتك. روح "طلبات الانضمام".</p>` : ''}
     ${!Object.keys(settings.zones).length ? '<p class="warn">⚠️ مفيش مناطق توصيل لسه، فالعملاء مش هيقدروا يطلبوا. روح "المناطق والنسب" وضيف مناطق.</p>' : ''}
     ${!drivers.length ? '<p class="warn">⚠️ مفيش مندوبين لسه. روح "المندوبين" وضيف مندوب بإيميله.</p>' : ''}
     <section class="panel">
@@ -158,6 +169,75 @@ function drawOverview(body) {
       ${orders.slice(0, 8).map((o) => `
         <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${esc(o.driverName)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
     </section>`;
+}
+
+// ---------- طلبات الانضمام ----------
+
+function drawRequests(body) {
+  if (!applications.length) {
+    body.innerHTML = `<div class="empty-state"><div class="big">📭</div><h2>مفيش طلبات جديدة</h2>
+      <p class="muted">المندوبين بيقدّموا من <a href="delivery.html" target="_blank">صفحة المندوبين</a>، والمطاعم من <a href="restaurant.html" target="_blank">صفحة المطاعم</a>.</p></div>`;
+    return;
+  }
+  const cat = (id) => CATEGORIES.find((c) => c.id === id);
+  body.innerHTML = `
+    <div class="requests">
+      ${applications.map((a) => `
+        <article class="panel request">
+          <header>
+            <span class="status ${a.type === 'driver' ? 'on_way' : 'ready'}">${a.type === 'driver' ? '🛵 مندوب' : '🏪 مطعم'}</span>
+            <span class="muted small">${new Date(a.createdAt).toLocaleString('ar-EG')}</span>
+          </header>
+          ${a.type === 'restaurant' ? `<h3>${esc(cat(a.category)?.icon || '')} ${esc(a.restaurantName)}</h3>` : `<h3>${esc(a.name)}</h3>`}
+          <dl>
+            <dt>الاسم</dt><dd>${esc(a.name)}</dd>
+            <dt>الموبايل</dt><dd><a href="tel:${esc(a.phone)}" dir="ltr">${esc(a.phone)}</a></dd>
+            <dt>الإيميل</dt><dd dir="ltr">${esc(a.email)}</dd>
+            ${a.type === 'driver' ? `
+              <dt>المواصلة</dt><dd>${VEHICLES[a.vehicle] || esc(a.vehicle)}</dd>
+              <dt>المناطق</dt><dd>${esc(a.area)}</dd>` : `
+              <dt>النوع</dt><dd>${esc(cat(a.category)?.name || a.category)}</dd>
+              <dt>العنوان</dt><dd>${esc(a.address)}</dd>
+              <dt>تليفون المطعم</dt><dd><a href="tel:${esc(a.restaurantPhone)}" dir="ltr">${esc(a.restaurantPhone)}</a></dd>`}
+            ${a.notes ? `<dt>ملاحظات</dt><dd>${esc(a.notes)}</dd>` : ''}
+          </dl>
+          <div class="order-actions">
+            <button class="btn primary" data-approve="${a.uid}" type="button">✅ موافقة</button>
+            <button class="btn danger-outline" data-reject="${a.uid}" type="button">رفض</button>
+          </div>
+        </article>`).join('')}
+    </div>`;
+
+  const byUid = (uid) => applications.find((a) => a.uid === uid);
+  body.querySelectorAll('[data-approve]').forEach((b) => b.addEventListener('click', async () => {
+    const a = byUid(b.dataset.approve);
+    b.disabled = true;
+    try {
+      if (a.type === 'driver') {
+        await backend.approveDriver(a.uid);
+        toast(`تمت إضافة ${a.name} كمندوب ✅`);
+      } else {
+        // المطعم بيبدأ مقفول لحد ما صاحبه يضيف المنيو ويفتحه
+        await backend.approveRestaurant(a.uid, {
+          ...NEW_RESTAURANT, name: a.restaurantName, category: a.category, emoji: cat(a.category)?.icon || '🍽️',
+          address: a.address, phone: a.restaurantPhone, isOpen: false,
+        });
+        toast(`تم تسجيل ${a.restaurantName} ✅ صاحبه يقدر يضيف المنيو دلوقتي`);
+      }
+    } catch (e) {
+      toast(errorMessage(e));
+      b.disabled = false;
+    }
+  }));
+  body.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm('رفض الطلب ده؟')) return;
+    try {
+      await backend.rejectApplication(b.dataset.reject);
+      toast('تم رفض الطلب');
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  }));
 }
 
 // ---------- الحسابات ----------
@@ -482,7 +562,7 @@ function drawDrivers(body) {
       <h2>${drivers.length} مندوب</h2>
       <button class="btn primary" id="addDriver" type="button">+ إضافة مندوب</button>
     </div>
-    <p class="muted small">المندوب يعمل حساب عادي من الموقع، وبعدين تضيفه هنا بإيميله. وهو يفتح صفحة المندوبين: <a href="delivery.html" target="_blank">delivery.html</a></p>
+    <p class="muted small">المندوب يفتح صفحة المندوبين (<a href="delivery.html" target="_blank">delivery.html</a>)، ويعمل حساب ويقدّم طلب، وإنت توافق عليه من "📥 طلبات الانضمام". أو ضيف حساب موجود بإيميله من هنا.</p>
     ${drivers.length ? `<div class="table-wrap"><table class="table">
       <thead><tr><th>المندوب</th><th>الموبايل</th><th>معاه دلوقتي</th><th>وصّل النهارده</th><th>مكسبه النهارده</th><th>كل أوردراته</th><th>كاش معاه للمنصة</th><th></th></tr></thead>
       <tbody>${drivers.map((d) => {

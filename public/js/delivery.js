@@ -2,6 +2,7 @@
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { orderSplit, sum } from './finance.js';
+import { renderJoin } from './join.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
   renderAuthForm, renderDashNav, paymentLabel,
@@ -29,17 +30,12 @@ function start() {
   renderDashNav(user, backend);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
-    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'دخول المندوبين' });
+    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
     return;
   }
   if (user.role !== 'driver') {
-    root.innerHTML = `
-      <div class="empty-state">
-        <div class="big">🛵</div>
-        <h2>الحساب ده مش متسجل كمندوب</h2>
-        <p class="muted">ابعت إيميلك (<span dir="ltr">${esc(user.email)}</span>) للأدمن عشان يضيفك كمندوب.</p>
-        <a href="index.html" class="btn">الرجوع للتطبيق</a>
-      </div>`;
+    root.innerHTML = `${demoBanner(isDemo)}<div id="joinBox"></div>`;
+    unsubs.push(renderJoin(document.getElementById('joinBox'), { backend, user, type: 'driver' }));
     return;
   }
   root.innerHTML = `${demoBanner(isDemo)}<div class="tabs" id="tabs"></div><div id="tabBody">${loader()}</div>`;
