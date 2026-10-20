@@ -7,7 +7,7 @@ import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
-  renderAuthForm, renderDashNav, renderCompleteProfile, statusBadge, restaurantLogo,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderAccountPanel, homeFor, statusBadge, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -43,7 +43,7 @@ const TABS = [
 ];
 
 // الصفحات اللي فيها فورم، مش بنعيد رسمها لما البيانات تتغير عشان منمسحش اللي الأدمن بيكتبه
-const isEditing = () => editing || tab === 'zones' || (tab === 'support' && openTicket);
+const isEditing = () => editing || tab === 'zones' || tab === 'account' || (tab === 'support' && openTicket);
 
 function stop() {
   unsubs.forEach((u) => u());
@@ -61,7 +61,10 @@ function stop() {
 
 function start() {
   stop();
-  renderDashNav(user, backend);
+  // لو الحساب ده ليه لوحة تانية (مثلًا مندوب فتح صفحة المطاعم) نوديه لوحته
+  const panel = homeFor(user);
+  if (panel && panel !== 'admin.html') { location.replace(panel); return; }
+  renderDashNav(user, backend, openAccount);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'دخول الأدمن' });
@@ -131,7 +134,7 @@ function start() {
   }));
 }
 
-const STAFF_TABS = ['support', 'requests'];
+const STAFF_TABS = ['support', 'requests', 'account'];
 const isStaff = () => user?.role === 'staff';
 
 // شكاوي مستنية رد من الإدارة
@@ -155,11 +158,23 @@ function drawTabs() {
   }));
 }
 
+// صفحة "حسابي" جوه اللوحة
+function openAccount() {
+  if (!document.getElementById('tabBody')) {
+    renderAccountPanel(root, { backend, user, onBack: start });
+    return;
+  }
+  tab = 'account';
+  drawTabs();
+  drawTab();
+}
+
 function drawTab() {
   const body = document.getElementById('tabBody');
   if (!body) return;
   if (!orders || (!isStaff() && (!restaurants || !settings))) { body.innerHTML = loader(); return; }
   ({
+    account: (b) => renderAccountPanel(b, { backend, user, onBack: () => { tab = isStaff() ? 'support' : 'overview'; drawTabs(); drawTab(); } }),
     overview: drawOverview, requests: drawRequests, support: drawSupport, finance: drawFinance, restaurants: drawRestaurants,
     zones: drawZones, drivers: drawDrivers, users: drawUsers, orders: drawOrders,
   })[tab](body);

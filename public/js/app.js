@@ -7,7 +7,7 @@ import { activeZones } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
-  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked,
+  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked, homeFor,
   changePasswordForm, bindChangePassword,
 } from './ui.js';
 import { renderSupport } from './support.js';
@@ -60,19 +60,37 @@ function setCleanup(fn) {
 
 // ---------- الهيدر ----------
 
+// شريط السلة تحت على الموبايل (في الرئيسية وصفحة المطعم)
+const cartBar = document.createElement('a');
+cartBar.className = 'mobile-cart-bar';
+cartBar.href = '#/cart';
+document.body.appendChild(cartBar);
+
+function updateCartBar() {
+  const n = Cart.count();
+  const r = state.settings && cartRestaurant();
+  const show = n > 0 && r && ['', 'restaurant'].includes(page);
+  cartBar.classList.toggle('show', Boolean(show));
+  document.body.classList.toggle('has-cart-bar', Boolean(show));
+  if (show) {
+    cartBar.innerHTML = `<span class="bar-count">${n}</span><span>عرض السلة</span><strong>${fmt(cartTotals(r).subtotal)}</strong>`;
+  }
+}
+
 function updateHeader() {
+  updateCartBar();
   document.getElementById('cartCount').textContent = Cart.count();
   const u = state.user;
   document.getElementById('addressLabel').textContent = u?.address || 'حدد عنوانك عند الطلب';
   document.getElementById('userNav').innerHTML = u
-    ? `${u.role === 'admin' ? '<a href="admin.html" class="nav-link">🛠️ الأدمن</a>' : ''}
+    ? `${u.role === 'admin' ? '<a href="admin.html" class="nav-link" data-drawer-label="🛠️ لوحة الأدمن">🛠️ الأدمن</a>' : ''}
        ${u.role === 'staff' ? '<a href="admin.html" class="nav-link">🎧 لوحة خدمة العملاء</a>' : ''}
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
-       <a href="#/orders" class="nav-link">طلباتي</a>
-       <a href="#/support" class="nav-link" title="خدمة العملاء">🎧</a>
+       <a href="#/orders" class="nav-link" data-drawer-label="🧾 طلباتي">طلباتي</a>
+       <a href="#/support" class="nav-link" title="خدمة العملاء" data-drawer-label="🎧 خدمة العملاء">🎧</a>
        <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}${u.username ? ` <span class="uname">@${esc(u.username)}</span>` : ''}</a>`
-    : u === null ? '<a href="#/login" class="nav-link">دخول</a>' : '';
+    : u === null ? '<a href="#/login" class="nav-link" data-drawer-label="🔑 دخول / حساب جديد">دخول</a>' : '';
 }
 
 // ---------- الرئيسية ----------
@@ -335,6 +353,7 @@ function drawMenu(r) {
         }).join('')}
       </section>`).join('') || '<p class="empty">مفيش أصناف مطابقة 😕</p>'}`;
   document.getElementById('sideCart').innerHTML = miniCart();
+  updateCartBar();
 
   const list = document.getElementById('menuList');
   list.querySelectorAll('[data-add], [data-inc]').forEach((b) => b.addEventListener('click', () => {
@@ -791,6 +810,9 @@ function renderNotFound() {
 
 function router() {
   setCleanup(null);
+  // المطعم والمندوب والموظف ليهم لوحاتهم، مش بيدخلوا تطبيق العملاء
+  const panel = homeFor(state.user);
+  if (panel) { location.replace(panel); return; }
   const [, name = '', id] = (location.hash || '#/').slice(1).split('/');
   page = name;
   // حساب محذوف أو محظور (المحظور يقدر يكلّم خدمة العملاء بس)
@@ -826,6 +848,10 @@ function router() {
 window.addEventListener('hashchange', () => {
   router();
   window.scrollTo(0, 0);
+  // انتقال ناعم بين الصفحات
+  app.classList.remove('page-enter');
+  void app.offsetWidth;
+  app.classList.add('page-enter');
 });
 Cart.subscribe(updateHeader);
 

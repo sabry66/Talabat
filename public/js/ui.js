@@ -248,6 +248,45 @@ export function bindChangePassword(el, backend) {
   });
 }
 
+// صفحة "حسابي" جوه لوحات المطعم والمندوب والموظفين (عشان ميحتاجوش يدخلوا تطبيق العملاء)
+export function renderAccountPanel(el, { backend, user, onBack }) {
+  el.innerHTML = `
+    ${onBack ? '<button class="back link" id="accountBack" type="button">→ رجوع</button>' : ''}
+    <form class="panel narrow" id="profileForm">
+      <h3>👤 بياناتي</h3>
+      <p class="muted" dir="ltr">${esc(user.email)}</p>
+      ${usernameField(user.username, true)}
+      <label>الاسم<input name="name" required value="${esc(user.name)}"></label>
+      <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(user.phone)}" inputmode="numeric" dir="ltr"></label>
+      <button class="btn primary block" type="submit">حفظ</button>
+    </form>
+    ${changePasswordForm()}
+    <div class="narrow"><button class="btn block" type="button" id="accountLogout">🚪 تسجيل الخروج</button></div>`;
+  el.querySelector('#accountBack')?.addEventListener('click', onBack);
+  el.querySelector('#accountLogout').addEventListener('click', () => backend.signOut());
+  el.querySelector('#profileForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    try {
+      await backend.updateProfile(user.uid, { name: d.name.trim(), address: user.address || '', location: user.location });
+      if (d.phone.trim() !== user.phone) await backend.claimIdentity(user, { username: user.username, phone: d.phone });
+      toast('تم الحفظ ✅');
+    } catch (err) {
+      toast(errorMessage(err));
+    }
+  });
+  bindChangePassword(el, backend);
+}
+
+// كل نوع حساب ليه لوحته؛ المطعم والمندوب والموظف مش بيستخدموا تطبيق العملاء
+export function homeFor(user) {
+  if (!user || user.banned || user.deleted) return null;
+  if (user.role === 'restaurant' && user.restaurantId) return 'restaurant.html';
+  if (user.role === 'driver') return 'delivery.html';
+  if (user.role === 'staff') return 'admin.html';
+  return null;
+}
+
 // للحسابات اللي اتعملت قبل أسماء المستخدمين: لازم يختاروا اسم مستخدم ويأكدوا رقمهم مرة واحدة
 export function renderCompleteProfile(el, { backend, user }) {
   el.innerHTML = `
@@ -306,13 +345,16 @@ export function renderBlocked(el, { backend, user }) {
 }
 
 // اسم المستخدم وزرار الخروج في هيدر لوحات التحكم
-export function renderDashNav(user, backend) {
+// onAccount: بيفتح صفحة "حسابي" جوه اللوحة نفسها
+export function renderDashNav(user, backend, onAccount) {
   const nav = document.getElementById('userNav');
   nav.innerHTML = user
     ? `<span class="muted small">${esc(user.name || user.email)}${user.username ? ` <b dir="ltr">@${esc(user.username)}</b>` : ''}</span>
-       <a class="btn small" href="index.html#/account" title="حسابي وكلمة السر">⚙️</a><button class="btn small" id="logoutBtn" type="button">خروج</button>`
+       <button class="btn small" id="accountBtn" type="button" title="حسابي وكلمة السر" data-drawer-label="⚙️ حسابي وكلمة السر">⚙️</button><button class="btn small" id="logoutBtn" type="button" data-drawer-label="🚪 خروج">خروج</button>`
     : '';
-  if (user) nav.querySelector('#logoutBtn').addEventListener('click', () => backend.signOut());
+  if (!user) return;
+  nav.querySelector('#logoutBtn').addEventListener('click', () => backend.signOut());
+  nav.querySelector('#accountBtn').addEventListener('click', () => onAccount?.());
 }
 
 // بطاقة طلب في لوحات التحكم، actions = [{ status, label, cls }]

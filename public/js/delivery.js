@@ -6,7 +6,7 @@ import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
-  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, paymentLabel,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, renderAccountPanel, homeFor, paymentLabel,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -31,7 +31,10 @@ function stop() {
 
 function start() {
   stop();
-  renderDashNav(user, backend);
+  // لو الحساب ده ليه لوحة تانية (مثلًا مندوب فتح صفحة المطاعم) نوديه لوحته
+  const panel = homeFor(user);
+  if (panel && panel !== 'delivery.html') { location.replace(panel); return; }
+  renderDashNav(user, backend, openAccount);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
@@ -93,12 +96,24 @@ function drawTabs() {
   }));
 }
 
+// صفحة "حسابي" جوه اللوحة
+function openAccount() {
+  if (!document.getElementById('tabBody')) {
+    renderAccountPanel(root, { backend, user, onBack: start });
+    return;
+  }
+  tab = 'account';
+  drawTabs();
+  drawTab();
+}
+
 function drawTab() {
   const body = document.getElementById('tabBody');
   if (!body) return;
   if (supportUnsub) supportUnsub();
   supportUnsub = null;
-  if (tab === 'available') drawAvailable(body);
+  if (tab === 'account') renderAccountPanel(body, { backend, user, onBack: () => { tab = 'available'; drawTabs(); drawTab(); } });
+  else if (tab === 'available') drawAvailable(body);
   else if (tab === 'active') drawActive(body);
   else if (tab === 'support') supportUnsub = renderSupport(body, { backend, user });
   else drawHistory(body);

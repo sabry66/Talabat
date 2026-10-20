@@ -7,7 +7,7 @@ import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
-  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, orderCard, restaurantLogo,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, renderAccountPanel, homeFor, orderCard, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -40,7 +40,10 @@ function stop() {
 
 function start() {
   stop();
-  renderDashNav(user, backend);
+  // لو الحساب ده ليه لوحة تانية (مثلًا مندوب فتح صفحة المطاعم) نوديه لوحته
+  const panel = homeFor(user);
+  if (panel && panel !== 'restaurant.html') { location.replace(panel); return; }
+  renderDashNav(user, backend, openAccount);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'أصحاب المطاعم: سجّل دخول أو اعمل حساب جديد عشان تسجّل مطعمك' });
@@ -141,9 +144,24 @@ function drawTabs() {
   }));
 }
 
+// صفحة "حسابي" جوه اللوحة
+function openAccount() {
+  if (!document.getElementById('tabBody')) {
+    renderAccountPanel(root, { backend, user, onBack: start });
+    return;
+  }
+  tab = 'account';
+  drawTabs();
+  drawTab();
+}
+
 function drawTab() {
   if (supportUnsub) supportUnsub();
   supportUnsub = null;
+  if (tab === 'account') {
+    renderAccountPanel(document.getElementById('tabBody'), { backend, user, onBack: () => { tab = 'orders'; drawTabs(); drawTab(); } });
+    return;
+  }
   if (tab === 'orders') return drawOrders();
   if (tab === 'support') {
     supportUnsub = renderSupport(document.getElementById('tabBody'), { backend, user });

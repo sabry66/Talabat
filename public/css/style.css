@@ -195,7 +195,7 @@ label input, label textarea { margin-top: 4px; font-weight: 400; resize: vertica
 .rider { font-size: 3rem; text-align: center; margin: 10px 0; }
 .rider.moving { animation: ride 1.6s ease-in-out infinite alternate; }
 @keyframes ride { from { transform: translateX(-40px); } to { transform: translateX(40px); } }
-.steps { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
+.steps { list-style: none; padding: 0; margin: 10px 0; display: grid; grid-template-columns: repeat(5, 1fr); position: relative; }
 .steps li { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; font-size: .85rem; color: var(--muted); position: relative; }
 .steps li:not(:last-child)::after {
   content: ''; position: absolute; top: 18px; inset-inline-start: 50%; width: 100%; height: 3px; background: var(--line); z-index: 0;
@@ -458,3 +458,182 @@ label.btn { display: inline-flex; margin: 0 0 6px; font-weight: 700; }
   .search { flex-direction: column; }
   .item-grid { grid-template-columns: 1fr; }
 }
+
+/* ================================================================
+   التجاوب مع كل الشاشات + التنعيم
+   ================================================================ */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+img { max-width: 100%; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* الشريط اللي فوق */
+.topbar {
+  padding-top: env(safe-area-inset-top);
+  background: rgba(255, 255, 255, .92);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 0;
+  box-shadow: 0 1px 0 var(--line), 0 4px 18px rgba(45, 36, 91, .05);
+}
+.topbar-inner { min-width: 0; }
+.nav { flex-wrap: nowrap; min-width: 0; }
+.nav-link { white-space: nowrap; padding: 6px 10px; border-radius: 10px; }
+.nav-link:hover { background: var(--brand-soft); color: var(--brand); }
+
+/* حركة ناعمة */
+.btn, .chip, .cat, .card, .add-btn, .item, .item-card, .tabs button, .drawer-item, .nav-link, .ticket-row, .order-row {
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .2s ease, transform .12s ease;
+}
+.btn:active, .chip:active, .cat:active, .add-btn:active, .card:active, .item-card:active, .drawer-item:active { transform: scale(.97); }
+.page-enter { animation: pageIn .26s ease-out; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cats, .tabs, .sections-nav { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.cats::-webkit-scrollbar, .tabs::-webkit-scrollbar, .sections-nav::-webkit-scrollbar { display: none; }
+.toast { bottom: calc(24px + env(safe-area-inset-bottom)); max-width: calc(100vw - 32px); text-align: center; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* الشبكات: محدش يعدّي عرض الشاشة حتى على الموبايلات الصغيرة */
+.grid { grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+.item-grid { grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
+.trips { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+.requests { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+.rates-grid { grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.form-grid { grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
+.list-head { flex-wrap: wrap; }
+.table { min-width: 560px; }
+.table-wrap { -webkit-overflow-scrolling: touch; }
+
+/* زرار القايمة (☰) */
+.menu-btn {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 42px; height: 42px; padding: 0 10px; border: 0; border-radius: 12px;
+  background: var(--brand-soft); cursor: pointer; flex: 0 0 auto;
+}
+.menu-btn span { display: block; height: 2px; border-radius: 2px; background: var(--brand); transition: transform .25s, opacity .2s; }
+body.drawer-open .menu-btn span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+body.drawer-open .menu-btn span:nth-child(2) { opacity: 0; }
+body.drawer-open .menu-btn span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* القايمة الجانبية */
+.drawer {
+  position: fixed; top: 0; bottom: 0; inset-inline-start: 0; z-index: 70;
+  width: min(320px, 86vw); background: var(--card);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  transform: translateX(105%); transition: transform .3s cubic-bezier(.2, .8, .2, 1);
+  box-shadow: -12px 0 40px rgba(20, 16, 40, .18); border-radius: 0 0 0 20px;
+}
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 69; background: rgba(20, 16, 40, .45);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+body.drawer-open { overflow: hidden; }
+body.drawer-open .drawer { transform: none; }
+body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.drawer-close { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--bg); font-size: 1.1rem; cursor: pointer; }
+.drawer-body { overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 2px; }
+.drawer-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px;
+  border: 0; border-radius: 12px; background: none; color: var(--text);
+  font: inherit; font-weight: 600; text-align: start; cursor: pointer;
+}
+.drawer-item:hover, .drawer-item.active { background: var(--brand-soft); color: var(--brand); }
+.drawer-item .badge { position: static; margin-inline-start: auto; }
+.drawer-item .uname { font-size: .85em; }
+.drawer-section { font-size: .78rem; color: var(--muted); font-weight: 700; padding: 14px 14px 4px; }
+.drawer-user { padding: 12px 14px; background: var(--bg); border-radius: 12px; margin-bottom: 4px; font-weight: 600; }
+
+/* شريط السلة تحت (موبايل) */
+.mobile-cart-bar { display: none; }
+
+/* ---------- تابلت وموبايل ---------- */
+@media (max-width: 900px) {
+  .menu-btn { display: flex; }
+  .topbar-inner { height: 58px; gap: 10px; }
+  .topbar .nav > :not(.cart-link), .topbar-inner > .install-btn, .topbar-inner > .dash-label { display: none !important; }
+  .topbar .nav { margin-inline-start: auto; }
+  .dashboard .topbar .logo { margin-inline-end: auto; }
+  .sections-nav { top: 58px; }
+  .menu-section { scroll-margin-top: 110px; }
+  .side-cart { display: none; }
+  .menu-layout { grid-template-columns: 1fr; }
+  .tabs { position: sticky; top: calc(58px + env(safe-area-inset-top)); z-index: 9; background: var(--bg); margin-inline: -16px; padding-inline: 16px; }
+
+  .mobile-cart-bar {
+    position: fixed; z-index: 40; inset-inline: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 16px;
+    background: var(--brand); color: #fff; font-weight: 700; box-shadow: 0 10px 30px rgba(45, 36, 91, .35);
+    transform: translateY(140%); transition: transform .3s cubic-bezier(.2, .8, .2, 1); pointer-events: none;
+  }
+  .mobile-cart-bar.show { transform: none; pointer-events: auto; }
+  .mobile-cart-bar span:nth-child(2) { flex: 1; }
+  .bar-count { background: var(--accent); border-radius: 10px; min-width: 28px; height: 28px; display: grid; place-items: center; padding: 0 6px; }
+  body.has-cart-bar main { padding-bottom: 96px; }
+  body.has-cart-bar .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 760px) {
+  .container { padding: 0 14px; }
+  main { padding-block: 14px 32px; }
+  .tabs { margin-inline: -14px; padding-inline: 14px; }
+  .logo { font-size: 1.3rem; }
+  .logo img { height: 34px; }
+  input, select, textarea { font-size: 16px !important; } /* الآيفون بيعمل زووم لو الخط أصغر من 16 */
+  .page-title { font-size: 1.25rem; }
+  .panel { padding: 14px; border-radius: 14px; }
+  .hero { padding: 20px 16px; border-radius: 16px; margin-bottom: 14px; }
+  .hero h1 { font-size: 1.15rem; margin-bottom: 12px; }
+  .search input { padding: 12px 14px; }
+  .cats { gap: 8px; margin-inline: -14px; padding-inline: 14px; margin-bottom: 10px; }
+  .cat { padding: 8px 12px; border-radius: 12px; font-size: .8rem; }
+  .cat-icon { font-size: 1.35rem; }
+  .grid { gap: 12px; }
+  .card-cover { height: 118px; font-size: 3.2rem; }
+  .card-cover .logo-img { width: 78px; height: 78px; }
+  .rest-header { padding: 16px; gap: 14px; border-radius: 16px; }
+  .rest-header h1 { font-size: 1.3rem; }
+  .rest-emoji { width: 80px; height: 80px; font-size: 3rem; border-radius: 16px; }
+  .item { padding: 12px; gap: 10px; }
+  .item-img { width: 76px; height: 76px; font-size: 2.2rem; }
+  .item-card .item-img { width: 76px; height: 76px; }
+  .filter-row label { max-width: none; flex: 1 1 40%; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 12px; }
+  .stat strong { font-size: 1.2rem; }
+  .dash-head { padding: 12px 14px; gap: 10px; }
+  .dash-head h1 { font-size: 1.15rem; }
+  .tabs button { padding: 10px 12px; font-size: .9rem; }
+  .steps li { font-size: .7rem; }
+  .dot { width: 32px; height: 32px; font-size: .95rem; }
+  .steps li:not(:last-child)::after { top: 15px; }
+  .track-head h1 { font-size: 1.1rem; }
+  .eta { font-size: .9rem; padding: 6px 10px; }
+  .cart-line { flex-wrap: wrap; gap: 10px; }
+  .cart-line .grow { min-width: 120px; }
+  .order-row { gap: 10px; }
+  .order-row > strong { margin-inline-start: auto; }
+  .edit-item .price-in { width: 90px; }
+  .reply { flex-direction: column; align-items: stretch; }
+  .msg { max-width: 92%; }
+  .money { font-size: .95rem; }
+  .footer { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .auth-card { margin: 8px auto; }
+}
+
+@media (max-width: 380px) {
+  .stats { grid-template-columns: 1fr; }
+  .card-cover { height: 104px; }
+  .item-img, .item-card .item-img { width: 64px; height: 64px; font-size: 1.9rem; }
+  .tabs button { padding: 9px 10px; font-size: .85rem; }
+}
+
+/* ---------- شاشات كبيرة ---------- */
+@media (min-width: 1500px) {
+  .container { max-width: 1280px; }
+  .container.wide { max-width: 1560px; }
+}
+.track { overflow: hidden; } /* حركة الموتوسيكل متطلعش برّه الشاشة */
