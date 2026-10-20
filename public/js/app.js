@@ -4,6 +4,7 @@ import { CATEGORIES, PROMO_CODES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } f
 import { Cart } from './cart.js';
 import { locationPicker } from './map.js';
 import { activeZones } from './finance.js';
+import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked,
@@ -16,7 +17,12 @@ const app = document.getElementById('app');
 // user: undefined = لسه بيحمّل، null = مش مسجل
 const state = { user: undefined, restaurants: null, settings: null };
 // حالة صفحة الرئيسية (بحث / تصنيف / ترتيب)
-const ui = { query: '', category: 'all', sort: 'recommended' };
+const ui = {
+  query: '', category: 'all', sort: 'recommended', showFilters: false, showAllItems: false,
+  openOnly: false, promoOnly: false, topRated: false, priceMin: '', priceMax: '',
+};
+// البحث والفلترة جوه منيو المطعم
+const menuUi = { query: '', sort: 'default', availableOnly: false };
 let page = '';
 let cleanup = null;
 let refreshCheckout = null;
@@ -73,22 +79,34 @@ function updateHeader() {
 
 function renderHome() {
   if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
-  const q = ui.query.trim();
-  // المطاعم اللي لسه مضافلهاش أصناف مش بتظهر للعملاء
-  let list = state.restaurants.filter((r) => !r.blocked && r.menu.some((sec) => sec.items.length) &&
-    (ui.category === 'all' || r.category === ui.category) &&
-    (!q || r.name.includes(q) || (r.tags || []).some((t) => t.includes(q)) ||
-      r.menu.some((s) => s.items.some((i) => i.name.includes(q)))));
-  if (ui.sort === 'rating') list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  if (ui.sort === 'time') list.sort((a, b) => a.time[0] - b.time[0]);
-  list.sort((a, b) => (b.isOpen !== false) - (a.isOpen !== false));
+  const activeFilters = [ui.openOnly, ui.promoOnly, ui.topRated, ui.priceMin, ui.priceMax].filter(Boolean).length;
 
+  // الحاجات الثابتة (البحث والفلاتر) بترسم مرة، والنتايج بس اللي بتتحدث وإنت بتكتب
   app.innerHTML = `
     ${demoBanner(isDemo)}
     <section class="hero">
       <h1>جعان؟ اطلب أكلك المفضل وهيوصلك لحد الباب 🛵</h1>
       <div class="search">
-        <input id="search" type="search" placeholder="دوّر على مطعم أو أكلة..." value="${esc(ui.query)}" autocomplete="off">
+        <input id="search" type="search" placeholder="دوّر على مطعم أو أكلة... (مثال: شاورما، بيتزا، كشري)" value="${esc(ui.query)}" autocomplete="off" enterkeyhint="search">
+        <button class="btn filter-btn ${ui.showFilters ? 'active' : ''}" id="toggleFilters" type="button">⚙️ فلترة${activeFilters ? ` <span class="badge static">${activeFilters}</span>` : ''}</button>
+      </div>
+    </section>
+
+    <section class="panel filters" id="filters" ${ui.showFilters ? '' : 'hidden'}>
+      <div class="chips">
+        <label class="chip check-chip"><input type="checkbox" data-filter="openOnly" ${ui.openOnly ? 'checked' : ''}> 🟢 مفتوح دلوقتي</label>
+        <label class="chip check-chip"><input type="checkbox" data-filter="promoOnly" ${ui.promoOnly ? 'checked' : ''}> 🏷️ عليه عرض</label>
+        <label class="chip check-chip"><input type="checkbox" data-filter="topRated" ${ui.topRated ? 'checked' : ''}> ⭐ تقييم 4 وأكتر</label>
+      </div>
+      <div class="filter-row">
+        <label>السعر من<input type="number" min="0" inputmode="numeric" data-filter="priceMin" value="${esc(ui.priceMin)}" placeholder="0"></label>
+        <label>إلى<input type="number" min="0" inputmode="numeric" data-filter="priceMax" value="${esc(ui.priceMax)}" placeholder="أي سعر"></label>
+        <label>الترتيب
+          <select data-filter="sort">
+            ${Object.entries(SORTS).map(([v, l]) => `<option value="${v}" ${ui.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </label>
+        <button class="link danger" id="clearFilters" type="button">مسح الفلاتر</button>
       </div>
     </section>
 
@@ -99,29 +117,106 @@ function renderHome() {
         </button>`).join('')}
     </section>
 
-    <div class="list-head">
-      <h2>${list.length} مطعم</h2>
-      <select id="sort" aria-label="ترتيب">
-        ${[['recommended', 'المقترح'], ['rating', 'الأعلى تقييمًا'], ['time', 'الأسرع توصيلًا']]
-          .map(([v, l]) => `<option value="${v}" ${ui.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
-      </select>
-    </div>
+    <div id="results"></div>`;
 
-    <section class="grid">
-      ${list.length ? list.map(restaurantCard).join('')
-        : `<p class="empty">${state.restaurants.length ? 'مفيش نتائج مطابقة 😕' : 'مفيش مطاعم لسه. الأدمن يقدر يضيف مطاعم من لوحة الأدمن.'}</p>`}
-    </section>`;
+  drawResults();
 
-  document.getElementById('search').addEventListener('input', (e) => {
-    ui.query = e.target.value;
-    const pos = e.target.selectionStart;
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => { ui.query = search.value; ui.showAllItems = false; drawResults(); });
+  document.getElementById('toggleFilters').addEventListener('click', () => { ui.showFilters = !ui.showFilters; renderHome(); });
+  app.querySelectorAll('[data-filter]').forEach((inp) => inp.addEventListener(inp.type === 'number' ? 'input' : 'change', () => {
+    ui[inp.dataset.filter] = inp.type === 'checkbox' ? inp.checked : inp.value;
+    drawResults();
+    const n = [ui.openOnly, ui.promoOnly, ui.topRated, ui.priceMin, ui.priceMax].filter(Boolean).length;
+    document.getElementById('toggleFilters').innerHTML = `⚙️ فلترة${n ? ` <span class="badge static">${n}</span>` : ''}`;
+  }));
+  document.getElementById('clearFilters').addEventListener('click', () => {
+    Object.assign(ui, { openOnly: false, promoOnly: false, topRated: false, priceMin: '', priceMax: '', sort: 'recommended' });
     renderHome();
-    const s = document.getElementById('search');
-    s.focus();
-    s.setSelectionRange(pos, pos);
   });
   app.querySelectorAll('.cat').forEach((b) => b.addEventListener('click', () => { ui.category = b.dataset.cat; renderHome(); }));
-  document.getElementById('sort').addEventListener('change', (e) => { ui.sort = e.target.value; renderHome(); });
+}
+
+// نتايج البحث: الأصناف اللي بتدوّر عليها، والمطاعم
+function drawResults() {
+  const box = document.getElementById('results');
+  if (!box) return;
+  const q = ui.query.trim();
+  // المطاعم اللي لسه مضافلهاش أصناف أو موقوفة مش بتظهر للعملاء
+  const visible = state.restaurants.filter((r) => !r.blocked && r.menu.some((sec) => sec.items.length) &&
+    (ui.category === 'all' || r.category === ui.category) &&
+    (!ui.openOnly || r.isOpen !== false) &&
+    (!ui.promoOnly || r.promo) &&
+    (!ui.topRated || (r.rating || 0) >= 4));
+
+  // الأصناف اللي بتطابق البحث (بتظهر بس لو فيه بحث أو فلتر سعر)
+  const wantItems = q || ui.priceMin || ui.priceMax;
+  let items = wantItems ? visible.flatMap((r) => r.menu.flatMap((sec) => sec.items
+    .filter((it) => isAvailable(it) && inPriceRange(it.price, ui) && matches(q, it.name, it.desc, sec.section))
+    .map((it) => ({ it, r })))) : [];
+
+  let list = visible.filter((r) => (!q || matches(q, r.name, r.tags || [], CATEGORIES.find((c) => c.id === r.category)?.name || '')
+      || items.some((x) => x.r.id === r.id))
+    && (!(ui.priceMin || ui.priceMax) || r.menu.some((sec) => sec.items.some((it) => isAvailable(it) && inPriceRange(it.price, ui)))));
+
+  const byOpen = (a, b) => (b.isOpen !== false) - (a.isOpen !== false);
+  if (ui.sort === 'rating') { list.sort((a, b) => (b.rating || 0) - (a.rating || 0)); items.sort((a, b) => (b.r.rating || 0) - (a.r.rating || 0)); }
+  if (ui.sort === 'time') { list.sort((a, b) => a.time[0] - b.time[0]); items.sort((a, b) => a.r.time[0] - b.r.time[0]); }
+  if (ui.sort === 'price_low') { list.sort((a, b) => minPrice(a) - minPrice(b)); items.sort((a, b) => a.it.price - b.it.price); }
+  if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => b.it.price - a.it.price); }
+  list.sort(byOpen);
+  items.sort((a, b) => byOpen(a.r, b.r));
+
+  const ITEMS_PREVIEW = 12;
+  const shownItems = ui.showAllItems ? items : items.slice(0, ITEMS_PREVIEW);
+
+  box.innerHTML = `
+    ${wantItems ? `
+      <div class="list-head"><h2>🍽️ ${items.length} صنف</h2></div>
+      ${items.length ? `<section class="item-grid">${shownItems.map(itemCard).join('')}</section>
+        ${items.length > ITEMS_PREVIEW && !ui.showAllItems ? `<button class="btn block" id="showAllItems" type="button">عرض كل الأصناف (${items.length})</button>` : ''}`
+        : '<p class="muted">مفيش أصناف مطابقة.</p>'}` : ''}
+    <div class="list-head"><h2>🏪 ${list.length} مطعم</h2></div>
+    <section class="grid">
+      ${list.length ? list.map(restaurantCard).join('')
+        : `<p class="empty">${state.restaurants.length ? 'مفيش نتائج مطابقة 😕 جرّب كلمة تانية أو امسح الفلاتر' : 'مفيش مطاعم لسه.'}</p>`}
+    </section>`;
+
+  box.querySelector('#showAllItems')?.addEventListener('click', () => { ui.showAllItems = true; drawResults(); });
+  box.querySelectorAll('[data-quick-add]').forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    const [rid, itemId] = b.dataset.quickAdd.split(':');
+    if (addToCart(findRestaurant(rid), itemId)) drawResults();
+  }));
+}
+
+function itemCard({ it, r }) {
+  const closed = r.isOpen === false;
+  const qty = Cart.restaurantId === r.id ? Cart.qty(it.id) : 0;
+  return `
+    <a class="item-card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
+      <div class="item-img">${itemImage(it, 90)}</div>
+      <div class="grow">
+        <b>${esc(it.name)}</b>
+        <div class="muted small clamp">${esc(it.desc)}</div>
+        <div class="small">${esc(r.emoji)} ${esc(r.name)}${closed ? ' • <span class="warn-text">مغلق</span>' : ''}</div>
+        <div class="item-card-foot">
+          <strong>${fmt(it.price)}</strong>
+          ${closed ? '' : `<button class="add-btn" data-quick-add="${r.id}:${it.id}" type="button">${qty ? `✓ ${qty} في السلة +` : '+ إضافة'}</button>`}
+        </div>
+      </div>
+    </a>`;
+}
+
+// إضافة صنف للسلة (مع سؤال لو السلة فيها أصناف من مطعم تاني)
+function addToCart(r, itemId) {
+  if (!Cart.add(r.id, itemId)) {
+    const other = cartRestaurant();
+    if (!confirm(`السلة فيها أصناف من "${other?.name || 'مطعم تاني'}". تحب تفضّيها وتبدأ طلب جديد من "${r.name}"؟`)) return false;
+    Cart.add(r.id, itemId, true);
+  }
+  toast('تمت الإضافة للسلة ✅');
+  return true;
 }
 
 function restaurantCard(r) {
@@ -149,7 +244,7 @@ function renderRestaurant(id) {
   const r = findRestaurant(id);
   if (!r || r.blocked) return renderNotFound();
   const closed = r.isOpen === false;
-  const inCart = Cart.restaurantId === r.id;
+  if (menuUi.rid !== r.id) Object.assign(menuUi, { rid: r.id, query: '', sort: 'default', availableOnly: false });
 
   app.innerHTML = `
     <a href="#/" class="back">→ رجوع للمطاعم</a>
@@ -164,66 +259,90 @@ function renderRestaurant(id) {
     </section>
     ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>' : ''}
 
+    <div class="menu-tools">
+      <input id="menuSearch" type="search" placeholder="🔍 دوّر في منيو ${esc(r.name)}..." value="${esc(menuUi.query)}" autocomplete="off">
+      <select id="menuSort" aria-label="ترتيب المنيو">
+        ${[['default', 'ترتيب المنيو'], ['price_low', 'الأرخص الأول'], ['price_high', 'الأغلى الأول']]
+          .map(([v, l]) => `<option value="${v}" ${menuUi.sort === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <label class="chip check-chip"><input type="checkbox" id="menuAvailable" ${menuUi.availableOnly ? 'checked' : ''}> المتاح بس</label>
+    </div>
+
     <nav class="sections-nav">
-      ${r.menu.map((s, i) => `<a href="#sec-${i}" data-scroll="sec-${i}">${esc(s.section)}</a>`).join('')}
+      ${r.menu.map((sec, i) => `<a href="#sec-${i}" data-scroll="sec-${i}">${esc(sec.section)}</a>`).join('')}
     </nav>
 
     <div class="menu-layout">
-      <div class="menu">
-        ${r.menu.map((s, i) => `
-          <section class="menu-section" id="sec-${i}">
-            <h2>${esc(s.section)}</h2>
-            ${s.items.map((it) => {
-              const qty = inCart ? Cart.qty(it.id) : 0;
-              const can = !closed && isAvailable(it);
-              return `
-              <div class="item ${isAvailable(it) ? '' : 'unavailable'}">
-                <div class="item-info">
-                  <h3>${esc(it.name)}</h3>
-                  <p class="muted">${esc(it.desc)}</p>
-                  <strong>${fmt(it.price)}</strong>
-                </div>
-                <div class="item-side">
-                  <div class="item-img">${itemImage(it)}</div>
-                  ${!isAvailable(it) ? '<span class="muted small">غير متاح</span>'
-                    : qty ? `<div class="qty">
-                         <button data-dec="${it.id}" type="button" aria-label="نقص">−</button>
-                         <span>${qty}</span>
-                         <button data-inc="${it.id}" type="button" aria-label="زود" ${can ? '' : 'disabled'}>+</button>
-                       </div>`
-                    : `<button class="add-btn" data-add="${it.id}" type="button" ${can ? '' : 'disabled'}>+ إضافة</button>`}
-                </div>
-              </div>`;
-            }).join('')}
-          </section>`).join('')}
-      </div>
-      <aside class="side-cart">${miniCart()}</aside>
+      <div class="menu" id="menuList"></div>
+      <aside class="side-cart" id="sideCart"></aside>
     </div>`;
 
   app.querySelectorAll('[data-scroll]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
-    document.getElementById(a.dataset.scroll).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById(a.dataset.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
+  document.getElementById('menuSearch').addEventListener('input', (e) => { menuUi.query = e.target.value; drawMenu(r); });
+  document.getElementById('menuSort').addEventListener('change', (e) => { menuUi.sort = e.target.value; drawMenu(r); });
+  document.getElementById('menuAvailable').addEventListener('change', (e) => { menuUi.availableOnly = e.target.checked; drawMenu(r); });
+  drawMenu(r);
+}
 
-  const rerender = () => {
-    const y = window.scrollY;
-    renderRestaurant(id);
-    window.scrollTo(0, y);
+// المنيو بعد البحث والفلترة (بيتحدث لوحده من غير ما خانة البحث تتمسح)
+function drawMenu(r) {
+  const closed = r.isOpen === false;
+  const inCart = Cart.restaurantId === r.id;
+  const filterItems = (sec) => {
+    const list = sec.items.filter((it) => (!menuUi.availableOnly || isAvailable(it))
+      && matches(menuUi.query, it.name, it.desc, sec.section));
+    if (menuUi.sort === 'price_low') list.sort((a, b) => a.price - b.price);
+    if (menuUi.sort === 'price_high') list.sort((a, b) => b.price - a.price);
+    return list;
   };
+  let sections = r.menu.map((sec, i) => ({ sec, i, items: filterItems(sec) })).filter((x) => x.items.length);
+  // الترتيب بالسعر: قايمة واحدة لكل الأصناف بدل ما يترتبوا جوه كل قسم لوحده
+  if (menuUi.sort !== 'default' && sections.length) {
+    const all = sections.flatMap((x) => x.items).sort((a, b) => (menuUi.sort === 'price_low' ? a.price - b.price : b.price - a.price));
+    sections = [{ sec: { section: menuUi.sort === 'price_low' ? 'كل الأصناف (من الأرخص)' : 'كل الأصناف (من الأغلى)' }, i: 'all', items: all }];
+  }
+  const filtering = menuUi.query.trim() || menuUi.availableOnly;
 
-  app.querySelectorAll('[data-add], [data-inc]').forEach((b) => b.addEventListener('click', () => {
-    const itemId = b.dataset.add || b.dataset.inc;
-    if (!Cart.add(r.id, itemId)) {
-      const other = cartRestaurant();
-      if (!confirm(`السلة فيها أصناف من "${other?.name || 'مطعم تاني'}". تحب تفضّيها وتبدأ طلب جديد من "${r.name}"؟`)) return;
-      Cart.add(r.id, itemId, true);
-    }
-    toast('تمت الإضافة للسلة ✅');
-    rerender();
+  document.getElementById('menuList').innerHTML = `
+    ${filtering ? `<p class="muted small">${sections.reduce((n, x) => n + x.items.length, 0)} صنف مطابق</p>` : ''}
+    ${sections.map(({ sec, i, items }) => `
+      <section class="menu-section" id="sec-${i}">
+        <h2>${esc(sec.section)}</h2>
+        ${items.map((it) => {
+          const qty = inCart ? Cart.qty(it.id) : 0;
+          const can = !closed && isAvailable(it);
+          return `
+          <div class="item ${isAvailable(it) ? '' : 'unavailable'}">
+            <div class="item-info">
+              <h3>${esc(it.name)}</h3>
+              <p class="muted">${esc(it.desc)}</p>
+              <strong>${fmt(it.price)}</strong>
+            </div>
+            <div class="item-side">
+              <div class="item-img">${itemImage(it)}</div>
+              ${!isAvailable(it) ? '<span class="muted small">غير متاح</span>'
+                : qty ? `<div class="qty">
+                     <button data-dec="${it.id}" type="button" aria-label="نقص">−</button>
+                     <span>${qty}</span>
+                     <button data-inc="${it.id}" type="button" aria-label="زود" ${can ? '' : 'disabled'}>+</button>
+                   </div>`
+                : `<button class="add-btn" data-add="${it.id}" type="button" ${can ? '' : 'disabled'}>+ إضافة</button>`}
+            </div>
+          </div>`;
+        }).join('')}
+      </section>`).join('') || '<p class="empty">مفيش أصناف مطابقة 😕</p>'}`;
+  document.getElementById('sideCart').innerHTML = miniCart();
+
+  const list = document.getElementById('menuList');
+  list.querySelectorAll('[data-add], [data-inc]').forEach((b) => b.addEventListener('click', () => {
+    if (addToCart(r, b.dataset.add || b.dataset.inc)) drawMenu(r);
   }));
-  app.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
+  list.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
     Cart.setQty(b.dataset.dec, Cart.qty(b.dataset.dec) - 1);
-    rerender();
+    drawMenu(r);
   }));
 }
 
