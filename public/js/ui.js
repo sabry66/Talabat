@@ -199,6 +199,30 @@ export function renderCompleteProfile(el, { backend, user }) {
 
 export { usernameField };
 
+// حساب محظور أو محذوف: بيرجّع true لو رسم الشاشة (والصفحة توقف هنا)
+export function renderBlocked(el, { backend, user }) {
+  if (!user?.deleted && !user?.banned) return false;
+  el.innerHTML = user.deleted ? `
+    <div class="empty-state">
+      <div class="big">🗑️</div>
+      <h2>الحساب ده اتحذف</h2>
+      <p class="muted">لو ده حصل بالغلط، كلّم إدارة أريفو.</p>
+      <button class="btn" type="button" id="blockedLogout">خروج</button>
+    </div>` : `
+    <div class="empty-state">
+      <div class="big">🚫</div>
+      <h2>حسابك موقوف</h2>
+      ${user.bannedReason ? `<p>السبب: ${esc(user.bannedReason)}</p>` : ''}
+      <p class="muted">لو شايف إن ده غلط، ابعتلنا من خدمة العملاء.</p>
+      <div class="row-actions center-row">
+        <a class="btn primary" href="index.html#/support">🎧 خدمة العملاء</a>
+        <button class="btn" type="button" id="blockedLogout">خروج</button>
+      </div>
+    </div>`;
+  el.querySelector('#blockedLogout').addEventListener('click', () => backend.signOut());
+  return true;
+}
+
 // اسم المستخدم وزرار الخروج في هيدر لوحات التحكم
 export function renderDashNav(user, backend) {
   const nav = document.getElementById('userNav');

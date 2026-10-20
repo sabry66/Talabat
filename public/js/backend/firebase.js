@@ -40,6 +40,16 @@ export function createBackend(config, { useEmulators }) {
   // مستند لكل اسم مستخدم ولكل رقم موبايل، عشان محدش ياخدهم مرتين
   const usernames = collection(db, 'usernames');
   const phones = collection(db, 'phones');
+  const tickets = collection(db, 'tickets');
+  const message = (by, name, text) => ({ by, name, text, at: Date.now() });
+
+  // بيرجّع الأوردرات اللي المندوب ماستلمهاش لسه لباقي المندوبين
+  async function releaseDriverOrders(batch, uid) {
+    const snap = await getDocs(query(orders, where('driverUid', '==', uid)));
+    snap.docs.filter((d) => CLAIMABLE.includes(d.data().status)).forEach((d) => batch.update(d.ref, {
+      driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
+    }));
+  }
   let signingUp = false;
 
   const logError = (cb, fallback) => (err) => {
@@ -205,7 +215,7 @@ export function createBackend(config, { useEmulators }) {
       return onSnapshot(settingsDoc, (s) => cb({ ...withDefaults(s.data()), exists: s.exists() }), logError(cb, withDefaults()));
     },
 
-    saveSettings: (settings) => setDoc(settingsDoc, { zones: settings.zones, rates: settings.rates }),
+    saveSettings: (settings) => setDoc(settingsDoc, { zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '' }),
 
     watchUsersByRole(role, cb) {
       return onSnapshot(query(users, where('role', '==', role)),
@@ -248,6 +258,67 @@ export function createBackend(config, { useEmulators }) {
     },
 
     rejectApplication: (uid) => updateDoc(doc(applications, uid), { status: 'rejected', reviewedAt: Date.now() }),
+
+    // ---------- خدمة العملاء ----------
+    async createTicket(user, { topic, subject, text, orderId }) {
+      const now = Date.now();
+      const ref = await addDoc(tickets, {
+        uid: user.uid, name: user.name, username: user.username || null, role: user.role, phone: user.phone || '',
+        topic, subject, orderId: orderId || null, status: 'open', lastBy: 'user',
+        createdAt: now, updatedAt: now, messages: [message(user.uid, user.name, text)],
+      });
+      return ref.id;
+    },
+
+    replyTicket: (id, user, text) => updateDoc(doc(tickets, id), {
+      messages: arrayUnion(message(user.uid, user.name, text)), updatedAt: Date.now(), lastBy: 'user', status: 'open',
+    }),
+
+    adminReplyTicket: (id, admin, text) => updateDoc(doc(tickets, id), {
+      messages: arrayUnion(message('admin', admin.name, text)), updatedAt: Date.now(), lastBy: 'admin',
+    }),
+
+    setTicketStatus: (id, status) => updateDoc(doc(tickets, id), { status, updatedAt: Date.now() }),
+
+    watchMyTickets(uid, cb) {
+      return onSnapshot(query(tickets, where('uid', '==', uid)),
+        (s) => cb(s.docs.map(withId).sort((a, b) => b.updatedAt - a.updatedAt)), logError(cb, []));
+    },
+
+    watchAllTickets(cb) {
+      return onSnapshot(query(tickets, orderBy('updatedAt', 'desc'), limit(300)), (s) => cb(s.docs.map(withId)), logError(cb, []));
+    },
+
+    // ---------- الحظر والحذف (للأدمن) ----------
+    async setBanned(user, banned, reason = '') {
+      const batch = writeBatch(db);
+      batch.update(doc(users, user.uid), { banned, bannedReason: banned ? reason : null });
+      if (banned && user.role === 'driver') await releaseDriverOrders(batch, user.uid);
+      if (banned && user.restaurantId) batch.update(doc(restaurants, user.restaurantId), { blocked: true, isOpen: false });
+      if (!banned && user.restaurantId) batch.update(doc(restaurants, user.restaurantId), { blocked: false });
+      await batch.commit();
+    },
+
+    // Firebase مش بيسمح بمسح حساب الدخول نفسه من المتصفح، فبنمسح بياناته ونقفله،
+    // ونفك اسم المستخدم والرقم عشان حد تاني يقدر ياخدهم
+    async deleteAccount(user) {
+      const batch = writeBatch(db);
+      batch.update(doc(users, user.uid), {
+        deleted: true, banned: true, name: 'حساب محذوف', phone: '', address: '', location: null,
+        username: null, deletedUsername: user.username || null, role: 'customer', restaurantId: null,
+      });
+      if (user.username) batch.delete(doc(usernames, user.username));
+      if (user.phone) batch.delete(doc(phones, user.phone));
+      if (user.role === 'driver') await releaseDriverOrders(batch, user.uid);
+      if (user.restaurantId) {
+        batch.update(doc(restaurants, user.restaurantId), { ownerUid: null, ownerEmail: null, ownerUsername: null, isOpen: false });
+      }
+      const app = await getDoc(doc(applications, user.uid));
+      if (app.exists()) batch.delete(app.ref);
+      await batch.commit();
+    },
+
+    setRestaurantBlocked: (id, blocked) => updateDoc(doc(restaurants, id), blocked ? { blocked: true, isOpen: false } : { blocked: false }),
 
     async createOrder(order) {
       return (await addDoc(orders, { ...order, createdAt: serverTimestamp() })).id;

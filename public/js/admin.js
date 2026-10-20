@@ -2,6 +2,7 @@
 import { backend, isDemo } from './backend/index.js';
 import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES, CATEGORIES } from './data.js';
 import { VEHICLES } from './join.js';
+import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
@@ -17,6 +18,10 @@ let settings = null;
 let drivers = [];
 let users = [];
 let userQuery = '';
+let usersRedraw = null;
+let tickets = [];
+let ticketFilter = 'open';
+let openTicket = null;
 let applications = [];
 let tab = 'overview';
 let editing = null; // id المطعم اللي بيتعدل، أو 'new'
@@ -28,6 +33,7 @@ let settingsCreated = false;
 const TABS = [
   ['overview', '📊 نظرة عامة'],
   ['requests', '📥 طلبات الانضمام'],
+  ['support', '🎧 الشكاوي'],
   ['finance', '💰 الحسابات'],
   ['restaurants', '🏪 المطاعم'],
   ['zones', '📍 المناطق والنسب'],
@@ -37,7 +43,7 @@ const TABS = [
 ];
 
 // الصفحات اللي فيها فورم، مش بنعيد رسمها لما البيانات تتغير عشان منمسحش اللي الأدمن بيكتبه
-const isEditing = () => editing || tab === 'zones';
+const isEditing = () => editing || tab === 'zones' || (tab === 'support' && openTicket);
 
 function stop() {
   unsubs.forEach((u) => u());
@@ -47,6 +53,8 @@ function stop() {
   settings = null;
   drivers = [];
   users = [];
+  tickets = [];
+  openTicket = null;
   applications = [];
   editing = null;
 }
@@ -99,6 +107,11 @@ function start() {
     }
     if (first || tab !== 'zones') refresh();
   }));
+  unsubs.push(backend.watchAllTickets((list) => {
+    tickets = list;
+    drawTabs();
+    if (tab === 'support') drawSupport(document.getElementById('tabBody'));
+  }));
   unsubs.push(backend.watchApplications((list) => {
     applications = list;
     drawTabs();
@@ -107,9 +120,13 @@ function start() {
   unsubs.push(backend.watchUsers((list) => {
     users = list;
     drivers = list.filter((u) => u.role === 'driver');
-    if (tab !== 'users') refresh();
+    if (tab === 'users' && usersRedraw) usersRedraw();
+    else refresh();
   }));
 }
+
+// شكاوي مستنية رد من الإدارة
+const waitingTickets = () => tickets.filter((t) => t.status !== 'closed' && t.lastBy !== 'admin');
 
 function drawTabs() {
   const active = (orders || []).filter((o) => !FINAL_STATUSES.includes(o.status)).length;
@@ -117,10 +134,13 @@ function drawTabs() {
   if (!el) return;
   el.innerHTML = TABS.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}${
     k === 'orders' && active ? ` <span class="badge static">${active}</span>` : ''}${
-    k === 'requests' && applications.length ? ` <span class="badge static">${applications.length}</span>` : ''}</button>`).join('');
+    k === 'requests' && applications.length ? ` <span class="badge static">${applications.length}</span>` : ''}${
+    k === 'support' && waitingTickets().length ? ` <span class="badge static">${waitingTickets().length}</span>` : ''}</button>`).join('');
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     tab = b.dataset.tab;
     editing = null;
+    openTicket = null;
+    usersRedraw = null;
     drawTabs();
     drawTab();
   }));
@@ -131,7 +151,7 @@ function drawTab() {
   if (!body) return;
   if (!restaurants || !orders || !settings) { body.innerHTML = loader(); return; }
   ({
-    overview: drawOverview, requests: drawRequests, finance: drawFinance, restaurants: drawRestaurants,
+    overview: drawOverview, requests: drawRequests, support: drawSupport, finance: drawFinance, restaurants: drawRestaurants,
     zones: drawZones, drivers: drawDrivers, users: drawUsers, orders: drawOrders,
   })[tab](body);
 }
@@ -174,6 +194,7 @@ function drawOverview(body) {
       <div class="stat"><span>مطاعم مفتوحة</span><strong>${open} / ${restaurants.length}</strong></div>
       <div class="stat"><span>المندوبين</span><strong>${drivers.length}</strong></div>
     </div>
+    ${waitingTickets().length ? `<p class="warn">🎧 فيه ${waitingTickets().length} شكوى مستنية ردك. روح "الشكاوي".</p>` : ''}
     ${applications.length ? `<p class="warn">📥 فيه ${applications.length} طلب انضمام مستني موافقتك. روح "طلبات الانضمام".</p>` : ''}
     ${!Object.keys(settings.zones).length ? '<p class="warn">⚠️ مفيش مناطق توصيل لسه، فالعملاء مش هيقدروا يطلبوا. روح "المناطق والنسب" وضيف مناطق.</p>' : ''}
     ${!drivers.length ? '<p class="warn">⚠️ مفيش مندوبين لسه. روح "المندوبين" وضيف مندوب بإيميله.</p>' : ''}
@@ -182,6 +203,84 @@ function drawOverview(body) {
       ${orders.slice(0, 8).map((o) => `
         <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${who(o.driverName, o.driverUsername)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
     </section>`;
+}
+
+// ---------- الشكاوي ----------
+
+function drawSupport(body) {
+  const t = openTicket && tickets.find((x) => x.id === openTicket);
+  if (t) return drawTicket(body, t);
+  const filters = { open: 'المفتوحة', waiting: 'مستنية ردك', all: 'الكل' };
+  const list = tickets.filter((x) => ticketFilter === 'all' ? true
+    : ticketFilter === 'waiting' ? x.status !== 'closed' && x.lastBy !== 'admin' : x.status !== 'closed');
+  body.innerHTML = `
+    <div class="list-head">
+      <h2>${list.length} شكوى</h2>
+      <div class="chips">${Object.entries(filters).map(([k, l]) =>
+        `<button type="button" class="chip ${ticketFilter === k ? 'active' : ''}" data-tfilter="${k}">${l}</button>`).join('')}</div>
+    </div>
+    ${list.length ? `<div class="tickets">${list.map((x) => `
+      <button class="panel ticket-row" data-ticket="${x.id}" type="button">
+        <div class="grow">
+          <b>${TICKET_TOPICS[x.topic] || ''} ${esc(x.subject)}</b>
+          <div class="small">${who(x.name, x.username)} • ${ROLE_NAMES[x.role] || ''}${x.orderId ? ` • طلب #${shortId(x.orderId)}` : ''}</div>
+          <div class="muted small">${esc(x.messages[x.messages.length - 1].text).slice(0, 90)}</div>
+        </div>
+        ${ticketStatus(x).replace('الإدارة ردت', 'رديت')}
+      </button>`).join('')}</div>` : '<div class="empty-state"><div class="big">🎧</div><p class="muted">مفيش شكاوي هنا.</p></div>'}`;
+  body.querySelectorAll('[data-tfilter]').forEach((b) => b.addEventListener('click', () => { ticketFilter = b.dataset.tfilter; drawSupport(body); }));
+  body.querySelectorAll('[data-ticket]').forEach((b) => b.addEventListener('click', () => { openTicket = b.dataset.ticket; drawSupport(body); }));
+}
+
+function drawTicket(body, t) {
+  const draft = body.querySelector('#adminReply textarea')?.value || '';
+  const order = t.orderId && orders.find((o) => o.id === t.orderId);
+  body.innerHTML = `
+    <button class="back link" id="backTickets" type="button">→ كل الشكاوي</button>
+    <div class="two-col">
+      <section class="panel">
+        <div class="list-head"><h3>${TICKET_TOPICS[t.topic] || ''} ${esc(t.subject)}</h3>${ticketStatus(t).replace('الإدارة ردت', 'رديت')}</div>
+        <div class="messages">${thread(t, 'admin')}</div>
+        <form id="adminReply" class="reply">
+          <textarea name="text" required rows="3" maxlength="2000" placeholder="اكتب ردك...">${esc(draft)}</textarea>
+          <button class="btn primary" type="submit">إرسال</button>
+        </form>
+        <div class="row-actions">
+          ${t.status === 'closed'
+            ? '<button class="btn small" id="reopenTicket" type="button">فتحها تاني</button>'
+            : '<button class="btn small" id="closeTicket" type="button">✅ قفل الشكوى (اتحلت)</button>'}
+        </div>
+      </section>
+      <section class="panel">
+        <h3>صاحب الشكوى</h3>
+        <p>${who(t.name, t.username)} • ${ROLE_NAMES[t.role] || ''}</p>
+        <p>📞 <a href="tel:${esc(t.phone)}" dir="ltr">${esc(t.phone)}</a></p>
+        ${order ? `<h3>الطلب #${shortId(order.id)}</h3>
+          <p class="small">${esc(order.restaurantName)} • ${fmt(order.totals.total)} • ${statusBadge(order.status)}</p>
+          <p class="small">${order.lines.map((l) => `${l.qty}× ${esc(l.name)}`).join('، ')}</p>
+          ${order.driverName ? `<p class="small">🛵 ${who(order.driverName, order.driverUsername)}</p>` : ''}` : ''}
+      </section>
+    </div>`;
+  const box = body.querySelector('.messages');
+  box.scrollTop = box.scrollHeight;
+  body.querySelector('#backTickets').addEventListener('click', () => { openTicket = null; drawSupport(body); });
+  body.querySelector('#adminReply').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const ta = e.target.querySelector('textarea');
+    const text = ta.value.trim();
+    if (!text) return;
+    e.target.querySelector('button').disabled = true;
+    try {
+      ta.value = '';
+      await backend.adminReplyTicket(t.id, user, text);
+    } catch (err) {
+      ta.value = text;
+      toast(errorMessage(err));
+    }
+  });
+  const setStatus = (status) => backend.setTicketStatus(t.id, status).catch((e) => toast(errorMessage(e)));
+  body.querySelector('#closeTicket')?.addEventListener('click', () => setStatus('closed'));
+  body.querySelector('#reopenTicket')?.addEventListener('click', () => setStatus('open'));
 }
 
 // ---------- طلبات الانضمام ----------
@@ -354,13 +453,14 @@ function drawRestaurants(body) {
             <tr>
               <td><span class="mini-logo" style="background:${esc(r.color)}">${restaurantLogo(r, 36)}</span> <strong>${esc(r.name)}</strong>
                 ${r.address ? '' : '<br><span class="small warn-text">⚠️ مفيش عنوان للمندوب</span>'}</td>
-              <td><button class="chip" data-toggle="${r.id}" type="button">${r.isOpen !== false ? '🟢 مفتوح' : '🔴 مغلق'}</button></td>
+              <td>${r.blocked ? '<span class="status cancelled">⛔ موقوف</span>' : `<button class="chip" data-toggle="${r.id}" type="button">${r.isOpen !== false ? '🟢 مفتوح' : '🔴 مغلق'}</button>`}</td>
               <td class="small">${r.ownerEmail ? `${r.ownerUsername ? `<span class="uname">@${esc(r.ownerUsername)}</span><br>` : ''}<span dir="ltr">${esc(r.ownerEmail)}</span>` : '<span class="muted">—</span>'}</td>
               <td>${r.menu.reduce((n, s) => n + s.items.length, 0)}</td>
               <td>${orders.filter((o) => o.restaurantId === r.id && o.status === 'delivered').length}</td>
               <td class="row-actions">
                 <button class="btn small" data-edit="${r.id}" type="button">تعديل</button>
                 <button class="btn small" data-owner="${r.id}" type="button">ربط صاحب</button>
+                <button class="btn small ${r.blocked ? '' : 'danger-outline'}" data-block="${r.id}" type="button">${r.blocked ? '▶️ تفعيل' : '⛔ إيقاف'}</button>
                 <button class="btn small danger-outline" data-del="${r.id}" type="button">حذف</button>
               </td>
             </tr>`).join('')}
@@ -382,6 +482,16 @@ function drawRestaurants(body) {
     try {
       await backend.deleteRestaurant(r.id);
       toast('تم الحذف');
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  }));
+  body.querySelectorAll('[data-block]').forEach((b) => b.addEventListener('click', async () => {
+    const r = byId(b.dataset.block);
+    if (!confirm(r.blocked ? `تفعيل "${r.name}" تاني؟ (صاحبه يقدر يفتحه بعدها)` : `إيقاف "${r.name}"؟ هيتقفل ويختفي من التطبيق، وصاحبه مش هيقدر يفتحه.`)) return;
+    try {
+      await backend.setRestaurantBlocked(r.id, !r.blocked);
+      toast(r.blocked ? 'تم التفعيل ✅' : 'تم الإيقاف ⛔');
     } catch (e) {
       toast(errorMessage(e));
     }
@@ -506,6 +616,13 @@ function drawZones(body) {
             المندوب بيدفع للمطعم تمن الأكل كاش وقت الاستلام</label>
           <p class="muted small">التغيير بيسري على الأوردرات الجديدة بس، والقديمة بتفضل بحسابها.</p>
         </section>
+
+        <section class="panel">
+          <h3>🎧 خدمة العملاء</h3>
+          <label>رقم واتساب خدمة العملاء (اختياري، بيظهر في صفحة الدعم)
+            <input id="supportPhone" type="tel" pattern="01[0-9]{9}" value="${esc(draft.supportPhone)}" placeholder="01xxxxxxxxx" inputmode="numeric" dir="ltr">
+          </label>
+        </section>
         <div class="editor-actions">
           <button class="btn primary" type="submit">💾 حفظ المناطق والنسب</button>
         </div>
@@ -522,6 +639,7 @@ function drawZones(body) {
         rt[inp.dataset.rf] = inp.dataset.rf === 'value' ? Number(inp.value) : inp.value;
       });
       draft.rates.driverPaysRestaurant = body.querySelector('#driverPays').checked;
+      draft.supportPhone = body.querySelector('#supportPhone').value.trim();
     };
     const redraw = (fn) => () => { sync(); fn(); draw(); };
 
@@ -587,7 +705,7 @@ function drawDrivers(body) {
           <td><a href="tel:${esc(d.phone)}" dir="ltr">${esc(d.phone)}</a></td>
           <td>${s.active}</td><td>${s.today}</td><td>${fmt(s.earnToday)}</td><td>${s.total}</td>
           <td><b>${fmt(s.owes)}</b></td>
-          <td><button class="btn small danger-outline" data-remove="${d.uid}" type="button">شيله</button></td>
+          <td class="row-actions">${accountState(d)} <button class="btn small" data-remove="${d.uid}" type="button">شيله من المندوبين</button>${moderationButtons(d)}</td>
         </tr>`;
       }).join('')}</tbody></table></div>` : '<p class="muted">مفيش مندوبين لسه.</p>'}`;
 
@@ -607,6 +725,7 @@ function drawDrivers(body) {
       toast(errorMessage(e));
     }
   });
+  bindModeration(body);
   body.querySelectorAll('[data-remove]').forEach((b) => b.addEventListener('click', async () => {
     const d = drivers.find((x) => x.uid === b.dataset.remove);
     if (!confirm(`شيل ${d.name} من المندوبين؟`)) return;
@@ -617,6 +736,54 @@ function drawDrivers(body) {
       toast(errorMessage(e));
     }
   }));
+}
+
+// ---------- الحظر والحذف ----------
+
+const canModerate = (u) => u && u.role !== 'admin' && u.uid !== user.uid && !u.deleted;
+
+async function toggleBan(u) {
+  try {
+    if (u.banned) {
+      if (!confirm(`فك الحظر عن ${u.name} (@${u.username || ''})؟`)) return;
+      await backend.setBanned(u, false);
+      toast('تم فك الحظر ✅');
+    } else {
+      const reason = prompt(`حظر ${u.name} (@${u.username || ''})\nمش هيقدر يطلب أو يستقبل أوردرات.${
+        u.role === 'driver' ? ' الأوردرات اللي ماستلمهاش هترجع لباقي المندوبين.' : ''}${
+        u.restaurantId ? ' ومطعمه هيتقفل ويختفي من التطبيق.' : ''}\n\nاكتب السبب (هيظهرله):`);
+      if (reason === null) return;
+      await backend.setBanned(u, true, reason.trim());
+      toast('تم الحظر 🚫');
+    }
+  } catch (e) {
+    toast(errorMessage(e));
+  }
+}
+
+async function deleteUser(u) {
+  const typed = prompt(`⚠️ حذف حساب ${u.name} نهائيًا\nبياناته هتتمسح، واسم المستخدم والرقم هيتفكوا، ومش هيقدر يدخل تاني.\nالطلبات القديمة بتفضل في الحسابات.\n\nللتأكيد اكتب اسم المستخدم: ${u.username || u.email}`);
+  if (typed === null) return;
+  if (typed.trim().replace(/^@/, '').toLowerCase() !== String(u.username || u.email).toLowerCase()) return toast('الاسم مش مطابق، متحذفش');
+  try {
+    await backend.deleteAccount(u);
+    toast('تم حذف الحساب 🗑️');
+  } catch (e) {
+    toast(errorMessage(e));
+  }
+}
+
+const accountState = (u) => (u.deleted ? '<span class="status cancelled">🗑️ محذوف</span>'
+  : u.banned ? `<span class="status cancelled" title="${esc(u.bannedReason || '')}">🚫 محظور</span>` : '');
+
+const moderationButtons = (u) => (canModerate(u) ? `
+  <button class="btn small ${u.banned ? '' : 'danger-outline'}" data-ban="${u.uid}" type="button">${u.banned ? '✅ فك الحظر' : '🚫 حظر'}</button>
+  <button class="btn small danger-outline" data-delete="${u.uid}" type="button">🗑️ حذف</button>` : '');
+
+function bindModeration(root) {
+  const find = (uid) => users.find((x) => x.uid === uid);
+  root.querySelectorAll('[data-ban]').forEach((b) => b.addEventListener('click', () => toggleBan(find(b.dataset.ban))));
+  root.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', () => deleteUser(find(b.dataset.delete))));
 }
 
 // ---------- المستخدمين ----------
@@ -638,18 +805,21 @@ function drawUsers(body) {
     const restName = (id) => restaurants.find((r) => r.id === id)?.name;
     body.querySelector('#usersTable').innerHTML = `
       <div class="table-wrap"><table class="table">
-        <thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الموبايل</th><th>الإيميل</th><th>النوع</th><th>طلباته</th></tr></thead>
+        <thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الموبايل</th><th>الإيميل</th><th>النوع</th><th>طلباته</th><th></th></tr></thead>
         <tbody>${list.map((u) => `
           <tr>
-            <td>${u.username ? `<span class="uname">@${esc(u.username)}</span>` : '<span class="muted small">لسه ماختارش</span>'}</td>
+            <td>${u.username ? `<span class="uname">@${esc(u.username)}</span>` : u.deletedUsername ? `<s class="muted">@${esc(u.deletedUsername)}</s>` : '<span class="muted small">لسه ماختارش</span>'} ${accountState(u)}</td>
             <td>${esc(u.name)}</td>
             <td><a href="tel:${esc(u.phone)}" dir="ltr">${esc(u.phone)}</a></td>
             <td class="small" dir="ltr">${esc(u.email)}</td>
             <td class="small">${ROLE_LABELS[u.role] || esc(u.role)}${u.restaurantId && restName(u.restaurantId) ? `<br>${esc(restName(u.restaurantId))}` : ''}</td>
             <td>${ordersBy(u.uid)}</td>
-          </tr>`).join('') || '<tr><td colspan="6" class="center muted">مفيش نتايج</td></tr>'}
+            <td class="row-actions">${moderationButtons(u)}</td>
+          </tr>`).join('') || '<tr><td colspan="7" class="center muted">مفيش نتايج</td></tr>'}
         </tbody></table></div>`;
+    bindModeration(body);
   };
+  usersRedraw = draw;
   draw();
   body.querySelector('#userSearch').addEventListener('input', (e) => { userQuery = e.target.value; draw(); });
 }

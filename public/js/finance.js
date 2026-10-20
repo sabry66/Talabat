@@ -19,6 +19,7 @@ export function withDefaults(settings) {
   return {
     zones: s.zones || {},
     rates: { ...DEFAULT_SETTINGS.rates, ...(s.rates || {}) },
+    supportPhone: s.supportPhone || '',
   };
 }
 

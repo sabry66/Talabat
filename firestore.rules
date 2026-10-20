@@ -19,10 +19,20 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    function isDriver() {
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // حساب شغال: مش محظور ومش محذوف
+    function isActive() {
       return signedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'driver';
+        && me().get('banned', false) == false
+        && me().get('deleted', false) == false;
+    }
+
+    function isDriver() {
+      return isActive() && me().role == 'driver';
     }
 
     function changedOnly(keys) {
@@ -51,6 +61,7 @@ service cloud.firestore {
         && (request.resource.data.get('phone', '') == '' || ownsPhone(uid, request.resource.data.phone));
       allow update: if isAdmin()
         || (signedIn() && request.auth.uid == uid
+            && resource.data.get('deleted', false) == false
             && changedOnly(['name', 'phone', 'address', 'location', 'username'])
             // اسم المستخدم بيتحدد مرة واحدة بس
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['username'])
@@ -89,7 +100,7 @@ service cloud.firestore {
     match /applications/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create, update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid
+        || (isActive() && request.auth.uid == uid
             && request.resource.data.uid == uid
             && request.resource.data.status == 'pending'
             && request.resource.data.type in ['driver', 'restaurant']);
@@ -100,10 +111,35 @@ service cloud.firestore {
       allow read: if true;
       allow create, delete: if isAdmin();
       allow update: if isAdmin()
-        || (signedIn()
+        || (isActive()
             && resource.data.get('ownerUid', null) == request.auth.uid
             && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['ownerUid', 'ownerEmail', 'ownerUsername', 'rating', 'reviews']));
+                 .hasAny(['ownerUid', 'ownerEmail', 'ownerUsername', 'rating', 'reviews', 'blocked']));
+    }
+
+    // خدمة العملاء: كل واحد يشوف شكاويه بس ويضيف رسايل جديدة (ميعدلش القديمة)، والأدمن يرد ويقفل
+    match /tickets/{ticketId} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && me().get('deleted', false) == false
+        && request.resource.data.status == 'open'
+        && request.resource.data.lastBy == 'user'
+        && request.resource.data.subject is string && request.resource.data.subject.size() <= 100
+        && request.resource.data.messages.size() == 1
+        && request.resource.data.messages[0].by == request.auth.uid
+        && request.resource.data.messages[0].text.size() <= 2000;
+      allow update: if isAdmin()
+        || (signedIn()
+            && resource.data.uid == request.auth.uid
+            && changedOnly(['messages', 'updatedAt', 'lastBy', 'status'])
+            && request.resource.data.lastBy == 'user'
+            && request.resource.data.status == 'open'
+            && request.resource.data.messages.size() == resource.data.messages.size() + 1
+            && request.resource.data.messages.hasAll(resource.data.messages)
+            && request.resource.data.messages[resource.data.messages.size()].by == request.auth.uid
+            && request.resource.data.messages[resource.data.messages.size()].text.size() <= 2000);
+      allow delete: if isAdmin();
     }
 
     match /orders/{orderId} {
@@ -127,7 +163,7 @@ service cloud.firestore {
               resource.data.driverUid == request.auth.uid
               || (resource.data.driverUid == null && resource.data.status in ['preparing', 'ready']))));
 
-      allow create: if signedIn()
+      allow create: if isActive()
         && request.resource.data.customerUid == request.auth.uid
         && request.resource.data.status == 'placed'
         && request.resource.data.createdAt == request.time
@@ -136,6 +172,7 @@ service cloud.firestore {
         && request.resource.data.lines.size() <= 50
         && exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
         && restaurant().get('isOpen', true) == true
+        && restaurant().get('blocked', false) == false
         && request.resource.data.ownerUid == restaurant().get('ownerUid', null)
         && request.resource.data.driverUid == null
         // رسوم التوصيل لازم تكون سعر المنطقة، والنسب هي نسب المنصة الحالية
@@ -147,7 +184,7 @@ service cloud.firestore {
 
       allow update: if isAdmin()
         // صاحب المطعم: يقبل أو يرفض، وبعدين "جاهز للتسليم"
-        || (signedIn()
+        || (isActive()
             && resource.data.ownerUid == request.auth.uid
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
             && ((resource.data.status == 'placed' && request.resource.data.status in ['preparing', 'rejected'])

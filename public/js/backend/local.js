@@ -35,7 +35,7 @@ function seed() {
     };
   }
   const settings = { ...clone(DEFAULT_SETTINGS), zones: clone(SAMPLE_ZONES) };
-  return { users, restaurants, orders: {}, settings, applications: {} };
+  return { users, restaurants, orders: {}, settings, applications: {}, tickets: {} };
 }
 
 let cache = null;
@@ -88,6 +88,11 @@ const publicUser = (u) => {
 };
 
 const sortByNewest = (list) => list.sort((a, b) => b.createdAt - a.createdAt);
+
+function releaseDriverOrders(uid) {
+  Object.values(db().orders).filter((o) => o.driverUid === uid && ['preparing', 'ready'].includes(o.status))
+    .forEach((o) => Object.assign(o, { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null }));
+}
 
 export function createBackend() {
   return {
@@ -204,7 +209,7 @@ export function createBackend() {
     },
 
     async saveSettings(settings) {
-      db().settings = clone(settings);
+      db().settings = clone({ zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '' });
       commit();
     },
 
@@ -252,6 +257,78 @@ export function createBackend() {
 
     async rejectApplication(uid) {
       Object.assign(db().applications[uid], { status: 'rejected', reviewedAt: Date.now() });
+      commit();
+    },
+
+    // ---------- خدمة العملاء ----------
+    async createTicket(user, { topic, subject, text, orderId }) {
+      const d = db();
+      d.tickets ||= {};
+      const id = 't' + newId();
+      const now = Date.now();
+      d.tickets[id] = {
+        id, uid: user.uid, name: user.name, username: user.username || null, role: user.role, phone: user.phone || '',
+        topic, subject, orderId: orderId || null, status: 'open', lastBy: 'user', createdAt: now, updatedAt: now,
+        messages: [{ by: user.uid, name: user.name, text, at: now }],
+      };
+      commit();
+      return id;
+    },
+
+    async replyTicket(id, user, text) {
+      const t = db().tickets[id];
+      t.messages.push({ by: user.uid, name: user.name, text, at: Date.now() });
+      Object.assign(t, { updatedAt: Date.now(), lastBy: 'user', status: 'open' });
+      commit();
+    },
+
+    async adminReplyTicket(id, admin, text) {
+      const t = db().tickets[id];
+      t.messages.push({ by: 'admin', name: admin.name, text, at: Date.now() });
+      Object.assign(t, { updatedAt: Date.now(), lastBy: 'admin' });
+      commit();
+    },
+
+    async setTicketStatus(id, status) {
+      Object.assign(db().tickets[id], { status, updatedAt: Date.now() });
+      commit();
+    },
+
+    watchMyTickets(uid, cb) {
+      return watch(() => Object.values(db().tickets || {}).filter((t) => t.uid === uid).sort((a, b) => b.updatedAt - a.updatedAt), cb);
+    },
+
+    watchAllTickets(cb) {
+      return watch(() => Object.values(db().tickets || {}).sort((a, b) => b.updatedAt - a.updatedAt), cb);
+    },
+
+    // ---------- الحظر والحذف (للأدمن) ----------
+    async setBanned(user, banned, reason = '') {
+      const d = db();
+      Object.assign(d.users[user.uid], { banned, bannedReason: banned ? reason : null });
+      if (banned && user.role === 'driver') releaseDriverOrders(user.uid);
+      if (user.restaurantId && d.restaurants[user.restaurantId]) {
+        Object.assign(d.restaurants[user.restaurantId], banned ? { blocked: true, isOpen: false } : { blocked: false });
+      }
+      commit();
+    },
+
+    async deleteAccount(user) {
+      const d = db();
+      Object.assign(d.users[user.uid], {
+        deleted: true, banned: true, name: 'حساب محذوف', phone: '', address: '', location: null,
+        username: null, deletedUsername: user.username || null, role: 'customer', restaurantId: null,
+      });
+      if (user.role === 'driver') releaseDriverOrders(user.uid);
+      if (user.restaurantId && d.restaurants[user.restaurantId]) {
+        Object.assign(d.restaurants[user.restaurantId], { ownerUid: null, ownerEmail: null, ownerUsername: null, isOpen: false });
+      }
+      delete (d.applications || {})[user.uid];
+      commit();
+    },
+
+    async setRestaurantBlocked(id, blocked) {
+      Object.assign(db().restaurants[id], blocked ? { blocked: true, isOpen: false } : { blocked: false });
       commit();
     },
 

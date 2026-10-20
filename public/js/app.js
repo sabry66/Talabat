@@ -6,8 +6,9 @@ import { locationPicker } from './map.js';
 import { activeZones } from './finance.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
-  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField,
+  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked,
 } from './ui.js';
+import { renderSupport } from './support.js';
 
 const app = document.getElementById('app');
 
@@ -61,6 +62,7 @@ function updateHeader() {
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
        <a href="#/orders" class="nav-link">طلباتي</a>
+       <a href="#/support" class="nav-link" title="خدمة العملاء">🎧</a>
        <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}${u.username ? ` <span class="uname">@${esc(u.username)}</span>` : ''}</a>`
     : u === null ? '<a href="#/login" class="nav-link">دخول</a>' : '';
 }
@@ -71,7 +73,7 @@ function renderHome() {
   if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const q = ui.query.trim();
   // المطاعم اللي لسه مضافلهاش أصناف مش بتظهر للعملاء
-  let list = state.restaurants.filter((r) => r.menu.some((sec) => sec.items.length) &&
+  let list = state.restaurants.filter((r) => !r.blocked && r.menu.some((sec) => sec.items.length) &&
     (ui.category === 'all' || r.category === ui.category) &&
     (!q || r.name.includes(q) || (r.tags || []).some((t) => t.includes(q)) ||
       r.menu.some((s) => s.items.some((i) => i.name.includes(q)))));
@@ -143,7 +145,7 @@ function restaurantCard(r) {
 function renderRestaurant(id) {
   if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
   const r = findRestaurant(id);
-  if (!r) return renderNotFound();
+  if (!r || r.blocked) return renderNotFound();
   const closed = r.isOpen === false;
   const inCart = Cart.restaurantId === r.id;
 
@@ -254,7 +256,7 @@ function renderCart() {
   const t = cartTotals(r);
   const promo = Cart.promo;
   const belowMin = t.subtotal < r.minOrder;
-  const closed = r.isOpen === false;
+  const closed = r.isOpen === false || r.blocked;
   const blocked = belowMin || closed;
 
   app.innerHTML = `
@@ -346,7 +348,7 @@ function renderCheckout() {
   if (!state.user) { location.hash = '#/login/checkout'; return; }
   const r = cartRestaurant();
   const lines = Cart.lines(r);
-  if (!lines.length || r.isOpen === false || cartTotals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
+  if (!lines.length || r.isOpen === false || r.blocked || cartTotals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
   const t = cartTotals(r);
   const u = state.user;
   let location_ = u.location || null;
@@ -422,7 +424,7 @@ function renderCheckout() {
     const d = Object.fromEntries(new FormData(e.target));
     const btn = document.getElementById('placeBtn');
     const rest = cartRestaurant();
-    if (!rest || rest.isOpen === false) return toast('المطعم مش متاح دلوقتي');
+    if (!rest || rest.isOpen === false || rest.blocked) return toast('المطعم مش متاح دلوقتي');
     const zone = currentZone();
     if (!zone) return toast('اختار منطقة التوصيل الأول');
     const totals = cartTotals(rest);
@@ -531,6 +533,7 @@ function drawOrder(o) {
         ${o.notes ? `<p>📝 ${esc(o.notes)}</p>` : ''}
         ${o.status === 'placed' ? '<button class="btn block danger-outline" id="cancelOrder" type="button">إلغاء الطلب</button>' : ''}
         <button class="btn block" id="reorder" type="button">🔁 اطلب نفس الطلب تاني</button>
+        <a class="btn block" href="#/support/order/${o.id}">🎧 عندك مشكلة في الطلب ده؟</a>
       </section>
     </div>`;
 
@@ -645,6 +648,15 @@ function renderAccount() {
   });
 }
 
+// ---------- خدمة العملاء ----------
+
+function renderSupportPage(orderId) {
+  if (state.user === undefined || !state.settings) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login/support'; return; }
+  app.innerHTML = '<div id="supportBox"></div>';
+  setCleanup(renderSupport(document.getElementById('supportBox'), { backend, user: state.user, settings: state.settings, orderId }));
+}
+
 function renderNotFound() {
   app.innerHTML = '<div class="empty-state"><div class="big">🤷</div><h2>الصفحة مش موجودة</h2><a href="#/" class="btn primary">الرئيسية</a></div>';
 }
@@ -655,8 +667,15 @@ function router() {
   setCleanup(null);
   const [, name = '', id] = (location.hash || '#/').slice(1).split('/');
   page = name;
+  // حساب محذوف أو محظور (المحظور يقدر يكلّم خدمة العملاء بس)
+  if (state.user && (state.user.deleted || (state.user.banned && name !== 'support'))) {
+    page = 'blocked';
+    renderBlocked(app, { backend, user: state.user });
+    updateHeader();
+    return;
+  }
   // حساب قديم من غير اسم مستخدم: لازم يختار واحد الأول
-  if (state.user && !state.user.username) {
+  if (state.user && !state.user.username && !state.user.banned) {
     page = 'complete';
     renderCompleteProfile(app, { backend, user: state.user });
     updateHeader();
@@ -672,6 +691,7 @@ function router() {
     case 'login': renderLogin('login', id); break;
     case 'register': renderLogin('register', id); break;
     case 'account': renderAccount(); break;
+    case 'support': renderSupportPage(id === 'order' ? (location.hash.split('/')[3] || null) : null); break;
     default: renderNotFound();
   }
   updateHeader();
@@ -712,7 +732,8 @@ backend.onAuth((user) => {
   updateHeader();
   // نعيد الرسم لو حالة الدخول اتغيرت أو الصفحة بتعرض بيانات الحساب
   if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid || page === 'account'
-    || Boolean(prev?.username) !== Boolean(user?.username)) router();
+    || Boolean(prev?.username) !== Boolean(user?.username)
+    || Boolean(prev?.banned) !== Boolean(user?.banned) || Boolean(prev?.deleted) !== Boolean(user?.deleted)) router();
 });
 
 router();

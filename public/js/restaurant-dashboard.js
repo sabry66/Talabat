@@ -4,9 +4,10 @@ import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum } from './finance.js';
 import { renderJoin } from './join.js';
+import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
-  renderAuthForm, renderDashNav, renderCompleteProfile, orderCard, restaurantLogo,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, orderCard, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -17,6 +18,7 @@ let orders = [];
 let tab = 'orders';
 let unsubs = [];
 let knownNew = null;
+let supportUnsub = null;
 
 const NEXT_ACTIONS = {
   placed: [
@@ -29,6 +31,8 @@ const NEXT_ACTIONS = {
 function stop() {
   unsubs.forEach((u) => u());
   unsubs = [];
+  if (supportUnsub) supportUnsub();
+  supportUnsub = null;
   restaurant = null;
   orders = [];
   knownNew = null;
@@ -42,6 +46,7 @@ function start() {
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'أصحاب المطاعم: سجّل دخول أو اعمل حساب جديد عشان تسجّل مطعمك' });
     return;
   }
+  if (renderBlocked(root, { backend, user })) return;
   if (!user.username) {
     root.innerHTML = '<div id="completeBox"></div>';
     renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
@@ -104,11 +109,13 @@ function drawHead() {
       <div class="rest-emoji sm">${restaurantLogo(r, 64)}</div>
       <div class="grow">
         <h1>${esc(r.name)}</h1>
-        <span class="status ${open ? 'delivered' : 'cancelled'}">${open ? '🟢 مفتوح ويستقبل طلبات' : '🔴 مغلق'}</span>
+        ${r.blocked ? '<span class="status cancelled">⛔ موقوف من الإدارة</span>'
+          : `<span class="status ${open ? 'delivered' : 'cancelled'}">${open ? '🟢 مفتوح ويستقبل طلبات' : '🔴 مغلق'}</span>`}
       </div>
-      <button class="btn ${open ? '' : 'primary'}" id="toggleOpen" type="button">${open ? 'اقفل المطعم' : 'افتح المطعم'}</button>
-    </section>`;
-  document.getElementById('toggleOpen').addEventListener('click', async (e) => {
+      ${r.blocked ? '' : `<button class="btn ${open ? '' : 'primary'}" id="toggleOpen" type="button">${open ? 'اقفل المطعم' : 'افتح المطعم'}</button>`}
+    </section>
+    ${r.blocked ? '<p class="warn">⛔ المطعم موقوف من إدارة أريفو ومش ظاهر للعملاء. كلّم خدمة العملاء من تبويب "🎧 الدعم".</p>' : ''}`;
+  document.getElementById('toggleOpen')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     try {
       await backend.updateRestaurant(r.id, { isOpen: !open });
@@ -124,7 +131,8 @@ function drawTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = `
     <button type="button" data-tab="orders" class="${tab === 'orders' ? 'active' : ''}">📋 الطلبات ${pending ? `<span class="badge static">${pending}</span>` : ''}</button>
-    <button type="button" data-tab="menu" class="${tab === 'menu' ? 'active' : ''}">🍽️ المنيو والإعدادات</button>`;
+    <button type="button" data-tab="menu" class="${tab === 'menu' ? 'active' : ''}">🍽️ المنيو والإعدادات</button>
+    <button type="button" data-tab="support" class="${tab === 'support' ? 'active' : ''}">🎧 الدعم</button>`;
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     if (tab === b.dataset.tab) return;
     tab = b.dataset.tab;
@@ -134,7 +142,13 @@ function drawTabs() {
 }
 
 function drawTab() {
+  if (supportUnsub) supportUnsub();
+  supportUnsub = null;
   if (tab === 'orders') return drawOrders();
+  if (tab === 'support') {
+    supportUnsub = renderSupport(document.getElementById('tabBody'), { backend, user });
+    return;
+  }
   renderMenuEditor(document.getElementById('tabBody'), restaurant, {
     showOpenToggle: false,
     onSave: async (data) => {

@@ -3,9 +3,10 @@ import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { orderSplit, sum } from './finance.js';
 import { renderJoin } from './join.js';
+import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
-  renderAuthForm, renderDashNav, renderCompleteProfile, paymentLabel,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, paymentLabel,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -16,10 +17,13 @@ let mine = [];
 let tab = 'available';
 let unsubs = [];
 let knownAvailable = null;
+let supportUnsub = null;
 
 function stop() {
   unsubs.forEach((u) => u());
   unsubs = [];
+  if (supportUnsub) supportUnsub();
+  supportUnsub = null;
   available = [];
   mine = [];
   knownAvailable = null;
@@ -33,6 +37,7 @@ function start() {
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
     return;
   }
+  if (renderBlocked(root, { backend, user })) return;
   if (!user.username) {
     root.innerHTML = '<div id="completeBox"></div>';
     renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
@@ -54,7 +59,7 @@ function start() {
   unsubs.push(backend.watchOrders({ driverUid: user.uid }, (list) => {
     mine = list;
     drawTabs();
-    if (tab !== 'available') drawTab();
+    if (tab === 'active' || tab === 'history') drawTab();
   }));
 }
 
@@ -79,6 +84,7 @@ function drawTabs() {
     ['available', `📋 أوردرات متاحة${badge(available.length)}`],
     ['active', `🛵 أوردراتي الحالية${badge(active().length)}`],
     ['history', '💰 حسابي'],
+    ['support', '🎧 الدعم'],
   ].map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}</button>`).join('');
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     tab = b.dataset.tab;
@@ -90,8 +96,11 @@ function drawTabs() {
 function drawTab() {
   const body = document.getElementById('tabBody');
   if (!body) return;
+  if (supportUnsub) supportUnsub();
+  supportUnsub = null;
   if (tab === 'available') drawAvailable(body);
   else if (tab === 'active') drawActive(body);
+  else if (tab === 'support') supportUnsub = renderSupport(body, { backend, user });
   else drawHistory(body);
 }
 
