@@ -156,7 +156,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       errEl.hidden = true;
       try {
         if (mode === 'login') await backend.signIn(d.email, d.password);
-        else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.username, email: d.email, password: d.password });
+        else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password });
         if (onDone) onDone();
       } catch (err) {
         errEl.textContent = errorMessage(err);
@@ -168,10 +168,13 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
   draw();
 }
 
+// الخانة اسمها handle ومن غير autocomplete عشان الموبايل ميفتكرهاش خانة تسجيل دخول
+// ويفتح قايمة الإيميلات المحفوظة مع كل حرف (وده كان بيقفل الكيبورد)
 const usernameField = (value = '', locked = false) => `
   <label>اسم المستخدم (مميز ليك ومحدش ياخده غيرك)
-    <span class="at-input"><span>@</span><input name="username" required pattern="[a-zA-Z0-9_.]{3,20}" value="${esc(value)}"
-      placeholder="ahmed_10" autocomplete="username" dir="ltr" ${locked ? 'readonly' : ''}></span>
+    <span class="at-input"><span>@</span><input name="handle" required pattern="[a-zA-Z0-9_.]{3,20}" value="${esc(value)}"
+      placeholder="ahmed_10" dir="ltr" ${locked ? 'readonly' : ''}
+      autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-lpignore="true" data-form-type="other"></span>
     <span class="muted small">${locked ? 'اسم المستخدم مبيتغيرش.' : 'من 3 لـ 20 حرف إنجليزي أو أرقام أو _ و . (مبيتغيرش بعد كده)'}</span>
   </label>`;
 
@@ -266,7 +269,7 @@ export function renderCompleteProfile(el, { backend, user }) {
     btn.disabled = true;
     errEl.hidden = true;
     try {
-      await backend.claimIdentity(user, { username: d.username, phone: d.phone });
+      await backend.claimIdentity(user, { username: d.handle, phone: d.phone });
       toast('تم حفظ بياناتك ✅');
     } catch (err) {
       errEl.textContent = errorMessage(err);
