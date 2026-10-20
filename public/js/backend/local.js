@@ -5,7 +5,7 @@ import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES } from '../data.js';
 import { withDefaults } from '../finance.js';
 import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 
-const DB_KEY = 'arrivo_demo_db_v2';
+const DB_KEY = 'arrivo_demo_db_v3';
 const SESSION_KEY = 'talabaty_demo_session';
 
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -25,6 +25,7 @@ function seed() {
     'u-owner': user('u-owner', 'owner@demo.com', 'صاحب بيت البرجر', 'restaurant', '01000000002', 'burger-house'),
     'u-customer': user('u-customer', 'customer@demo.com', 'عميل تجريبي', 'customer', '01000000003'),
     'u-driver': user('u-driver', 'driver@demo.com', 'مندوب تجريبي', 'driver', '01000000004'),
+    'u-staff': user('u-staff', 'staff@demo.com', 'موظف خدمة العملاء', 'staff', '01000000005'),
   };
   const restaurants = {};
   for (const r of SEED_RESTAURANTS) {
@@ -252,24 +253,24 @@ export function createBackend() {
       return watch(() => sortByNewest(Object.values(db().applications || {}).filter((a) => a.status === 'pending')), cb);
     },
 
-    async approveDriver(uid) {
+    async approveDriver(uid, reviewer = null) {
       Object.assign(db().users[uid], { role: 'driver', restaurantId: null });
-      Object.assign(db().applications[uid], { status: 'approved', reviewedAt: Date.now() });
+      Object.assign(db().applications[uid], { status: 'approved', reviewedAt: Date.now(), reviewedBy: reviewer });
       commit();
     },
 
-    async approveRestaurant(uid, restaurant) {
+    async approveRestaurant(uid, restaurant, reviewer = null) {
       const d = db();
       const id = 'r-' + newId();
       d.restaurants[id] = { ...clone(restaurant), id, ownerUid: uid, ownerEmail: d.users[uid].email, ownerUsername: d.users[uid].username || null };
       Object.assign(d.users[uid], { role: 'restaurant', restaurantId: id });
-      Object.assign(d.applications[uid], { status: 'approved', reviewedAt: Date.now() });
+      Object.assign(d.applications[uid], { status: 'approved', reviewedAt: Date.now(), reviewedBy: reviewer });
       commit();
       return id;
     },
 
-    async rejectApplication(uid) {
-      Object.assign(db().applications[uid], { status: 'rejected', reviewedAt: Date.now() });
+    async rejectApplication(uid, reviewer = null) {
+      Object.assign(db().applications[uid], { status: 'rejected', reviewedAt: Date.now(), reviewedBy: reviewer });
       commit();
     },
 

@@ -72,7 +72,7 @@ function start() {
     renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
     return;
   }
-  if (user.role !== 'admin') {
+  if (!['admin', 'staff'].includes(user.role)) {
     root.innerHTML = `
       <div class="empty-state">
         <div class="big">🔒</div>
@@ -82,19 +82,35 @@ function start() {
       </div>`;
     return;
   }
+  // الموظف: الشكاوي وطلبات الانضمام بس
+  if (isStaff()) {
+    document.querySelector('.dash-label').textContent = '🎧 لوحة خدمة العملاء';
+    if (!STAFF_TABS.includes(tab)) tab = 'support';
+  }
   root.innerHTML = `
     ${demoBanner(isDemo)}
     <div class="tabs" id="tabs"></div>
     <div id="tabBody">${loader()}</div>`;
   drawTabs();
   const refresh = () => { if (!isEditing()) drawTab(); };
-  unsubs.push(backend.watchRestaurants((list) => {
-    restaurants = list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-    refresh();
-  }));
   unsubs.push(backend.watchOrders({}, (list) => {
     orders = list;
     drawTabs();
+    refresh();
+  }));
+  unsubs.push(backend.watchAllTickets((list) => {
+    tickets = list;
+    drawTabs();
+    if (tab === 'support') drawSupport(document.getElementById('tabBody'));
+  }));
+  unsubs.push(backend.watchApplications((list) => {
+    applications = list;
+    drawTabs();
+    refresh();
+  }));
+  if (isStaff()) return;
+  unsubs.push(backend.watchRestaurants((list) => {
+    restaurants = list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
     refresh();
   }));
   unsubs.push(backend.watchSettings((s) => {
@@ -107,16 +123,6 @@ function start() {
     }
     if (first || tab !== 'zones') refresh();
   }));
-  unsubs.push(backend.watchAllTickets((list) => {
-    tickets = list;
-    drawTabs();
-    if (tab === 'support') drawSupport(document.getElementById('tabBody'));
-  }));
-  unsubs.push(backend.watchApplications((list) => {
-    applications = list;
-    drawTabs();
-    refresh();
-  }));
   unsubs.push(backend.watchUsers((list) => {
     users = list;
     drivers = list.filter((u) => u.role === 'driver');
@@ -125,6 +131,9 @@ function start() {
   }));
 }
 
+const STAFF_TABS = ['support', 'requests'];
+const isStaff = () => user?.role === 'staff';
+
 // شكاوي مستنية رد من الإدارة
 const waitingTickets = () => tickets.filter((t) => t.status !== 'closed' && t.lastBy !== 'admin');
 
@@ -132,7 +141,7 @@ function drawTabs() {
   const active = (orders || []).filter((o) => !FINAL_STATUSES.includes(o.status)).length;
   const el = document.getElementById('tabs');
   if (!el) return;
-  el.innerHTML = TABS.map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}${
+  el.innerHTML = TABS.filter(([k]) => !isStaff() || STAFF_TABS.includes(k)).map(([k, l]) => `<button type="button" data-tab="${k}" class="${tab === k ? 'active' : ''}">${l}${
     k === 'orders' && active ? ` <span class="badge static">${active}</span>` : ''}${
     k === 'requests' && applications.length ? ` <span class="badge static">${applications.length}</span>` : ''}${
     k === 'support' && waitingTickets().length ? ` <span class="badge static">${waitingTickets().length}</span>` : ''}</button>`).join('');
@@ -149,7 +158,7 @@ function drawTabs() {
 function drawTab() {
   const body = document.getElementById('tabBody');
   if (!body) return;
-  if (!restaurants || !orders || !settings) { body.innerHTML = loader(); return; }
+  if (!orders || (!isStaff() && (!restaurants || !settings))) { body.innerHTML = loader(); return; }
   ({
     overview: drawOverview, requests: drawRequests, support: drawSupport, finance: drawFinance, restaurants: drawRestaurants,
     zones: drawZones, drivers: drawDrivers, users: drawUsers, orders: drawOrders,
@@ -240,7 +249,7 @@ function drawTicket(body, t) {
     <div class="two-col">
       <section class="panel">
         <div class="list-head"><h3>${TICKET_TOPICS[t.topic] || ''} ${esc(t.subject)}</h3>${ticketStatus(t).replace('الإدارة ردت', 'رديت')}</div>
-        <div class="messages">${thread(t, 'admin')}</div>
+        <div class="messages">${thread(t, 'admin', true)}</div>
         <form id="adminReply" class="reply">
           <textarea name="text" required rows="3" maxlength="2000" placeholder="اكتب ردك...">${esc(draft)}</textarea>
           <button class="btn primary" type="submit">إرسال</button>
@@ -326,14 +335,14 @@ function drawRequests(body) {
     b.disabled = true;
     try {
       if (a.type === 'driver') {
-        await backend.approveDriver(a.uid);
+        await backend.approveDriver(a.uid, user.username);
         toast(`تمت إضافة ${a.name} كمندوب ✅`);
       } else {
         // المطعم بيبدأ مقفول لحد ما صاحبه يضيف المنيو ويفتحه
         await backend.approveRestaurant(a.uid, {
           ...NEW_RESTAURANT, name: a.restaurantName, category: a.category, emoji: cat(a.category)?.icon || '🍽️',
           address: a.address, phone: a.restaurantPhone, isOpen: false,
-        });
+        }, user.username);
         toast(`تم تسجيل ${a.restaurantName} ✅ صاحبه يقدر يضيف المنيو دلوقتي`);
       }
     } catch (e) {
@@ -344,7 +353,7 @@ function drawRequests(body) {
   body.querySelectorAll('[data-reject]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('رفض الطلب ده؟')) return;
     try {
-      await backend.rejectApplication(b.dataset.reject);
+      await backend.rejectApplication(b.dataset.reject, user.username);
       toast('تم رفض الطلب');
     } catch (e) {
       toast(errorMessage(e));
@@ -776,19 +785,36 @@ async function deleteUser(u) {
 const accountState = (u) => (u.deleted ? '<span class="status cancelled">🗑️ محذوف</span>'
   : u.banned ? `<span class="status cancelled" title="${esc(u.bannedReason || '')}">🚫 محظور</span>` : '');
 
+// موظف خدمة العملاء: من العملاء بس (مش مطعم أو مندوب)
+const staffButton = (u) => (canModerate(u) && !u.banned && ['customer', 'staff'].includes(u.role) ? `
+  <button class="btn small" data-staff="${u.uid}" type="button">${u.role === 'staff' ? '👔 شيله من الموظفين' : '👔 خليه موظف'}</button>` : '');
+
 const moderationButtons = (u) => (canModerate(u) ? `
   <button class="btn small ${u.banned ? '' : 'danger-outline'}" data-ban="${u.uid}" type="button">${u.banned ? '✅ فك الحظر' : '🚫 حظر'}</button>
   <button class="btn small danger-outline" data-delete="${u.uid}" type="button">🗑️ حذف</button>` : '');
 
 function bindModeration(root) {
   const find = (uid) => users.find((x) => x.uid === uid);
+  root.querySelectorAll('[data-staff]').forEach((b) => b.addEventListener('click', async () => {
+    const u = find(b.dataset.staff);
+    const make = u.role !== 'staff';
+    if (!confirm(make
+      ? `تخلي ${u.name} (@${u.username || ''}) موظف خدمة عملاء؟\nهيقدر يرد على الشكاوي ويوافق أو يرفض طلبات المطاعم والمندوبين.`
+      : `تشيل ${u.name} من موظفين خدمة العملاء؟`)) return;
+    try {
+      await backend.setUserRole(u.uid, make ? 'staff' : 'customer');
+      toast(make ? 'بقى موظف خدمة عملاء 👔' : 'اتشال من الموظفين');
+    } catch (e) {
+      toast(errorMessage(e));
+    }
+  }));
   root.querySelectorAll('[data-ban]').forEach((b) => b.addEventListener('click', () => toggleBan(find(b.dataset.ban))));
   root.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', () => deleteUser(find(b.dataset.delete))));
 }
 
 // ---------- المستخدمين ----------
 
-const ROLE_LABELS = { customer: '👤 عميل', restaurant: '🏪 صاحب مطعم', driver: '🛵 مندوب', admin: '🛠️ أدمن' };
+const ROLE_LABELS = { customer: '👤 عميل', restaurant: '🏪 صاحب مطعم', driver: '🛵 مندوب', staff: '👔 خدمة عملاء', admin: '🛠️ أدمن' };
 
 function drawUsers(body) {
   body.innerHTML = `
@@ -814,7 +840,7 @@ function drawUsers(body) {
             <td class="small" dir="ltr">${esc(u.email)}</td>
             <td class="small">${ROLE_LABELS[u.role] || esc(u.role)}${u.restaurantId && restName(u.restaurantId) ? `<br>${esc(restName(u.restaurantId))}` : ''}</td>
             <td>${ordersBy(u.uid)}</td>
-            <td class="row-actions">${moderationButtons(u)}</td>
+            <td class="row-actions">${staffButton(u)}${moderationButtons(u)}</td>
           </tr>`).join('') || '<tr><td colspan="7" class="center muted">مفيش نتايج</td></tr>'}
         </tbody></table></div>`;
     bindModeration(body);

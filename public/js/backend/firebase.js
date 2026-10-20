@@ -250,26 +250,27 @@ export function createBackend(config, { useEmulators }) {
         (s) => cb(s.docs.map((d) => d.data()).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
     },
 
-    approveDriver(uid) {
+    // reviewer = اسم مستخدم الأدمن أو الموظف اللي راجع الطلب
+    approveDriver(uid, reviewer = null) {
       const batch = writeBatch(db);
       batch.update(doc(users, uid), { role: 'driver', restaurantId: null });
-      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now() });
+      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now(), reviewedBy: reviewer });
       return batch.commit();
     },
 
     // بيعمل المطعم ويربطه بصاحب الطلب في خطوة واحدة
-    async approveRestaurant(uid, restaurant) {
+    async approveRestaurant(uid, restaurant, reviewer = null) {
       const user = (await getDoc(doc(users, uid))).data();
       const ref = doc(restaurants);
       const batch = writeBatch(db);
       batch.set(ref, { ...withoutId(restaurant), ownerUid: uid, ownerEmail: user.email, ownerUsername: user.username || null });
       batch.update(doc(users, uid), { role: 'restaurant', restaurantId: ref.id });
-      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now() });
+      batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now(), reviewedBy: reviewer });
       await batch.commit();
       return ref.id;
     },
 
-    rejectApplication: (uid) => updateDoc(doc(applications, uid), { status: 'rejected', reviewedAt: Date.now() }),
+    rejectApplication: (uid, reviewer = null) => updateDoc(doc(applications, uid), { status: 'rejected', reviewedAt: Date.now(), reviewedBy: reviewer }),
 
     // ---------- خدمة العملاء ----------
     async createTicket(user, { topic, subject, text, orderId }) {

@@ -12,12 +12,13 @@ export const TICKET_TOPICS = {
 export const ROLE_NAMES = { customer: 'عميل', restaurant: 'مطعم', driver: 'مندوب', admin: 'أدمن' };
 
 // رسايل المحادثة
-export function thread(t, myId) {
+// showStaff: في لوحة الإدارة بنعرض اسم الموظف اللي رد
+export function thread(t, myId, showStaff = false) {
   return t.messages.map((m) => {
     const mine = m.by === myId;
     return `
       <div class="msg ${mine ? 'mine' : ''} ${m.by === 'admin' ? 'admin' : ''}">
-        <div class="msg-head">${m.by === 'admin' ? '🎧 خدمة العملاء' : esc(m.name)} • <span>${timeAgo(m.at)}</span></div>
+        <div class="msg-head">${m.by === 'admin' ? `🎧 خدمة العملاء${showStaff && m.name ? ` (${esc(m.name)})` : ''}` : esc(m.name)} • <span>${timeAgo(m.at)}</span></div>
         <div class="msg-body">${esc(m.text).replace(/\n/g, '<br>')}</div>
       </div>`;
   }).join('');

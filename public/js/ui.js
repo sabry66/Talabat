@@ -131,6 +131,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
             <button type="button" class="chip" data-demo="customer@demo.com">👤 عميل</button>
             <button type="button" class="chip" data-demo="owner@demo.com">🍔 صاحب مطعم</button>
             <button type="button" class="chip" data-demo="driver@demo.com">🛵 مندوب</button>
+            <button type="button" class="chip" data-demo="staff@demo.com">👔 خدمة عملاء</button>
             <button type="button" class="chip" data-demo="admin@demo.com">🛠️ أدمن</button>
           </div>` : ''}
       </div>`;

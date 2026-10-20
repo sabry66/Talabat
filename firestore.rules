@@ -31,6 +31,19 @@ service cloud.firestore {
         && me().get('deleted', false) == false;
     }
 
+    // موظف خدمة العملاء: الشكاوي وطلبات الانضمام بس
+    function isStaff() {
+      return isActive() && me().role == 'staff';
+    }
+
+    function isTeam() {
+      return isAdmin() || isStaff();
+    }
+
+    function application(uid) {
+      return get(/databases/$(database)/documents/applications/$(uid)).data;
+    }
+
     function isDriver() {
       return isActive() && me().role == 'driver';
     }
@@ -51,7 +64,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == uid || isTeam());
       // أي حساب جديد بيبدأ عميل؛ الأدمن بس اللي يغير الدور
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'customer'
@@ -60,6 +73,13 @@ service cloud.firestore {
         && (!('username' in request.resource.data) || ownsUsername(uid, request.resource.data.username))
         && (request.resource.data.get('phone', '') == '' || ownsPhone(uid, request.resource.data.phone));
       allow update: if isAdmin()
+        // الموظف: يحوّل عميل لمندوب أو صاحب مطعم بس لو عنده طلب انضمام مستني من نفس النوع
+        || (isStaff()
+            && changedOnly(['role', 'restaurantId'])
+            && resource.data.role == 'customer'
+            && application(uid).status == 'pending'
+            && request.resource.data.role == application(uid).type
+            && request.resource.data.role in ['driver', 'restaurant'])
         || (signedIn() && request.auth.uid == uid
             && resource.data.get('deleted', false) == false
             && changedOnly(['name', 'phone', 'address', 'location', 'username'])
@@ -98,8 +118,12 @@ service cloud.firestore {
 
     // طلبات الانضمام: كل واحد يقدّم طلبه بنفسه (قيد المراجعة بس)، والأدمن بس اللي يوافق أو يرفض
     match /applications/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if signedIn() && (request.auth.uid == uid || isTeam());
       allow create, update: if isAdmin()
+        || (isStaff() && resource != null
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['approved', 'rejected']
+            && changedOnly(['status', 'reviewedAt', 'reviewedBy']))
         || (isActive() && request.auth.uid == uid
             && request.resource.data.uid == uid
             && request.resource.data.status == 'pending'
@@ -109,7 +133,15 @@ service cloud.firestore {
 
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin()
+        // الموظف: يعمل مطعم جديد (مقفول) لصاحب طلب انضمام مطعم مستني، ويربطه بيه في نفس العملية
+        || (isStaff()
+            && request.resource.data.isOpen == false
+            && request.resource.data.get('blocked', false) == false
+            && application(request.resource.data.ownerUid).status == 'pending'
+            && application(request.resource.data.ownerUid).type == 'restaurant'
+            && getAfter(/databases/$(database)/documents/users/$(request.resource.data.ownerUid)).data.restaurantId == restaurantId);
+      allow delete: if isAdmin();
       allow update: if isAdmin()
         || (isActive()
             && resource.data.get('ownerUid', null) == request.auth.uid
@@ -119,7 +151,7 @@ service cloud.firestore {
 
     // خدمة العملاء: كل واحد يشوف شكاويه بس ويضيف رسايل جديدة (ميعدلش القديمة)، والأدمن يرد ويقفل
     match /tickets/{ticketId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isTeam());
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && me().get('deleted', false) == false
@@ -130,6 +162,11 @@ service cloud.firestore {
         && request.resource.data.messages[0].by == request.auth.uid
         && request.resource.data.messages[0].text.size() <= 2000;
       allow update: if isAdmin()
+        // الموظف: يرد ويقفل ويفتح، بس ميعدلش أو يمسح رسايل قديمة
+        || (isStaff()
+            && changedOnly(['messages', 'updatedAt', 'lastBy', 'status'])
+            && request.resource.data.messages.size() >= resource.data.messages.size()
+            && request.resource.data.messages.hasAll(resource.data.messages))
         || (signedIn()
             && resource.data.uid == request.auth.uid
             && changedOnly(['messages', 'updatedAt', 'lastBy', 'status'])
@@ -158,7 +195,7 @@ service cloud.firestore {
       allow read: if signedIn() && (
         resource.data.customerUid == request.auth.uid
         || resource.data.ownerUid == request.auth.uid
-        || isAdmin()
+        || isTeam()
         || (isDriver() && (
               resource.data.driverUid == request.auth.uid
               || (resource.data.driverUid == null && resource.data.status in ['preparing', 'ready']))));

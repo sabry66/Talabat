@@ -60,6 +60,7 @@ function updateHeader() {
   document.getElementById('addressLabel').textContent = u?.address || 'حدد عنوانك عند الطلب';
   document.getElementById('userNav').innerHTML = u
     ? `${u.role === 'admin' ? '<a href="admin.html" class="nav-link">🛠️ الأدمن</a>' : ''}
+       ${u.role === 'staff' ? '<a href="admin.html" class="nav-link">🎧 لوحة خدمة العملاء</a>' : ''}
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
        <a href="#/orders" class="nav-link">طلباتي</a>
