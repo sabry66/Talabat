@@ -547,6 +547,22 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 .drawer-section { font-size: .78rem; color: var(--muted); font-weight: 700; padding: 14px 14px 4px; }
 .drawer-user { padding: 12px 14px; background: var(--bg); border-radius: 12px; margin-bottom: 4px; font-weight: 600; }
 
+/* اسم القسم الحالي (بيظهر بدل شريط الأقسام على الموبايل) */
+.section-title {
+  display: none; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  margin-bottom: 14px; padding: 12px 16px; border: 0; border-radius: 14px; cursor: pointer;
+  background: var(--card); box-shadow: var(--shadow); font: inherit; font-weight: 800; color: var(--brand); text-align: start;
+}
+.section-title span { display: flex; align-items: center; gap: 8px; }
+.section-title .badge { position: static; }
+.section-title small { color: var(--muted); font-weight: 600; font-size: .8rem; white-space: nowrap; }
+.menu-btn { position: relative; }
+.menu-badge {
+  position: absolute; top: -5px; inset-inline-end: -5px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 10px; background: var(--accent); color: #fff; font-size: .72rem; line-height: 20px; text-align: center;
+}
+.menu-badge[hidden] { display: none; }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 
@@ -561,7 +577,8 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
   .menu-section { scroll-margin-top: 110px; }
   .side-cart { display: none; }
   .menu-layout { grid-template-columns: 1fr; }
-  .tabs { position: sticky; top: calc(58px + env(safe-area-inset-top)); z-index: 9; background: var(--bg); margin-inline: -16px; padding-inline: 16px; }
+  .tabs { display: none; } /* الأقسام موجودة في القايمة الجانبية */
+  .section-title { display: flex; }
 
   .mobile-cart-bar {
     position: fixed; z-index: 40; inset-inline: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
@@ -579,7 +596,6 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 @media (max-width: 760px) {
   .container { padding: 0 14px; }
   main { padding-block: 14px 32px; }
-  .tabs { margin-inline: -14px; padding-inline: 14px; }
   .logo { font-size: 1.3rem; }
   .logo img { height: 34px; }
   input, select, textarea { font-size: 16px !important; } /* الآيفون بيعمل زووم لو الخط أصغر من 16 */

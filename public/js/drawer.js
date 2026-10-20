@@ -13,7 +13,7 @@
     btn.type = 'button';
     btn.setAttribute('aria-label', 'القايمة');
     btn.setAttribute('aria-expanded', 'false');
-    btn.innerHTML = '<span></span><span></span><span></span>';
+    btn.innerHTML = '<span></span><span></span><span></span><b class="menu-badge" hidden></b>';
     bar.prepend(btn); // في أول الشريط (يمين، زي تطبيقات العربي)
 
     const drawer = document.createElement('aside');
@@ -99,6 +99,40 @@
         body.prepend(w);
       }
     }
+
+    // على الموبايل شريط الأقسام بيستخبى (موجود في القايمة)، فبنعرض اسم القسم الحالي
+    // ونحط عدد الإشعارات (طلبات/شكاوي جديدة) على زرار ☰
+    let queued = false;
+    function sync() {
+      queued = false;
+      const tabsEl = document.getElementById('tabs');
+      let title = document.getElementById('sectionTitle');
+      if (!tabsEl) { if (title) title.remove(); }
+      else {
+        if (!title || title.nextElementSibling !== tabsEl) {
+          if (title) title.remove();
+          title = document.createElement('button');
+          title.type = 'button';
+          title.id = 'sectionTitle';
+          title.className = 'section-title';
+          title.addEventListener('click', open);
+          tabsEl.before(title);
+        }
+        const active = tabsEl.querySelector('[data-tab].active');
+        const html = `<span>${active ? active.innerHTML : ''}</span><small>الأقسام ▾</small>`;
+        if (title.innerHTML !== html) title.innerHTML = html;
+      }
+      const count = [...document.querySelectorAll('#tabs .badge')]
+        .reduce((n, b) => n + (parseInt(b.textContent.replace(/[^0-9]/g, ''), 10) || 0), 0);
+      const badge = btn.querySelector('.menu-badge');
+      const text = count > 99 ? '99+' : String(count);
+      if (badge.textContent !== text) badge.textContent = text;
+      if (badge.hidden !== !count) badge.hidden = !count;
+    }
+    new MutationObserver(() => {
+      if (!queued) { queued = true; requestAnimationFrame(sync); }
+    }).observe(document.getElementById('app') || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], characterData: true });
+    sync();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', build);
