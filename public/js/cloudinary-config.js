@@ -2,6 +2,6 @@
 // الخطوات في SETUP.md: اعمل حساب ← Settings ← Upload ← Add upload preset (Signing mode: Unsigned)
 // طول ما القيم فاضية، رفع الصور بيكون مقفول (وفي الوضع التجريبي الصور بتتحفظ في المتصفح).
 export const cloudinaryConfig = {
-  cloudName: '',
-  uploadPreset: '',
+  cloudName: 'qrp8inik',
+  uploadPreset: 'Arrivo',
 };
