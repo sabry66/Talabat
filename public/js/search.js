@@ -1,5 +1,6 @@
 // البحث: بيوحّد الحروف العربية عشان "فراخ" و"فرّاخ" و"اسكندراني" و"إسكندراني" يطلعوا نفس النتيجة
 import { isAvailable } from './ui.js';
+import { priceOf } from './offers.js';
 
 export function normalize(text) {
   return String(text || '')
@@ -22,7 +23,7 @@ export function matches(query, ...fields) {
   return words.every((w) => hay.includes(w));
 }
 
-export const minPrice = (r) => Math.min(...r.menu.flatMap((s) => s.items).filter(isAvailable).map((i) => i.price));
+export const minPrice = (r) => Math.min(...r.menu.flatMap((s) => s.items).filter(isAvailable).map(priceOf));
 
 export const inPriceRange = (price, { priceMin, priceMax }) =>
   (!priceMin || price >= Number(priceMin)) && (!priceMax || price <= Number(priceMax));

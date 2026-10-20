@@ -11,6 +11,7 @@ import {
   changePasswordForm, bindChangePassword,
 } from './ui.js';
 import { renderSupport } from './support.js';
+import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
 
@@ -69,7 +70,7 @@ document.body.appendChild(cartBar);
 function updateCartBar() {
   const n = Cart.count();
   const r = state.settings && cartRestaurant();
-  const show = n > 0 && r && ['', 'restaurant'].includes(page);
+  const show = n > 0 && r && ['', 'restaurant', 'offers'].includes(page);
   cartBar.classList.toggle('show', Boolean(show));
   document.body.classList.toggle('has-cart-bar', Boolean(show));
   if (show) {
@@ -87,10 +88,12 @@ function updateHeader() {
        ${u.role === 'staff' ? '<a href="admin.html" class="nav-link">🎧 لوحة خدمة العملاء</a>' : ''}
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
+       <a href="#/offers" class="nav-link" data-drawer-label="🔥 عروض وخصومات">🔥 العروض</a>
        <a href="#/orders" class="nav-link" data-drawer-label="🧾 طلباتي">طلباتي</a>
        <a href="#/support" class="nav-link" title="خدمة العملاء" data-drawer-label="🎧 خدمة العملاء">🎧</a>
        <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}${u.username ? ` <span class="uname">@${esc(u.username)}</span>` : ''}</a>`
-    : u === null ? '<a href="#/login" class="nav-link" data-drawer-label="🔑 دخول / حساب جديد">دخول</a>' : '';
+    : u === null ? `<a href="#/offers" class="nav-link" data-drawer-label="🔥 عروض وخصومات">🔥 العروض</a>
+       <a href="#/login" class="nav-link" data-drawer-label="🔑 دخول / حساب جديد">دخول</a>` : '';
 }
 
 // ---------- الرئيسية ----------
@@ -164,31 +167,36 @@ function drawResults() {
   const visible = state.restaurants.filter((r) => !r.blocked && r.menu.some((sec) => sec.items.length) &&
     (ui.category === 'all' || r.category === ui.category) &&
     (!ui.openOnly || r.isOpen !== false) &&
-    (!ui.promoOnly || r.promo) &&
+    (!ui.promoOnly || hasOffers(r)) &&
     (!ui.topRated || (r.rating || 0) >= 4));
 
   // الأصناف اللي بتطابق البحث (بتظهر بس لو فيه بحث أو فلتر سعر)
   const wantItems = q || ui.priceMin || ui.priceMax;
   let items = wantItems ? visible.flatMap((r) => r.menu.flatMap((sec) => sec.items
-    .filter((it) => isAvailable(it) && inPriceRange(it.price, ui) && matches(q, it.name, it.desc, sec.section))
+    .filter((it) => isAvailable(it) && inPriceRange(priceOf(it), ui) && matches(q, it.name, it.desc, sec.section))
     .map((it) => ({ it, r })))) : [];
 
   let list = visible.filter((r) => (!q || matches(q, r.name, r.tags || [], CATEGORIES.find((c) => c.id === r.category)?.name || '')
       || items.some((x) => x.r.id === r.id))
-    && (!(ui.priceMin || ui.priceMax) || r.menu.some((sec) => sec.items.some((it) => isAvailable(it) && inPriceRange(it.price, ui)))));
+    && (!(ui.priceMin || ui.priceMax) || r.menu.some((sec) => sec.items.some((it) => isAvailable(it) && inPriceRange(priceOf(it), ui)))));
 
   const byOpen = (a, b) => (b.isOpen !== false) - (a.isOpen !== false);
   if (ui.sort === 'rating') { list.sort((a, b) => (b.rating || 0) - (a.rating || 0)); items.sort((a, b) => (b.r.rating || 0) - (a.r.rating || 0)); }
   if (ui.sort === 'time') { list.sort((a, b) => a.time[0] - b.time[0]); items.sort((a, b) => a.r.time[0] - b.r.time[0]); }
-  if (ui.sort === 'price_low') { list.sort((a, b) => minPrice(a) - minPrice(b)); items.sort((a, b) => a.it.price - b.it.price); }
-  if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => b.it.price - a.it.price); }
+  if (ui.sort === 'price_low') { list.sort((a, b) => minPrice(a) - minPrice(b)); items.sort((a, b) => priceOf(a.it) - priceOf(b.it)); }
+  if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => priceOf(b.it) - priceOf(a.it)); }
   list.sort(byOpen);
   items.sort((a, b) => byOpen(a.r, b.r));
 
   const ITEMS_PREVIEW = 12;
   const shownItems = ui.showAllItems ? items : items.slice(0, ITEMS_PREVIEW);
 
+  // شريط العروض: بيظهر في الرئيسية لما مفيش بحث
+  const deals = wantItems ? [] : dealsList(visible);
   box.innerHTML = `
+    ${deals.length ? `
+      <div class="list-head"><h2>🔥 عروض وخصومات</h2><a href="#/offers" class="link">عرض الكل ←</a></div>
+      <section class="deals-strip">${deals.slice(0, 12).map(itemCard).join('')}</section>` : ''}
     ${wantItems ? `
       <div class="list-head"><h2>🍽️ ${items.length} صنف</h2></div>
       ${items.length ? `<section class="item-grid">${shownItems.map(itemCard).join('')}</section>
@@ -213,17 +221,50 @@ function itemCard({ it, r }) {
   const qty = Cart.restaurantId === r.id ? Cart.qty(it.id) : 0;
   return `
     <a class="item-card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
-      <div class="item-img">${itemImage(it, 90)}</div>
+      <div class="item-img">${itemImage(it, 90)}${activeOffer(it) ? `<span class="off-badge">-${activeOffer(it).pct}%</span>` : ''}</div>
       <div class="grow">
         <b>${esc(it.name)}</b>
         <div class="muted small clamp">${esc(it.desc)}</div>
         <div class="small">${esc(r.emoji)} ${esc(r.name)}${closed ? ' • <span class="warn-text">مغلق</span>' : ''}</div>
         <div class="item-card-foot">
-          <strong>${fmt(it.price)}</strong>
+          ${priceHtml(it)}
           ${closed ? '' : `<button class="add-btn" data-quick-add="${r.id}:${it.id}" type="button">${qty ? `✓ ${qty} في السلة +` : '+ إضافة'}</button>`}
         </div>
       </div>
     </a>`;
+}
+
+// الأصناف اللي عليها خصم في المطاعم الظاهرة (المفتوح الأول، والخصم الأكبر الأول)
+function dealsList(restaurants) {
+  return restaurants.flatMap((r) => offerItems(r).map((it) => ({ it, r })))
+    .sort((a, b) => (b.r.isOpen !== false) - (a.r.isOpen !== false) || activeOffer(b.it).pct - activeOffer(a.it).pct);
+}
+
+// ---------- صفحة العروض ----------
+
+function renderOffers() {
+  if (!state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
+  const visible = state.restaurants.filter((r) => !r.blocked && r.menu.some((sec) => sec.items.length));
+  const deals = dealsList(visible);
+  const promos = visible.filter((r) => r.promo).sort((a, b) => (b.isOpen !== false) - (a.isOpen !== false));
+  app.innerHTML = `
+    <a href="#/" class="back">→ رجوع للرئيسية</a>
+    <section class="hero offers-hero">
+      <h1>🔥 عروض وخصومات</h1>
+      <p>كل الخصومات اللي المطاعم عاملاها دلوقتي في مكان واحد.</p>
+    </section>
+    ${promos.length ? `
+      <div class="list-head"><h2>🏷️ عروض المطاعم</h2></div>
+      <section class="grid">${promos.map(restaurantCard).join('')}</section>` : ''}
+    <div class="list-head"><h2>💸 أصناف عليها خصم (${deals.length})</h2></div>
+    ${deals.length ? `<section class="item-grid">${deals.map(itemCard).join('')}</section>`
+      : '<p class="empty">مفيش خصومات على أصناف دلوقتي. ارجع تاني قريب 😉</p>'}`;
+  app.querySelectorAll('[data-quick-add]').forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    const [rid, itemId] = b.dataset.quickAdd.split(':');
+    if (addToCart(findRestaurant(rid), itemId)) renderOffers();
+  }));
+  updateCartBar();
 }
 
 // إضافة صنف للسلة (مع سؤال لو السلة فيها أصناف من مطعم تاني)
@@ -242,7 +283,7 @@ function restaurantCard(r) {
   return `
     <a class="card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
       <div class="card-cover" style="background:${esc(r.color)}">${restaurantLogo(r, 140)}
-        ${closed ? '<span class="closed-tag">مغلق الآن</span>' : r.promo ? `<span class="promo">${esc(r.promo)}</span>` : ''}
+        ${closed ? '<span class="closed-tag">مغلق الآن</span>' : hasOffers(r) ? `<span class="promo">🏷️ ${promoText(r)}</span>` : ''}
       </div>
       <div class="card-body">
         <div class="card-title">
@@ -272,7 +313,7 @@ function renderRestaurant(id) {
         <h1>${esc(r.name)}</h1>
         <p>${esc((r.tags || []).join(' • '))}</p>
         <p class="meta">${r.rating ? `⭐ ${r.rating} (${Number(r.reviews || 0).toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
-        ${r.promo ? `<span class="promo static">${esc(r.promo)}</span>` : ''}
+        ${hasOffers(r) ? `<span class="promo static">🏷️ ${promoText(r)}</span>` : ''}
       </div>
     </section>
     ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>' : ''}
@@ -312,14 +353,14 @@ function drawMenu(r) {
   const filterItems = (sec) => {
     const list = sec.items.filter((it) => (!menuUi.availableOnly || isAvailable(it))
       && matches(menuUi.query, it.name, it.desc, sec.section));
-    if (menuUi.sort === 'price_low') list.sort((a, b) => a.price - b.price);
-    if (menuUi.sort === 'price_high') list.sort((a, b) => b.price - a.price);
+    if (menuUi.sort === 'price_low') list.sort((a, b) => priceOf(a) - priceOf(b));
+    if (menuUi.sort === 'price_high') list.sort((a, b) => priceOf(b) - priceOf(a));
     return list;
   };
   let sections = r.menu.map((sec, i) => ({ sec, i, items: filterItems(sec) })).filter((x) => x.items.length);
   // الترتيب بالسعر: قايمة واحدة لكل الأصناف بدل ما يترتبوا جوه كل قسم لوحده
   if (menuUi.sort !== 'default' && sections.length) {
-    const all = sections.flatMap((x) => x.items).sort((a, b) => (menuUi.sort === 'price_low' ? a.price - b.price : b.price - a.price));
+    const all = sections.flatMap((x) => x.items).sort((a, b) => (menuUi.sort === 'price_low' ? priceOf(a) - priceOf(b) : priceOf(b) - priceOf(a)));
     sections = [{ sec: { section: menuUi.sort === 'price_low' ? 'كل الأصناف (من الأرخص)' : 'كل الأصناف (من الأغلى)' }, i: 'all', items: all }];
   }
   const filtering = menuUi.query.trim() || menuUi.availableOnly;
@@ -337,7 +378,7 @@ function drawMenu(r) {
             <div class="item-info">
               <h3>${esc(it.name)}</h3>
               <p class="muted">${esc(it.desc)}</p>
-              <strong>${fmt(it.price)}</strong>
+              ${priceHtml(it)}${activeOffer(it)?.until ? ` <span class="muted small">(${untilLabel(activeOffer(it).until)})</span>` : ''}
             </div>
             <div class="item-side">
               <div class="item-img">${itemImage(it)}</div>
@@ -412,7 +453,7 @@ function renderCart() {
             <div class="item-img sm">${itemImage(l.item, 52)}</div>
             <div class="grow">
               <strong>${esc(l.item.name)}</strong>
-              <div class="muted">${fmt(l.item.price)}</div>
+              <div class="muted">${fmt(l.item.price)}${l.item.fullPrice > l.item.price ? ` <s class="old-price">${fmt(l.item.fullPrice)}</s>` : ''}</div>
             </div>
             <div class="qty">
               <button data-dec="${l.item.id}" type="button" aria-label="نقص">−</button>
@@ -499,11 +540,9 @@ function renderCheckout() {
       <section class="panel">
         <h3>📍 عنوان التوصيل</h3>
         ${zoneSelect()}
+        <p class="muted small">حدد مكانك على الخريطة (اختياري بس بيسهّل على المندوب يوصلك):</p>
         <div class="map-box" id="map"><span class="muted small">جاري تحميل الخريطة...</span></div>
-        <div class="map-actions">
-          <button type="button" class="btn small" id="locateBtn">📍 حدد موقعي الحالي</button>
-          <span class="muted small" id="locLabel">${location_ ? '✅ تم تحديد الموقع على الخريطة' : 'اضغط على الخريطة لتحديد مكانك (اختياري)'}</span>
-        </div>
+
         <label>العنوان بالتفصيل
           <textarea name="address" required rows="2" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(u.address)}</textarea>
         </label>
@@ -542,21 +581,12 @@ function renderCheckout() {
   };
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
 
-  const label = document.getElementById('locLabel');
-  let picker = null;
-  locationPicker(document.getElementById('map'), location_, (ll) => {
-    location_ = ll;
-    label.textContent = '✅ تم تحديد الموقع على الخريطة';
-  }).then((p) => {
+  locationPicker(document.getElementById('map'), location_, (ll) => { location_ = ll; },
+    { hint: 'هيتبعت للمندوب مع الطلب' }).then((p) => {
     if (page !== 'checkout') return p.destroy();
-    picker = p;
     setCleanup(() => p.destroy());
   }).catch(() => {
     document.getElementById('map')?.replaceChildren('تعذر تحميل الخريطة. اكتب العنوان بالتفصيل.');
-  });
-  document.getElementById('locateBtn').addEventListener('click', () => {
-    if (!picker) return toast('الخريطة لسه بتحمّل');
-    picker.locate().catch((e) => toast(e.message));
   });
 
   document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
@@ -586,7 +616,7 @@ function renderCheckout() {
       driverUid: null,
       driverName: null,
       driverPhone: null,
-      lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty })),
+      lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty, ...(l.item.fullPrice > l.item.price ? { fullPrice: l.item.fullPrice } : {}) })),
       totals,
       promo: Cart.promo,
       address: d.address.trim(),
@@ -832,6 +862,7 @@ function router() {
   switch (name) {
     case '': renderHome(); break;
     case 'restaurant': renderRestaurant(id); break;
+    case 'offers': renderOffers(); break;
     case 'cart': renderCart(); break;
     case 'checkout': renderCheckout(); break;
     case 'orders': renderOrders(); break;
@@ -859,7 +890,7 @@ backend.watchRestaurants((list) => {
   const first = state.restaurants === null;
   state.restaurants = list;
   // صفحات بتعتمد على بيانات المطاعم بس، فنحدثها لما المطاعم تتغير
-  if (first || ['', 'restaurant', 'cart'].includes(page)) {
+  if (first || ['', 'restaurant', 'cart', 'offers'].includes(page)) {
     const y = window.scrollY;
     router();
     window.scrollTo(0, y);
@@ -870,7 +901,7 @@ backend.watchSettings((settings) => {
   const first = state.settings === null;
   state.settings = settings;
   if (page === 'checkout' && !first && refreshCheckout) return refreshCheckout();
-  if (first || ['', 'restaurant', 'cart'].includes(page)) {
+  if (first || ['', 'restaurant', 'cart', 'offers'].includes(page)) {
     const y = window.scrollY;
     router();
     window.scrollTo(0, y);

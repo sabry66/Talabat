@@ -2,6 +2,7 @@
 import { PROMO_CODES } from './data.js';
 import { isAvailable } from './ui.js';
 import { orderTotals } from './finance.js';
+import { priceOf } from './offers.js';
 
 const KEY = 'talabaty_cart_v2';
 const ZONE_KEY = 'arrivo_zone'; // منطقة التوصيل اللي العميل اختارها آخر مرة
@@ -68,13 +69,14 @@ export const Cart = {
     save();
   },
 
-  // الأصناف الموجودة ومتاحة في منيو المطعم دلوقتي
+  // الأصناف الموجودة ومتاحة في منيو المطعم دلوقتي (بالسعر بعد الخصم لو فيه)
   lines(restaurant) {
     if (!restaurant || restaurant.id !== cart.restaurantId) return [];
     const all = restaurant.menu.flatMap((s) => s.items);
     return Object.entries(cart.items)
       .map(([id, qty]) => ({ item: all.find((i) => i.id === id), qty }))
-      .filter((l) => l.item && isAvailable(l.item));
+      .filter((l) => l.item && isAvailable(l.item))
+      .map((l) => ({ ...l, item: { ...l.item, price: priceOf(l.item), fullPrice: Number(l.item.price) } }));
   },
 
   // settings = إعدادات المنصة (المناطق والنسب)

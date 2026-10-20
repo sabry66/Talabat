@@ -11,16 +11,18 @@ const EDITABLE = ['name', 'emoji', 'color', 'logo', 'category', 'tags', 'time', 
 
 // showOpenToggle: false في لوحة المطعم لأن الفتح والقفل ليه زرار لوحده فوق
 export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel = 'حفظ التعديلات', showOpenToggle = true }) {
-  const fields = showOpenToggle ? EDITABLE : EDITABLE.filter((k) => k !== 'isOpen');
+  // في لوحة المطعم: الفتح والقفل ليهم زرار، والعرض ليه تبويب "العروض"
+  const fields = showOpenToggle ? EDITABLE : EDITABLE.filter((k) => k !== 'isOpen' && k !== 'promo');
   const draft = JSON.parse(JSON.stringify(Object.fromEntries(fields.map((k) => [k, restaurant[k] ?? null]))));
   draft.tags ||= [];
   draft.time ||= [20, 35];
   draft.menu ||= [];
-  draft.promo ||= '';
+  if (showOpenToggle) draft.promo ||= '';
   draft.address ||= '';
   draft.phone ||= '';
   draft.logo ||= '';
   let picker = null;
+  let savedLoc = JSON.stringify(restaurant.location || null); // عشان نقول لصاحب المطعم المكان اتحفظ ولا لأ
 
   // يقرا كل الحقول من الصفحة ويحطها في draft قبل أي إعادة رسم
   function sync() {
@@ -61,7 +63,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       <input class="price-in" type="number" min="1" step="any" data-f="price" data-sec="${si}" data-item="${ii}" value="${it.price ?? ''}" placeholder="السعر" required aria-label="السعر">
       <label class="check"><input type="checkbox" data-f="available" data-sec="${si}" data-item="${ii}" ${it.available !== false ? 'checked' : ''}> متاح</label>
       ${it.image ? `<button type="button" class="icon-btn" data-del-photo="${si}:${ii}" title="شيل الصورة" aria-label="شيل الصورة">🖼️✕</button>` : ''}
-      <button type="button" class="icon-btn danger" data-del-item="${si}:${ii}" aria-label="حذف الصنف">🗑️</button>
+      <button type="button" class="btn small danger-outline" data-del-item="${si}:${ii}" aria-label="حذف الصنف">🗑️ حذف</button>
     </div>`;
 
   function draw() {
@@ -92,15 +94,16 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
             <label>أيقونة (لو مفيش لوجو)<input data-f="emoji" value="${esc(draft.emoji)}"></label>
             <label>لون الخلفية<input type="color" data-f="color" value="${esc(draft.color || '#ffe3d1')}"></label>
             <label>الكلمات المميزة (افصل بفاصلة)<input data-f="tags" value="${esc(draft.tags.join('، '))}" placeholder="برجر، وجبات سريعة"></label>
-            <label>عرض (اختياري)<input data-f="promo" value="${esc(draft.promo)}" placeholder="خصم 20% على أول طلب"></label>
+            ${showOpenToggle ? `<label>عرض (اختياري)<input data-f="promo" value="${esc(draft.promo)}" placeholder="خصم 20% على أول طلب"></label>` : ''}
             <label>وقت التحضير والتوصيل من (دقيقة)<input type="number" min="1" data-f="timeMin" value="${draft.time[0]}" required></label>
             <label>إلى (دقيقة)<input type="number" min="1" data-f="timeMax" value="${draft.time[1]}" required></label>
             <label>الحد الأدنى للطلب (ج.م)<input type="number" min="0" step="any" data-f="minOrder" value="${draft.minOrder ?? 0}" required></label>
             <label>تليفون المطعم<input data-f="phone" type="tel" value="${esc(draft.phone)}" inputmode="numeric" dir="ltr"></label>
           </div>
           <label>عنوان المطعم (المندوب هيستلم منه)<input data-f="address" value="${esc(draft.address)}" placeholder="المنطقة، الشارع، علامة مميزة" required></label>
+          <p class="muted small">📍 مكان المطعم على الخريطة (عشان المندوب يوصله):</p>
           <div class="map-box small-map" id="restMap"><span class="muted small">جاري تحميل الخريطة...</span></div>
-          <p class="muted small" id="restLoc">${draft.location ? '✅ مكان المطعم متحدد على الخريطة' : 'اضغط على الخريطة لتحديد مكان المطعم بالظبط (عشان المندوب يوصله)'}</p>
+
           ${showOpenToggle ? `<label class="check"><input type="checkbox" data-f="isOpen" ${draft.isOpen !== false ? 'checked' : ''}> المطعم مفتوح ويستقبل طلبات</label>` : ''}
         </section>
 
@@ -122,9 +125,8 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         </div>
       </form>`;
 
-    locationPicker(el.querySelector('#restMap'), draft.location, (ll) => {
-      draft.location = ll;
-      el.querySelector('#restLoc').textContent = '✅ مكان المطعم متحدد على الخريطة';
+    locationPicker(el.querySelector('#restMap'), draft.location, (ll) => { draft.location = ll; }, {
+      hint: (ll) => (JSON.stringify(ll) === savedLoc ? '💾 ده المكان المحفوظ' : `⚠️ متنساش تدوس «${saveLabel}» تحت عشان يتحفظ`),
     }).then((p) => { picker = p; }).catch(() => {
       el.querySelector('#restMap')?.replaceChildren('تعذر تحميل الخريطة');
     });
@@ -162,10 +164,13 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
     el.querySelector('#addSec').addEventListener('click', redraw(() => draft.menu.push({ section: 'قسم جديد', items: [] })));
     el.querySelectorAll('[data-add-item]').forEach((b) => b.addEventListener('click', redraw(() =>
       draft.menu[+b.dataset.addItem].items.push({ id: newItemId(), name: '', desc: '', price: '', emoji: '🍽️', available: true }))));
-    el.querySelectorAll('[data-del-item]').forEach((b) => b.addEventListener('click', redraw(() => {
+    el.querySelectorAll('[data-del-item]').forEach((b) => b.addEventListener('click', () => {
+      sync();
       const [si, ii] = b.dataset.delItem.split(':').map(Number);
-      draft.menu[si].items.splice(ii, 1);
-    })));
+      const it = draft.menu[si].items[ii];
+      if (it.name && !confirm(`حذف "${it.name}" من المنيو؟ (هيتحذف نهائي لما تدوس حفظ)`)) return;
+      redraw(() => draft.menu[si].items.splice(ii, 1))();
+    }));
     el.querySelectorAll('[data-del-sec]').forEach((b) => b.addEventListener('click', () => {
       const sec = draft.menu[+b.dataset.delSec];
       if (sec.items.length && !confirm(`حذف قسم "${sec.section}" بكل أصنافه؟`)) return;
@@ -190,7 +195,10 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       try {
         if (showOpenToggle) draft.isOpen = Boolean(draft.isOpen);
         draft.menu.forEach((s) => s.items.forEach((it) => { it.available = Boolean(it.available); }));
-        await onSave(JSON.parse(JSON.stringify(draft)));
+        if (await onSave(JSON.parse(JSON.stringify(draft))) !== false) {
+          savedLoc = JSON.stringify(draft.location || null);
+          picker?.refresh();
+        }
       } finally {
         btn.disabled = false;
       }

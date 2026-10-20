@@ -2,6 +2,7 @@
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
+import { renderOffersEditor } from './offers-editor.js';
 import { orderSplit, sum } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
@@ -135,6 +136,7 @@ function drawTabs() {
   el.innerHTML = `
     <button type="button" data-tab="orders" class="${tab === 'orders' ? 'active' : ''}">📋 الطلبات ${pending ? `<span class="badge static">${pending}</span>` : ''}</button>
     <button type="button" data-tab="menu" class="${tab === 'menu' ? 'active' : ''}">🍽️ المنيو والإعدادات</button>
+    <button type="button" data-tab="offers" class="${tab === 'offers' ? 'active' : ''}">🏷️ العروض والخصومات</button>
     <button type="button" data-tab="support" class="${tab === 'support' ? 'active' : ''}">🎧 الدعم</button>`;
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     if (tab === b.dataset.tab) return;
@@ -167,6 +169,20 @@ function drawTab() {
     supportUnsub = renderSupport(document.getElementById('tabBody'), { backend, user });
     return;
   }
+  if (tab === 'offers') {
+    renderOffersEditor(document.getElementById('tabBody'), restaurant, {
+      onSave: async (changes) => {
+        try {
+          await backend.updateRestaurant(restaurant.id, changes);
+        } catch (err) {
+          throw new Error(errorMessage(err));
+        }
+        Object.assign(restaurant, JSON.parse(JSON.stringify(changes)));
+        if (tab === 'offers') drawTab();
+      },
+    });
+    return;
+  }
   renderMenuEditor(document.getElementById('tabBody'), restaurant, {
     showOpenToggle: false,
     onSave: async (data) => {
@@ -175,6 +191,7 @@ function drawTab() {
         toast('تم حفظ التعديلات ✅');
       } catch (err) {
         toast(errorMessage(err));
+        return false;
       }
     },
   });

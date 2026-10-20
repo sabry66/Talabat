@@ -544,6 +544,7 @@ function drawEditor(body) {
         close();
       } catch (e) {
         toast(errorMessage(e));
+        return false;
       }
     },
   });
