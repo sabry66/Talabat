@@ -55,6 +55,11 @@ export function errorMessage(e) {
     'auth/configuration-not-found': 'لازم تفعّل Authentication من Firebase Console',
     'permission-denied': 'مش مسموحلك تعمل العملية دي',
     'order-taken': 'الأوردر ده مندوب تاني أخده',
+    'username-taken': 'اسم المستخدم ده محجوز، اختار اسم تاني',
+    'username-invalid': 'اسم المستخدم لازم يكون من 3 لـ 20 حرف إنجليزي صغير أو أرقام أو _ و . بس',
+    'username-locked': 'اسم المستخدم مينفعش يتغير بعد ما يتحدد',
+    'phone-taken': 'رقم الموبايل ده مسجل بحساب تاني',
+    'phone-invalid': 'رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 01',
     unavailable: 'مفيش اتصال بالسيرفر، جرب تاني',
   };
   return map[code] || `حصل خطأ: ${e?.message || e}`;
@@ -108,7 +113,8 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
         <form id="authForm">
           ${mode === 'register' ? `
             <label>الاسم<input name="name" required autocomplete="name"></label>
-            <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" autocomplete="tel"></label>` : ''}
+            ${usernameField()}
+            <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" autocomplete="tel" dir="ltr"></label>` : ''}
           <label>الإيميل<input name="email" type="email" required autocomplete="email" dir="ltr"></label>
           <label>كلمة السر<input name="password" type="password" required minlength="6" dir="ltr"
             autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>
@@ -141,7 +147,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       errEl.hidden = true;
       try {
         if (mode === 'login') await backend.signIn(d.email, d.password);
-        else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), email: d.email, password: d.password });
+        else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.username, email: d.email, password: d.password });
         if (onDone) onDone();
       } catch (err) {
         errEl.textContent = errorMessage(err);
@@ -153,11 +159,51 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
   draw();
 }
 
+const usernameField = (value = '', locked = false) => `
+  <label>اسم المستخدم (مميز ليك ومحدش ياخده غيرك)
+    <span class="at-input"><span>@</span><input name="username" required pattern="[a-zA-Z0-9_.]{3,20}" value="${esc(value)}"
+      placeholder="ahmed_10" autocomplete="username" dir="ltr" ${locked ? 'readonly' : ''}></span>
+    <span class="muted small">${locked ? 'اسم المستخدم مبيتغيرش.' : 'من 3 لـ 20 حرف إنجليزي أو أرقام أو _ و . (مبيتغيرش بعد كده)'}</span>
+  </label>`;
+
+// للحسابات اللي اتعملت قبل أسماء المستخدمين: لازم يختاروا اسم مستخدم ويأكدوا رقمهم مرة واحدة
+export function renderCompleteProfile(el, { backend, user }) {
+  el.innerHTML = `
+    <form class="auth-card panel" id="completeForm">
+      <h2>كمّل بيانات حسابك 👋</h2>
+      <p class="muted small center">اختار اسم مستخدم مميز ليك، عشان نعرف كل حساب بسهولة.</p>
+      ${usernameField()}
+      <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(user.phone)}" inputmode="numeric" dir="ltr"></label>
+      <p class="form-error" id="completeError" hidden></p>
+      <button class="btn primary block" type="submit">حفظ</button>
+      <button class="btn block" type="button" id="completeLogout">خروج</button>
+    </form>`;
+  el.querySelector('#completeLogout').addEventListener('click', () => backend.signOut());
+  el.querySelector('#completeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(e.target));
+    const btn = e.target.querySelector('button[type=submit]');
+    const errEl = el.querySelector('#completeError');
+    btn.disabled = true;
+    errEl.hidden = true;
+    try {
+      await backend.claimIdentity(user, { username: d.username, phone: d.phone });
+      toast('تم حفظ بياناتك ✅');
+    } catch (err) {
+      errEl.textContent = errorMessage(err);
+      errEl.hidden = false;
+      btn.disabled = false;
+    }
+  });
+}
+
+export { usernameField };
+
 // اسم المستخدم وزرار الخروج في هيدر لوحات التحكم
 export function renderDashNav(user, backend) {
   const nav = document.getElementById('userNav');
   nav.innerHTML = user
-    ? `<span class="muted small">${esc(user.name || user.email)}</span><button class="btn small" id="logoutBtn" type="button">خروج</button>`
+    ? `<span class="muted small">${esc(user.name || user.email)}${user.username ? ` <b dir="ltr">@${esc(user.username)}</b>` : ''}</span><button class="btn small" id="logoutBtn" type="button">خروج</button>`
     : '';
   if (user) nav.querySelector('#logoutBtn').addEventListener('click', () => backend.signOut());
 }
@@ -177,10 +223,10 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
       </ul>
       ${o.notes ? `<p class="note">📝 ${esc(o.notes)}</p>` : ''}
       <div class="small">
-        👤 ${esc(o.customerName)} • <a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a><br>
+        👤 ${esc(o.customerName)}${o.customerUsername ? ` <span class="uname">@${esc(o.customerUsername)}</span>` : ''} • <a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a><br>
         📍 ${o.zoneName ? `<b>${esc(o.zoneName)}</b> — ` : ''}${esc(o.address)} ${map ? `<a href="${map}" target="_blank" rel="noopener">(الخريطة)</a>` : ''}
       </div>
-      ${o.driverUid ? `<div class="driver-tag small">🛵 المندوب: ${esc(o.driverName)} • <a href="tel:${esc(o.driverPhone)}" dir="ltr">${esc(o.driverPhone)}</a></div>`
+      ${o.driverUid ? `<div class="driver-tag small">🛵 المندوب: ${esc(o.driverName)}${o.driverUsername ? ` <span class="uname">@${esc(o.driverUsername)}</span>` : ''} • <a href="tel:${esc(o.driverPhone)}" dir="ltr">${esc(o.driverPhone)}</a></div>`
         : ['preparing', 'ready'].includes(o.status) ? '<div class="driver-tag waiting small">⏳ مستني مندوب ياخده</div>' : ''}
       <footer>
         <strong>${fmt(o.totals.total)}</strong>

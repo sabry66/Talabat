@@ -5,7 +5,7 @@ import { orderSplit, sum } from './finance.js';
 import { renderJoin } from './join.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
-  renderAuthForm, renderDashNav, paymentLabel,
+  renderAuthForm, renderDashNav, renderCompleteProfile, paymentLabel,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -31,6 +31,11 @@ function start() {
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
+    return;
+  }
+  if (!user.username) {
+    root.innerHTML = '<div id="completeBox"></div>';
+    renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
     return;
   }
   if (user.role !== 'driver') {

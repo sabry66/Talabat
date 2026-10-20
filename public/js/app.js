@@ -6,7 +6,7 @@ import { locationPicker } from './map.js';
 import { activeZones } from './finance.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
-  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage,
+  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField,
 } from './ui.js';
 
 const app = document.getElementById('app');
@@ -61,7 +61,7 @@ function updateHeader() {
        ${u.restaurantId ? '<a href="restaurant.html" class="nav-link">🏪 لوحة المطعم</a>' : ''}
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
        <a href="#/orders" class="nav-link">طلباتي</a>
-       <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}</a>`
+       <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}${u.username ? ` <span class="uname">@${esc(u.username)}</span>` : ''}</a>`
     : u === null ? '<a href="#/login" class="nav-link">دخول</a>' : '';
 }
 
@@ -430,6 +430,7 @@ function renderCheckout() {
       customerUid: u.uid,
       customerName: d.name.trim(),
       customerPhone: d.phone.trim(),
+      customerUsername: u.username || null,
       restaurantId: rest.id,
       restaurantName: rest.name,
       restaurantEmoji: rest.emoji,
@@ -619,8 +620,9 @@ function renderAccount() {
     <h1 class="page-title">حسابي</h1>
     <form class="panel narrow" id="profileForm">
       <p class="muted" dir="ltr">${esc(u.email)}</p>
+      ${usernameField(u.username, true)}
       <label>الاسم<input name="name" required value="${esc(u.name)}"></label>
-      <label>رقم الموبايل<input name="phone" type="tel" pattern="01[0-9]{9}" value="${esc(u.phone)}" inputmode="numeric"></label>
+      <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(u.phone)}" inputmode="numeric" dir="ltr"></label>
       <label>العنوان<textarea name="address" rows="2">${esc(u.address)}</textarea></label>
       <button class="btn primary block" type="submit">حفظ</button>
       <button class="btn block" type="button" id="logout">تسجيل الخروج</button>
@@ -629,7 +631,9 @@ function renderAccount() {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     try {
-      await backend.updateProfile(u.uid, { name: d.name.trim(), phone: d.phone.trim(), address: d.address.trim(), location: u.location });
+      await backend.updateProfile(u.uid, { name: d.name.trim(), address: d.address.trim(), location: u.location });
+      // تغيير الرقم بيتأكد إنه مش مسجل بحساب تاني
+      if (d.phone.trim() !== u.phone) await backend.claimIdentity(u, { username: u.username, phone: d.phone });
       toast('تم الحفظ ✅');
     } catch (err) {
       toast(errorMessage(err));
@@ -651,6 +655,13 @@ function router() {
   setCleanup(null);
   const [, name = '', id] = (location.hash || '#/').slice(1).split('/');
   page = name;
+  // حساب قديم من غير اسم مستخدم: لازم يختار واحد الأول
+  if (state.user && !state.user.username) {
+    page = 'complete';
+    renderCompleteProfile(app, { backend, user: state.user });
+    updateHeader();
+    return;
+  }
   switch (name) {
     case '': renderHome(); break;
     case 'restaurant': renderRestaurant(id); break;
@@ -700,7 +711,8 @@ backend.onAuth((user) => {
   state.user = user;
   updateHeader();
   // نعيد الرسم لو حالة الدخول اتغيرت أو الصفحة بتعرض بيانات الحساب
-  if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid || page === 'account') router();
+  if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid || page === 'account'
+    || Boolean(prev?.username) !== Boolean(user?.username)) router();
 });
 
 router();

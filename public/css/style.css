@@ -407,3 +407,10 @@ label.btn { display: inline-flex; margin: 0 0 6px; font-weight: 700; }
 .request dd { margin: 0; }
 .join-form h2 { text-align: center; }
 .join-form select { display: block; width: 100%; margin-top: 4px; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+
+/* اسم المستخدم */
+.at-input { display: flex; align-items: stretch; margin-top: 4px; direction: ltr; }
+.at-input span { display: grid; place-items: center; padding: 0 10px; background: var(--brand-soft); color: var(--brand); font-weight: 800; border: 1px solid var(--line); border-right: 0; border-radius: 10px 0 0 10px; }
+.at-input input { margin-top: 0 !important; border-radius: 0 10px 10px 0 !important; }
+.uname { color: var(--brand); font-weight: 700; direction: ltr; unicode-bidi: isolate; font-size: .9em; }
+.search-in { font: inherit; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; min-width: min(360px, 100%); }

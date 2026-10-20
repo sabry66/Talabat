@@ -6,7 +6,7 @@ import { renderMenuEditor } from './menu-editor.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
-  renderAuthForm, renderDashNav, statusBadge, restaurantLogo,
+  renderAuthForm, renderDashNav, renderCompleteProfile, statusBadge, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -15,6 +15,8 @@ let restaurants = null;
 let orders = null;
 let settings = null;
 let drivers = [];
+let users = [];
+let userQuery = '';
 let applications = [];
 let tab = 'overview';
 let editing = null; // id المطعم اللي بيتعدل، أو 'new'
@@ -30,6 +32,7 @@ const TABS = [
   ['restaurants', '🏪 المطاعم'],
   ['zones', '📍 المناطق والنسب'],
   ['drivers', '🛵 المندوبين'],
+  ['users', '👥 المستخدمين'],
   ['orders', '📋 الطلبات'],
 ];
 
@@ -43,6 +46,7 @@ function stop() {
   orders = null;
   settings = null;
   drivers = [];
+  users = [];
   applications = [];
   editing = null;
 }
@@ -53,6 +57,11 @@ function start() {
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
     renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'دخول الأدمن' });
+    return;
+  }
+  if (!user.username) {
+    root.innerHTML = '<div id="completeBox"></div>';
+    renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
     return;
   }
   if (user.role !== 'admin') {
@@ -95,9 +104,10 @@ function start() {
     drawTabs();
     refresh();
   }));
-  unsubs.push(backend.watchUsersByRole('driver', (list) => {
-    drivers = list;
-    refresh();
+  unsubs.push(backend.watchUsers((list) => {
+    users = list;
+    drivers = list.filter((u) => u.role === 'driver');
+    if (tab !== 'users') refresh();
   }));
 }
 
@@ -122,9 +132,12 @@ function drawTab() {
   if (!restaurants || !orders || !settings) { body.innerHTML = loader(); return; }
   ({
     overview: drawOverview, requests: drawRequests, finance: drawFinance, restaurants: drawRestaurants,
-    zones: drawZones, drivers: drawDrivers, orders: drawOrders,
+    zones: drawZones, drivers: drawDrivers, users: drawUsers, orders: drawOrders,
   })[tab](body);
 }
+
+// الاسم وجنبه اسم المستخدم
+const who = (name, username) => `${esc(name || '—')}${username ? ` <span class="uname">@${esc(username)}</span>` : ''}`;
 
 const inPeriod = (o) => {
   if (period === 'all') return true;
@@ -167,7 +180,7 @@ function drawOverview(body) {
     <section class="panel">
       <h3>آخر الطلبات</h3>
       ${orders.slice(0, 8).map((o) => `
-        <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${esc(o.driverName)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
+        <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${who(o.driverName, o.driverUsername)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
     </section>`;
 }
 
@@ -190,7 +203,7 @@ function drawRequests(body) {
           </header>
           ${a.type === 'restaurant' ? `<h3>${esc(cat(a.category)?.icon || '')} ${esc(a.restaurantName)}</h3>` : `<h3>${esc(a.name)}</h3>`}
           <dl>
-            <dt>الاسم</dt><dd>${esc(a.name)}</dd>
+            <dt>الاسم</dt><dd>${who(a.name, a.username)}</dd>
             <dt>الموبايل</dt><dd><a href="tel:${esc(a.phone)}" dir="ltr">${esc(a.phone)}</a></dd>
             <dt>الإيميل</dt><dd dir="ltr">${esc(a.email)}</dd>
             ${a.type === 'driver' ? `
@@ -257,7 +270,7 @@ function drawFinance(body) {
     r.net += s.restaurant;
     r.due += s.restaurantDue;
     const key = o.driverUid || 'none';
-    const d = byDriver[key] ??= { name: o.driverName || 'بدون مندوب', ids: [], earn: 0, owes: 0 };
+    const d = byDriver[key] ??= { name: o.driverName || 'بدون مندوب', username: o.driverUsername, ids: [], earn: 0, owes: 0 };
     d.ids.push(shortId(o.id));
     d.earn += s.driver;
     d.owes += s.driverOwes;
@@ -289,7 +302,7 @@ function drawFinance(body) {
       ${Object.keys(byDriver).length ? `<div class="table-wrap flat"><table class="table">
         <thead><tr><th>المندوب</th><th>الأوردرات</th><th>أرقام الأوردرات</th><th>مكسبه</th><th>كاش معاه للمنصة</th></tr></thead>
         <tbody>${Object.values(byDriver).sort((a, b) => b.ids.length - a.ids.length).map((x) => `
-          <tr><td><b>${esc(x.name)}</b></td><td>${x.ids.length}</td>
+          <tr><td><b>${who(x.name, x.username)}</b></td><td>${x.ids.length}</td>
           <td class="ids">${x.ids.map((id) => `<span class="chip static">#${id}</span>`).join(' ')}</td>
           <td><b>${fmt(x.earn)}</b></td><td>${x.owes >= 0 ? fmt(x.owes) : `<span class="muted">المنصة عليها ${fmt(-x.owes)}</span>`}</td></tr>`).join('')}
         </tbody></table></div>` : '<p class="muted small">مفيش.</p>'}
@@ -300,7 +313,7 @@ function drawFinance(body) {
       ${splits.length ? `<div class="table-wrap flat"><table class="table">
         <thead><tr><th>الأوردر</th><th>المطعم</th><th>المنطقة</th><th>المندوب</th><th>الأكل</th><th>التوصيل</th><th>الخصم</th><th>الإجمالي</th><th>المطعم</th><th>المندوب</th><th>المنصة</th></tr></thead>
         <tbody>${splits.map(({ o, s }) => `
-          <tr><td>#${shortId(o.id)}</td><td>${esc(o.restaurantName)}</td><td>${esc(o.zoneName || '')}</td><td>${esc(o.driverName || '—')}</td>
+          <tr><td>#${shortId(o.id)}</td><td>${esc(o.restaurantName)}</td><td>${esc(o.zoneName || '')}</td><td>${who(o.driverName, o.driverUsername)}</td>
           <td>${fmt(o.totals.subtotal)}</td><td>${fmt(o.totals.delivery)}</td><td>${o.totals.discount ? fmt(o.totals.discount) : '—'}</td>
           <td>${fmt(o.totals.total)}</td><td>${fmt(s.restaurant)}</td><td>${fmt(s.driver)}</td><td><b>${fmt(s.platform)}</b></td></tr>`).join('')}
         </tbody></table></div>` : '<p class="muted small">مفيش.</p>'}
@@ -342,7 +355,7 @@ function drawRestaurants(body) {
               <td><span class="mini-logo" style="background:${esc(r.color)}">${restaurantLogo(r, 36)}</span> <strong>${esc(r.name)}</strong>
                 ${r.address ? '' : '<br><span class="small warn-text">⚠️ مفيش عنوان للمندوب</span>'}</td>
               <td><button class="chip" data-toggle="${r.id}" type="button">${r.isOpen !== false ? '🟢 مفتوح' : '🔴 مغلق'}</button></td>
-              <td class="small" dir="ltr">${r.ownerEmail ? esc(r.ownerEmail) : '<span class="muted">—</span>'}</td>
+              <td class="small">${r.ownerEmail ? `${r.ownerUsername ? `<span class="uname">@${esc(r.ownerUsername)}</span><br>` : ''}<span dir="ltr">${esc(r.ownerEmail)}</span>` : '<span class="muted">—</span>'}</td>
               <td>${r.menu.reduce((n, s) => n + s.items.length, 0)}</td>
               <td>${orders.filter((o) => o.restaurantId === r.id && o.status === 'delivered').length}</td>
               <td class="row-actions">
@@ -414,13 +427,15 @@ async function seedRestaurants() {
 }
 
 async function assignOwner(r) {
-  const email = prompt(`إيميل صاحب "${r.name}"\n(لازم يكون عامل حساب في الموقع الأول):`, r.ownerEmail || '');
+  const email = prompt(`صاحب "${r.name}": اكتب إيميله أو اسم المستخدم (@...) أو رقم موبايله\n(لازم يكون عامل حساب في الموقع الأول):`,
+    r.ownerUsername ? `@${r.ownerUsername}` : r.ownerEmail || '');
   if (!email || !email.trim()) return;
   try {
-    const u = await backend.findUserByEmail(email);
-    if (!u) return toast('مفيش حساب بالإيميل ده. خلّي صاحب المطعم يعمل حساب الأول.');
+    const u = await backend.findUser(email);
+    if (!u) return toast('مفيش حساب بالبيانات دي. خلّي صاحب المطعم يعمل حساب الأول.');
     if (u.role === 'driver') return toast('الحساب ده مندوب. شيله من المندوبين الأول.');
     if (u.restaurantId && u.restaurantId !== r.id && !confirm('الحساب ده مربوط بمطعم تاني، هيتفك ربطه منه. تكمل؟')) return;
+    if (!confirm(`ربط ${u.name} (@${u.username || u.email}) بـ ${r.name}؟`)) return;
     await backend.assignOwner(r.id, u);
     toast(`تم ربط ${u.name || u.email} بـ ${r.name} ✅`);
   } catch (e) {
@@ -568,7 +583,7 @@ function drawDrivers(body) {
       <tbody>${drivers.map((d) => {
         const s = stats(d.uid);
         return `<tr>
-          <td><b>${esc(d.name)}</b><br><span class="small muted" dir="ltr">${esc(d.email)}</span></td>
+          <td><b>${who(d.name, d.username)}</b><br><span class="small muted" dir="ltr">${esc(d.email)}</span></td>
           <td><a href="tel:${esc(d.phone)}" dir="ltr">${esc(d.phone)}</a></td>
           <td>${s.active}</td><td>${s.today}</td><td>${fmt(s.earnToday)}</td><td>${s.total}</td>
           <td><b>${fmt(s.owes)}</b></td>
@@ -577,11 +592,12 @@ function drawDrivers(body) {
       }).join('')}</tbody></table></div>` : '<p class="muted">مفيش مندوبين لسه.</p>'}`;
 
   body.querySelector('#addDriver').addEventListener('click', async () => {
-    const email = prompt('إيميل المندوب\n(لازم يكون عامل حساب في الموقع الأول):');
+    const email = prompt('اكتب إيميل المندوب أو اسم المستخدم (@...) أو رقم موبايله\n(لازم يكون عامل حساب في الموقع الأول):');
     if (!email || !email.trim()) return;
     try {
-      const u = await backend.findUserByEmail(email);
-      if (!u) return toast('مفيش حساب بالإيميل ده. خلّي المندوب يعمل حساب الأول.');
+      const u = await backend.findUser(email);
+      if (!u) return toast('مفيش حساب بالبيانات دي. خلّي المندوب يعمل حساب الأول.');
+      if (!confirm(`إضافة ${u.name} (@${u.username || u.email}) كمندوب؟`)) return;
       if (u.role === 'admin') return toast('ده حساب أدمن، مينفعش يبقى مندوب.');
       if (u.role === 'driver') return toast('الحساب ده مندوب أصلًا.');
       if (u.restaurantId && !confirm('الحساب ده صاحب مطعم، هيتفك ربطه بالمطعم. تكمل؟')) return;
@@ -601,6 +617,41 @@ function drawDrivers(body) {
       toast(errorMessage(e));
     }
   }));
+}
+
+// ---------- المستخدمين ----------
+
+const ROLE_LABELS = { customer: '👤 عميل', restaurant: '🏪 صاحب مطعم', driver: '🛵 مندوب', admin: '🛠️ أدمن' };
+
+function drawUsers(body) {
+  body.innerHTML = `
+    <div class="list-head">
+      <h2>${users.length} مستخدم</h2>
+      <input class="search-in" id="userSearch" type="search" placeholder="دوّر بالاسم أو @اسم المستخدم أو الموبايل أو الإيميل" value="${esc(userQuery)}">
+    </div>
+    <div id="usersTable"></div>`;
+  const draw = () => {
+    const q = userQuery.trim().toLowerCase().replace(/^@/, '');
+    const list = users.filter((u) => !q || [u.name, u.username, u.phone, u.email].some((v) => String(v || '').toLowerCase().includes(q)))
+      .sort((a, b) => String(a.username || '~').localeCompare(String(b.username || '~')));
+    const ordersBy = (uid) => orders.filter((o) => o.customerUid === uid).length;
+    const restName = (id) => restaurants.find((r) => r.id === id)?.name;
+    body.querySelector('#usersTable').innerHTML = `
+      <div class="table-wrap"><table class="table">
+        <thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الموبايل</th><th>الإيميل</th><th>النوع</th><th>طلباته</th></tr></thead>
+        <tbody>${list.map((u) => `
+          <tr>
+            <td>${u.username ? `<span class="uname">@${esc(u.username)}</span>` : '<span class="muted small">لسه ماختارش</span>'}</td>
+            <td>${esc(u.name)}</td>
+            <td><a href="tel:${esc(u.phone)}" dir="ltr">${esc(u.phone)}</a></td>
+            <td class="small" dir="ltr">${esc(u.email)}</td>
+            <td class="small">${ROLE_LABELS[u.role] || esc(u.role)}${u.restaurantId && restName(u.restaurantId) ? `<br>${esc(restName(u.restaurantId))}` : ''}</td>
+            <td>${ordersBy(u.uid)}</td>
+          </tr>`).join('') || '<tr><td colspan="6" class="center muted">مفيش نتايج</td></tr>'}
+        </tbody></table></div>`;
+  };
+  draw();
+  body.querySelector('#userSearch').addEventListener('input', (e) => { userQuery = e.target.value; draw(); });
 }
 
 // ---------- الطلبات ----------
@@ -627,9 +678,9 @@ function drawOrders(body) {
               <td>#${shortId(o.id)}</td>
               <td class="small">${new Date(o.createdAt).toLocaleString('ar-EG')}</td>
               <td>${esc(o.restaurantName)}</td>
-              <td class="small">${esc(o.customerName)}<br><a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a></td>
+              <td class="small">${who(o.customerName, o.customerUsername)}<br><a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a></td>
               <td class="small">${esc(o.zoneName || '')}</td>
-              <td class="small">${o.driverName ? esc(o.driverName) : '<span class="muted">—</span>'}</td>
+              <td class="small">${o.driverName ? who(o.driverName, o.driverUsername) : '<span class="muted">—</span>'}</td>
               <td>${fmt(o.totals.total)}</td>
               <td>
                 <select data-order="${o.id}" aria-label="حالة الطلب">

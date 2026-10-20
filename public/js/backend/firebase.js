@@ -2,6 +2,7 @@
 // الحماية (مين يقرا/يكتب إيه) موجودة في firestore.rules.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
 import { withDefaults } from '../finance.js';
+import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, updateProfile as updateAuthProfile, connectAuthEmulator,
@@ -36,12 +37,23 @@ export function createBackend(config, { useEmulators }) {
   const orders = collection(db, 'orders');
   const settingsDoc = doc(db, 'settings', 'app');
   const applications = collection(db, 'applications');
+  // مستند لكل اسم مستخدم ولكل رقم موبايل، عشان محدش ياخدهم مرتين
+  const usernames = collection(db, 'usernames');
+  const phones = collection(db, 'phones');
   let signingUp = false;
 
   const logError = (cb, fallback) => (err) => {
     console.error(err);
     cb(fallback);
   };
+
+  // بيتأكد إن اسم المستخدم والرقم مش محجوزين لحد تاني
+  async function checkFree(username, phone, uid) {
+    const [u, p] = await Promise.all([getDoc(doc(usernames, username)), phone ? getDoc(doc(phones, phone)) : null]);
+    if (u.exists() && u.data().uid !== uid) throw idError('username-taken');
+    if (p?.exists() && p.data().uid !== uid) throw idError('phone-taken');
+    return { usernameMine: u.exists(), phoneMine: Boolean(p?.exists()) };
+  }
 
   return {
     // بيرجّع بيانات المستخدم من مستند users/{uid} (الاسم، الدور، المطعم...) ويتابع تغييراتها
@@ -71,18 +83,54 @@ export function createBackend(config, { useEmulators }) {
       };
     },
 
-    async signUp({ name, email, password, phone }) {
+    async signUp({ name, email, password, phone, username }) {
+      username = normalizeUsername(username);
+      phone = normalizePhone(phone);
+      checkUsername(username);
+      checkPhone(phone);
+      await checkFree(username, phone, null);
       signingUp = true;
+      let user = null;
       try {
-        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        ({ user } = await createUserWithEmailAndPassword(auth, email.trim(), password));
         await updateAuthProfile(user, { displayName: name });
-        await setDoc(doc(users, user.uid), {
-          email: (user.email || '').toLowerCase(), name, phone, address: '',
+        const batch = writeBatch(db);
+        batch.set(doc(users, user.uid), {
+          email: (user.email || '').toLowerCase(), name, phone, username, address: '',
           role: 'customer', restaurantId: null, createdAt: serverTimestamp(),
         });
+        batch.set(doc(usernames, username), { uid: user.uid });
+        batch.set(doc(phones, phone), { uid: user.uid });
+        await batch.commit();
+      } catch (err) {
+        // حد سبقه للاسم أو الرقم في نفس اللحظة: نمسح الحساب اللي لسه اتعمل
+        if (user) {
+          await user.delete().catch(console.error);
+          if (err.code === 'permission-denied') throw idError('username-taken');
+        }
+        throw err;
       } finally {
         signingUp = false;
       }
+    },
+
+    // للحسابات القديمة اللي اتعملت قبل أسماء المستخدمين، أو لتغيير الرقم
+    async claimIdentity(user, { username, phone }) {
+      username = normalizeUsername(username || user.username);
+      phone = normalizePhone(phone);
+      checkUsername(username);
+      checkPhone(phone);
+      if (user.username && username !== user.username) throw idError('username-locked');
+      const { usernameMine, phoneMine } = await checkFree(username, phone, user.uid);
+      const batch = writeBatch(db);
+      batch.update(doc(users, user.uid), { username, phone });
+      if (!usernameMine) batch.set(doc(usernames, username), { uid: user.uid });
+      if (!phoneMine) batch.set(doc(phones, phone), { uid: user.uid });
+      if (user.phone && user.phone !== phone) {
+        const old = await getDoc(doc(phones, user.phone));
+        if (old.exists() && old.data().uid === user.uid) batch.delete(old.ref);
+      }
+      await batch.commit();
     },
 
     async signIn(email, password) {
@@ -91,13 +139,27 @@ export function createBackend(config, { useEmulators }) {
 
     signOut: () => signOut(auth),
 
-    async updateProfile(uid, { name, phone, address, location }) {
-      await updateDoc(doc(users, uid), { name, phone, address, location: location ?? null });
+    // الرقم بيتغير من claimIdentity بس (عشان يفضل مش متكرر)
+    async updateProfile(uid, { name, address, location }) {
+      await updateDoc(doc(users, uid), { name, address, location: location ?? null });
     },
 
-    async findUserByEmail(email) {
-      const snap = await getDocs(query(users, where('email', '==', email.trim().toLowerCase()), limit(1)));
+    // بالإيميل أو اسم المستخدم (@ahmed) أو رقم الموبايل
+    async findUser(identifier) {
+      const id = String(identifier || '').trim();
+      let snap;
+      if (id.includes('@') && !id.startsWith('@')) {
+        snap = await getDocs(query(users, where('email', '==', id.toLowerCase()), limit(1)));
+      } else if (/^[0-9٠-٩+]/.test(id)) {
+        snap = await getDocs(query(users, where('phone', '==', normalizePhone(id)), limit(1)));
+      } else {
+        snap = await getDocs(query(users, where('username', '==', normalizeUsername(id)), limit(1)));
+      }
       return snap.empty ? null : { ...snap.docs[0].data(), uid: snap.docs[0].id };
+    },
+
+    watchUsers(cb) {
+      return onSnapshot(users, (s) => cb(s.docs.map((d) => ({ ...d.data(), uid: d.id }))), logError(cb, []));
     },
 
     watchRestaurants(cb) {
@@ -134,7 +196,7 @@ export function createBackend(config, { useEmulators }) {
         const prev = await getDoc(doc(restaurants, user.restaurantId));
         if (prev.exists()) batch.update(prev.ref, { ownerUid: null, ownerEmail: null });
       }
-      batch.update(doc(restaurants, restaurantId), { ownerUid: user.uid, ownerEmail: user.email });
+      batch.update(doc(restaurants, restaurantId), { ownerUid: user.uid, ownerEmail: user.email, ownerUsername: user.username || null });
       batch.update(doc(users, user.uid), { restaurantId, role: user.role === 'admin' ? 'admin' : 'restaurant' });
       await batch.commit();
     },
@@ -154,7 +216,7 @@ export function createBackend(config, { useEmulators }) {
 
     // طلبات الانضمام كمندوب أو مطعم (مستند واحد لكل مستخدم)
     submitApplication: (user, data) => setDoc(doc(applications, user.uid), {
-      ...data, uid: user.uid, email: user.email, status: 'pending', createdAt: Date.now(),
+      ...data, uid: user.uid, email: user.email, username: user.username || null, status: 'pending', createdAt: Date.now(),
     }),
 
     watchMyApplication(uid, cb) {
@@ -178,7 +240,7 @@ export function createBackend(config, { useEmulators }) {
       const user = (await getDoc(doc(users, uid))).data();
       const ref = doc(restaurants);
       const batch = writeBatch(db);
-      batch.set(ref, { ...withoutId(restaurant), ownerUid: uid, ownerEmail: user.email });
+      batch.set(ref, { ...withoutId(restaurant), ownerUid: uid, ownerEmail: user.email, ownerUsername: user.username || null });
       batch.update(doc(users, uid), { role: 'restaurant', restaurantId: ref.id });
       batch.update(doc(applications, uid), { status: 'approved', reviewedAt: Date.now() });
       await batch.commit();
@@ -218,11 +280,16 @@ export function createBackend(config, { useEmulators }) {
         if (!o || o.driverUid || !CLAIMABLE.includes(o.status)) {
           throw Object.assign(new Error('taken'), { code: 'order-taken' });
         }
-        tx.update(ref, { driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, claimedAt: Date.now() });
+        tx.update(ref, {
+          driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone,
+          driverUsername: driver.username || null, claimedAt: Date.now(),
+        });
       });
     },
 
-    releaseOrder: (id) => updateDoc(doc(orders, id), { driverUid: null, driverName: null, driverPhone: null, claimedAt: null }),
+    releaseOrder: (id) => updateDoc(doc(orders, id), {
+      driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
+    }),
 
     setOrderStatus(id, status) {
       return updateDoc(doc(orders, id), {

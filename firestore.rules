@@ -29,16 +29,54 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    // اسم المستخدم ورقم الموبايل لازم يكونوا محجوزين باسم الحساب ده في نفس العملية
+    function ownsUsername(uid, name) {
+      return existsAfter(/databases/$(database)/documents/usernames/$(name))
+        && getAfter(/databases/$(database)/documents/usernames/$(name)).data.uid == uid;
+    }
+
+    function ownsPhone(uid, phone) {
+      return existsAfter(/databases/$(database)/documents/phones/$(phone))
+        && getAfter(/databases/$(database)/documents/phones/$(phone)).data.uid == uid;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       // أي حساب جديد بيبدأ عميل؛ الأدمن بس اللي يغير الدور
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.role == 'customer'
         && request.resource.data.get('restaurantId', null) == null
-        && request.resource.data.email == request.auth.token.email.lower();
+        && request.resource.data.email == request.auth.token.email.lower()
+        && (!('username' in request.resource.data) || ownsUsername(uid, request.resource.data.username))
+        && (request.resource.data.get('phone', '') == '' || ownsPhone(uid, request.resource.data.phone));
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == uid && changedOnly(['name', 'phone', 'address', 'location']));
+        || (signedIn() && request.auth.uid == uid
+            && changedOnly(['name', 'phone', 'address', 'location', 'username'])
+            // اسم المستخدم بيتحدد مرة واحدة بس
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['username'])
+                || (!('username' in resource.data) && ownsUsername(uid, request.resource.data.username)))
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['phone'])
+                || ownsPhone(uid, request.resource.data.phone)));
       allow delete: if isAdmin();
+    }
+
+    // usernames/{اسم} و phones/{رقم} = { uid }. مينفعش يتعدلوا، فأول واحد يحجز بياخد
+    match /usernames/{name} {
+      allow get: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && name.matches('^[a-z0-9_.]{3,20}$')
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == name;
+      allow delete: if isAdmin();
+    }
+
+    match /phones/{phone} {
+      allow get: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && phone.matches('^01[0-9]{9}$')
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.phone == phone;
+      allow delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
     }
 
     // إعدادات المنصة: المناطق وأسعار التوصيل والنسب
@@ -65,7 +103,7 @@ service cloud.firestore {
         || (signedIn()
             && resource.data.get('ownerUid', null) == request.auth.uid
             && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['ownerUid', 'ownerEmail', 'rating', 'reviews']));
+                 .hasAny(['ownerUid', 'ownerEmail', 'ownerUsername', 'rating', 'reviews']));
     }
 
     match /orders/{orderId} {
@@ -78,7 +116,7 @@ service cloud.firestore {
       }
 
       function driverFields() {
-        return ['driverUid', 'driverName', 'driverPhone', 'claimedAt'];
+        return ['driverUid', 'driverName', 'driverPhone', 'driverUsername', 'claimedAt'];
       }
 
       allow read: if signedIn() && (

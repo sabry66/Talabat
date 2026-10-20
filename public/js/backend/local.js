@@ -3,8 +3,9 @@
 // ولوحة المطعم كصاحب مطعم في تاب تاني.
 import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES } from '../data.js';
 import { withDefaults } from '../finance.js';
+import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 
-const DB_KEY = 'arrivo_demo_db_v1';
+const DB_KEY = 'arrivo_demo_db_v2';
 const SESSION_KEY = 'talabaty_demo_session';
 
 const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(x)));
@@ -17,18 +18,21 @@ const session = {
 const authError = (code) => Object.assign(new Error(code), { code });
 
 function seed() {
-  const user = (uid, email, name, role, restaurantId = null) =>
-    ({ uid, email, password: '123456', name, phone: '01000000000', address: '', role, restaurantId });
+  const user = (uid, email, name, role, phone, restaurantId = null) =>
+    ({ uid, email, password: '123456', name, phone, username: uid.replace('u-', 'demo_'), address: '', role, restaurantId });
   const users = {
-    'u-admin': user('u-admin', 'admin@demo.com', 'مدير التطبيق', 'admin'),
-    'u-owner': user('u-owner', 'owner@demo.com', 'صاحب بيت البرجر', 'restaurant', 'burger-house'),
-    'u-customer': user('u-customer', 'customer@demo.com', 'عميل تجريبي', 'customer'),
-    'u-driver': user('u-driver', 'driver@demo.com', 'مندوب تجريبي', 'driver'),
+    'u-admin': user('u-admin', 'admin@demo.com', 'مدير التطبيق', 'admin', '01000000001'),
+    'u-owner': user('u-owner', 'owner@demo.com', 'صاحب بيت البرجر', 'restaurant', '01000000002', 'burger-house'),
+    'u-customer': user('u-customer', 'customer@demo.com', 'عميل تجريبي', 'customer', '01000000003'),
+    'u-driver': user('u-driver', 'driver@demo.com', 'مندوب تجريبي', 'driver', '01000000004'),
   };
   const restaurants = {};
   for (const r of SEED_RESTAURANTS) {
     const owned = r.id === 'burger-house';
-    restaurants[r.id] = { ...clone(r), isOpen: true, ownerUid: owned ? 'u-owner' : null, ownerEmail: owned ? 'owner@demo.com' : null };
+    restaurants[r.id] = {
+      ...clone(r), isOpen: true, ownerUid: owned ? 'u-owner' : null,
+      ownerEmail: owned ? 'owner@demo.com' : null, ownerUsername: owned ? 'demo_owner' : null,
+    };
   }
   const settings = { ...clone(DEFAULT_SETTINGS), zones: clone(SAMPLE_ZONES) };
   return { users, restaurants, orders: {}, settings, applications: {} };
@@ -91,14 +95,34 @@ export function createBackend() {
       return watch(() => publicUser(db().users[session.get()]), cb);
     },
 
-    async signUp({ name, email, password, phone }) {
+    async signUp({ name, email, password, phone, username }) {
       email = email.trim().toLowerCase();
+      username = normalizeUsername(username);
+      phone = normalizePhone(phone);
+      checkUsername(username);
+      checkPhone(phone);
       if (!/^\S+@\S+\.\S+$/.test(email)) throw authError('auth/invalid-email');
       if (password.length < 6) throw authError('auth/weak-password');
-      if (Object.values(db().users).some((u) => u.email === email)) throw authError('auth/email-already-in-use');
+      const all = Object.values(db().users);
+      if (all.some((u) => u.email === email)) throw authError('auth/email-already-in-use');
+      if (all.some((u) => u.username === username)) throw idError('username-taken');
+      if (all.some((u) => u.phone === phone)) throw idError('phone-taken');
       const uid = 'u-' + newId();
-      db().users[uid] = { uid, email, password, name, phone, address: '', role: 'customer', restaurantId: null };
+      db().users[uid] = { uid, email, password, name, phone, username, address: '', role: 'customer', restaurantId: null };
       session.set(uid);
+      commit();
+    },
+
+    async claimIdentity(user, { username, phone }) {
+      username = normalizeUsername(username || user.username);
+      phone = normalizePhone(phone);
+      checkUsername(username);
+      checkPhone(phone);
+      if (user.username && username !== user.username) throw idError('username-locked');
+      const others = Object.values(db().users).filter((u) => u.uid !== user.uid);
+      if (others.some((u) => u.username === username)) throw idError('username-taken');
+      if (others.some((u) => u.phone === phone)) throw idError('phone-taken');
+      Object.assign(db().users[user.uid], { username, phone });
       commit();
     },
 
@@ -115,14 +139,22 @@ export function createBackend() {
       commit();
     },
 
-    async updateProfile(uid, { name, phone, address, location }) {
-      Object.assign(db().users[uid], clone({ name, phone, address, location: location ?? null }));
+    async updateProfile(uid, { name, address, location }) {
+      Object.assign(db().users[uid], clone({ name, address, location: location ?? null }));
       commit();
     },
 
-    async findUserByEmail(email) {
-      email = email.trim().toLowerCase();
-      return clone(publicUser(Object.values(db().users).find((u) => u.email === email)));
+    // بالإيميل أو اسم المستخدم (@ahmed) أو رقم الموبايل
+    async findUser(identifier) {
+      const id = String(identifier || '').trim();
+      const match = id.includes('@') && !id.startsWith('@') ? (u) => u.email === id.toLowerCase()
+        : /^[0-9٠-٩+]/.test(id) ? (u) => u.phone === normalizePhone(id)
+          : (u) => u.username === normalizeUsername(id);
+      return clone(publicUser(Object.values(db().users).find(match)));
+    },
+
+    watchUsers(cb) {
+      return watch(() => Object.values(db().users).map(publicUser), cb);
     },
 
     watchRestaurants(cb) {
@@ -162,7 +194,7 @@ export function createBackend() {
       if (u.restaurantId && u.restaurantId !== restaurantId && d.restaurants[u.restaurantId]) {
         Object.assign(d.restaurants[u.restaurantId], { ownerUid: null, ownerEmail: null });
       }
-      Object.assign(r, { ownerUid: u.uid, ownerEmail: u.email });
+      Object.assign(r, { ownerUid: u.uid, ownerEmail: u.email, ownerUsername: u.username || null });
       Object.assign(u, { restaurantId, role: u.role === 'admin' ? 'admin' : 'restaurant' });
       commit();
     },
@@ -188,7 +220,9 @@ export function createBackend() {
     // طلبات الانضمام كمندوب أو مطعم
     async submitApplication(user, data) {
       db().applications ||= {};
-      db().applications[user.uid] = { ...clone(data), uid: user.uid, email: user.email, status: 'pending', createdAt: Date.now() };
+      db().applications[user.uid] = {
+        ...clone(data), uid: user.uid, email: user.email, username: user.username || null, status: 'pending', createdAt: Date.now(),
+      };
       commit();
     },
 
@@ -209,7 +243,7 @@ export function createBackend() {
     async approveRestaurant(uid, restaurant) {
       const d = db();
       const id = 'r-' + newId();
-      d.restaurants[id] = { ...clone(restaurant), id, ownerUid: uid, ownerEmail: d.users[uid].email };
+      d.restaurants[id] = { ...clone(restaurant), id, ownerUid: uid, ownerEmail: d.users[uid].email, ownerUsername: d.users[uid].username || null };
       Object.assign(d.users[uid], { role: 'restaurant', restaurantId: id });
       Object.assign(d.applications[uid], { status: 'approved', reviewedAt: Date.now() });
       commit();
@@ -249,12 +283,14 @@ export function createBackend() {
     async claimOrder(id, driver) {
       const o = db().orders[id];
       if (o.driverUid || !['preparing', 'ready'].includes(o.status)) throw authError('permission-denied');
-      Object.assign(o, { driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, claimedAt: Date.now() });
+      Object.assign(o, {
+        driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, driverUsername: driver.username || null, claimedAt: Date.now(),
+      });
       commit();
     },
 
     async releaseOrder(id) {
-      Object.assign(db().orders[id], { driverUid: null, driverName: null, driverPhone: null, claimedAt: null });
+      Object.assign(db().orders[id], { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null });
       commit();
     },
 
