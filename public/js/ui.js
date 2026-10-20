@@ -44,6 +44,9 @@ export function errorMessage(e) {
   const code = e?.code || '';
   const map = {
     'auth/invalid-credential': 'الإيميل أو كلمة السر غلط',
+    'auth/missing-password': 'اكتب كلمة السر',
+    'auth/requires-recent-login': 'لأسباب أمان، اخرج وادخل تاني وبعدين غيّر كلمة السر',
+    'password-mismatch': 'كلمة السر الجديدة والتأكيد مش زي بعض',
     'auth/wrong-password': 'الإيميل أو كلمة السر غلط',
     'auth/user-not-found': 'الإيميل أو كلمة السر غلط',
     'auth/email-already-in-use': 'الإيميل ده مسجل قبل كده، جرب تسجيل الدخول',
@@ -120,6 +123,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
             autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>
           <p class="form-error" id="authError" hidden></p>
           <button class="btn primary block" type="submit">${mode === 'login' ? 'دخول' : 'إنشاء الحساب'}</button>
+          ${mode === 'login' ? '<button class="link block-link" type="button" id="forgotBtn">نسيت كلمة السر؟</button>' : ''}
         </form>
         ${isDemo && mode === 'login' ? `
           <div class="demo-accounts">
@@ -135,6 +139,10 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
     el.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => {
       el.querySelector('[name=email]').value = b.dataset.demo;
       el.querySelector('[name=password]').value = '123456';
+    }));
+
+    el.querySelector('#forgotBtn')?.addEventListener('click', () => renderForgot(el, {
+      backend, email: el.querySelector('[name=email]').value, onBack: () => { mode = 'login'; draw(); },
     }));
 
     const form = el.querySelector('#authForm');
@@ -165,6 +173,76 @@ const usernameField = (value = '', locked = false) => `
       placeholder="ahmed_10" autocomplete="username" dir="ltr" ${locked ? 'readonly' : ''}></span>
     <span class="muted small">${locked ? 'اسم المستخدم مبيتغيرش.' : 'من 3 لـ 20 حرف إنجليزي أو أرقام أو _ و . (مبيتغيرش بعد كده)'}</span>
   </label>`;
+
+// نسيت كلمة السر: بنبعت لينك على الإيميل
+function renderForgot(el, { backend, email = '', onBack }) {
+  el.innerHTML = `
+    <form class="auth-card panel" id="forgotForm">
+      <h2>نسيت كلمة السر؟ 🔑</h2>
+      <p class="muted small center">اكتب الإيميل اللي سجلت بيه، وهنبعتلك لينك تعمل منه كلمة سر جديدة.</p>
+      <label>الإيميل<input name="email" type="email" required value="${esc(email)}" autocomplete="email" dir="ltr"></label>
+      <p class="form-error" id="forgotError" hidden></p>
+      <button class="btn primary block" type="submit">ابعتلي اللينك</button>
+      <button class="btn block" type="button" id="forgotBack">رجوع لتسجيل الدخول</button>
+    </form>`;
+  el.querySelector('#forgotBack').addEventListener('click', onBack);
+  el.querySelector('#forgotForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type=submit]');
+    const errEl = el.querySelector('#forgotError');
+    btn.disabled = true;
+    errEl.hidden = true;
+    try {
+      const addr = e.target.email.value.trim();
+      await backend.resetPassword(addr);
+      el.innerHTML = `
+        <div class="auth-card panel center">
+          <div class="big">📧</div>
+          <h2>بعتنالك إيميل</h2>
+          <p>لو الإيميل <b dir="ltr">${esc(addr)}</b> مسجل عندنا، هيوصلك لينك تغيّر منه كلمة السر.</p>
+          <p class="muted small">لو مش لاقيه، دوّر في <b>Spam</b> أو <b>الرسائل غير المرغوب فيها</b>.</p>
+          <button class="btn primary block" type="button" id="forgotDone">رجوع لتسجيل الدخول</button>
+        </div>`;
+      el.querySelector('#forgotDone').addEventListener('click', onBack);
+    } catch (err) {
+      errEl.textContent = errorMessage(err);
+      errEl.hidden = false;
+      btn.disabled = false;
+    }
+  });
+}
+
+// تغيير كلمة السر (للي داخل بحسابه)
+export function changePasswordForm() {
+  return `
+    <form class="panel narrow" id="passwordForm">
+      <h3>🔑 تغيير كلمة السر</h3>
+      <label>كلمة السر الحالية<input name="current" type="password" required autocomplete="current-password" dir="ltr"></label>
+      <label>كلمة السر الجديدة<input name="next" type="password" required minlength="6" autocomplete="new-password" dir="ltr"></label>
+      <label>اكتبها تاني للتأكيد<input name="confirm" type="password" required minlength="6" autocomplete="new-password" dir="ltr"></label>
+      <button class="btn primary block" type="submit">تغيير كلمة السر</button>
+    </form>`;
+}
+
+export function bindChangePassword(el, backend) {
+  el.querySelector('#passwordForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const btn = f.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      if (f.next.value !== f.confirm.value) throw Object.assign(new Error('mismatch'), { code: 'password-mismatch' });
+      await backend.changePassword(f.current.value, f.next.value);
+      f.reset();
+      toast('تم تغيير كلمة السر ✅');
+    } catch (err) {
+      // كلمة السر الحالية غلط بيرجع نفس كود "الإيميل أو كلمة السر غلط"
+      toast(err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' ? 'كلمة السر الحالية غلط' : errorMessage(err));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
 
 // للحسابات اللي اتعملت قبل أسماء المستخدمين: لازم يختاروا اسم مستخدم ويأكدوا رقمهم مرة واحدة
 export function renderCompleteProfile(el, { backend, user }) {
@@ -227,7 +305,8 @@ export function renderBlocked(el, { backend, user }) {
 export function renderDashNav(user, backend) {
   const nav = document.getElementById('userNav');
   nav.innerHTML = user
-    ? `<span class="muted small">${esc(user.name || user.email)}${user.username ? ` <b dir="ltr">@${esc(user.username)}</b>` : ''}</span><button class="btn small" id="logoutBtn" type="button">خروج</button>`
+    ? `<span class="muted small">${esc(user.name || user.email)}${user.username ? ` <b dir="ltr">@${esc(user.username)}</b>` : ''}</span>
+       <a class="btn small" href="index.html#/account" title="حسابي وكلمة السر">⚙️</a><button class="btn small" id="logoutBtn" type="button">خروج</button>`
     : '';
   if (user) nav.querySelector('#logoutBtn').addEventListener('click', () => backend.signOut());
 }

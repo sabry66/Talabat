@@ -139,6 +139,19 @@ export function createBackend() {
       commit();
     },
 
+    // الوضع التجريبي مفيهوش إيميلات حقيقية
+    async resetPassword(email) {
+      if (!/^\S+@\S+\.\S+$/.test(email.trim())) throw authError('auth/invalid-email');
+    },
+
+    async changePassword(current, next) {
+      const u = db().users[session.get()];
+      if (!u || u.password !== current) throw authError('auth/invalid-credential');
+      if (next.length < 6) throw authError('auth/weak-password');
+      u.password = next;
+      commit();
+    },
+
     async signOut() {
       session.clear();
       commit();

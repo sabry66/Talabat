@@ -7,6 +7,7 @@ import { activeZones } from './finance.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked,
+  changePasswordForm, bindChangePassword,
 } from './ui.js';
 import { renderSupport } from './support.js';
 
@@ -610,7 +611,8 @@ function renderLogin(mode, next) {
     title: next === 'checkout' ? 'سجّل دخولك عشان تكمل الطلب' : '',
     onDone: () => {
       toast('أهلًا بيك 👋');
-      location.hash = `#/${next || ''}`;
+      // ممكن يكون اتنقل لوحده بالفعل لما الدخول اتسجل
+      if (['login', 'register'].includes(page)) location.hash = `#/${next || ''}`;
     },
   });
 }
@@ -629,7 +631,9 @@ function renderAccount() {
       <label>العنوان<textarea name="address" rows="2">${esc(u.address)}</textarea></label>
       <button class="btn primary block" type="submit">حفظ</button>
       <button class="btn block" type="button" id="logout">تسجيل الخروج</button>
-    </form>`;
+    </form>
+    ${changePasswordForm()}`;
+  bindChangePassword(app, backend);
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
@@ -644,6 +648,8 @@ function renderAccount() {
   });
   document.getElementById('logout').addEventListener('click', async () => {
     await backend.signOut();
+    state.user = null; // من غير ما نستنى إشعار الخروج، عشان صفحة الدخول تفتح على طول
+    updateHeader();
     location.hash = '#/';
   });
 }
@@ -731,7 +737,8 @@ backend.onAuth((user) => {
   state.user = user;
   updateHeader();
   // نعيد الرسم لو حالة الدخول اتغيرت أو الصفحة بتعرض بيانات الحساب
-  if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid || page === 'account'
+  // صفحة الحساب مش بنعيد رسمها هنا عشان منمسحش اللي بيكتبه (زي كلمة السر)
+  if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid
     || Boolean(prev?.username) !== Boolean(user?.username)
     || Boolean(prev?.banned) !== Boolean(user?.banned) || Boolean(prev?.deleted) !== Boolean(user?.deleted)) router();
 });

@@ -429,3 +429,6 @@ label.btn { display: inline-flex; margin: 0 0 6px; font-weight: 700; }
 .reply textarea { flex: 1; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; }
 .btn.whatsapp { background: #25d366; color: #fff; border-color: #25d366; }
 .center-row { justify-content: center; }
+.block-link { display: block; margin: 12px auto 0; }
+#passwordForm { margin-top: 16px; }
+.auth-card .big { font-size: 3rem; }

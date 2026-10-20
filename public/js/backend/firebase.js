@@ -6,6 +6,7 @@ import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError }
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, updateProfile as updateAuthProfile, connectAuthEmulator,
+  sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
@@ -26,6 +27,7 @@ const CLAIMABLE = ['preparing', 'ready'];
 export function createBackend(config, { useEmulators }) {
   const app = initializeApp(config);
   const auth = getAuth(app);
+  auth.languageCode = 'ar'; // إيميلات Firebase (زي استرجاع كلمة السر) بالعربي
   const db = getFirestore(app);
   if (useEmulators) {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
@@ -148,6 +150,16 @@ export function createBackend(config, { useEmulators }) {
     },
 
     signOut: () => signOut(auth),
+
+    // نسيت كلمة السر: Firebase بيبعت لينك على الإيميل
+    resetPassword: (email) => sendPasswordResetEmail(auth, email.trim()),
+
+    // تغيير كلمة السر وهو داخل: لازم يأكد بكلمة السر القديمة الأول
+    async changePassword(current, next) {
+      const user = auth.currentUser;
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current));
+      await updatePassword(user, next);
+    },
 
     // الرقم بيتغير من claimIdentity بس (عشان يفضل مش متكرر)
     async updateProfile(uid, { name, address, location }) {
