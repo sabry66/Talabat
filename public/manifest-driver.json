@@ -1,0 +1,32 @@
+{
+  "id": "/delivery.html",
+  "name": "أريفو للمندوبين",
+  "short_name": "أريفو مندوب",
+  "description": "خد الأوردرات ووصّلها واعرف مكسبك",
+  "start_url": "/delivery.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "background_color": "#ffffff",
+  "theme_color": "#2d245b",
+  "icons": [
+    {
+      "src": "img/icon-driver-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-driver-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-driver-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

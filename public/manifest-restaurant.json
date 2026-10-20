@@ -1,0 +1,32 @@
+{
+  "id": "/restaurant.html",
+  "name": "أريفو للمطاعم",
+  "short_name": "أريفو مطاعم",
+  "description": "استقبل طلبات مطعمك وجهّزها",
+  "start_url": "/restaurant.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl",
+  "background_color": "#ffffff",
+  "theme_color": "#2d245b",
+  "icons": [
+    {
+      "src": "img/icon-restaurant-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-restaurant-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icon-restaurant-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

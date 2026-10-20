@@ -393,3 +393,8 @@ label.btn { display: inline-flex; margin: 0 0 6px; font-weight: 700; }
 .money div { display: flex; justify-content: space-between; }
 .money .earn { color: var(--ok); font-size: 1.1rem; }
 .trip-card .order-actions { align-items: center; }
+
+/* تنزيل التطبيق */
+[hidden] { display: none !important; }
+.install-btn { background: var(--accent); color: #fff; border-color: var(--accent); white-space: nowrap; }
+.install-btn:hover { background: var(--accent-dark); }
