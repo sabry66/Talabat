@@ -104,7 +104,15 @@ export function demoBanner(isDemo) {
 }
 
 // فورم تسجيل الدخول / إنشاء حساب
-export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = '', onDone }) {
+// نوع الحساب عند التسجيل من الموقع الرئيسي: العميل بيكمّل، والمطعم والمندوب بيروحوا لطلب الانضمام
+export const SIGNUP_ROLES = [
+  ['customer', '👤 عميل', 'عايز أطلب أكل'],
+  ['restaurant', '🏪 صاحب مطعم', 'عايز أبيع على أريفو'],
+  ['driver', '🛵 مندوب', 'عايز أشتغل توصيل'],
+];
+
+// askRole: يظهر سؤال "إنت مين؟" في الحساب الجديد، و onDone بيتنادى بالنوع اللي اختاره
+export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = '', onDone, askRole = false, role = 'customer' }) {
   const draw = () => {
     el.innerHTML = `
       <div class="auth-card panel">
@@ -114,6 +122,13 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
           <button type="button" data-mode="register" class="${mode === 'register' ? 'active' : ''}">حساب جديد</button>
         </div>
         <form id="authForm">
+          ${mode === 'register' && askRole ? `
+            <fieldset class="role-pick">
+              <legend>إنت مين؟</legend>
+              ${SIGNUP_ROLES.map(([k, l, d]) => `
+                <label class="role-opt"><input type="radio" name="signupRole" value="${k}" ${role === k ? 'checked' : ''}>
+                  <span><b>${l}</b><small>${d}</small></span></label>`).join('')}
+            </fieldset>` : ''}
           ${mode === 'register' ? `
             <label>الاسم<input name="name" required autocomplete="name"></label>
             ${usernameField()}
@@ -137,6 +152,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       </div>`;
 
     el.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; draw(); }));
+    el.querySelectorAll('[name=signupRole]').forEach((r) => r.addEventListener('change', () => { role = r.value; }));
     el.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => {
       el.querySelector('[name=email]').value = b.dataset.demo;
       el.querySelector('[name=password]').value = '123456';
@@ -157,7 +173,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       try {
         if (mode === 'login') await backend.signIn(d.email, d.password);
         else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password });
-        if (onDone) onDone();
+        if (onDone) onDone(mode === 'register' ? role : null);
       } catch (err) {
         errEl.textContent = errorMessage(err);
         errEl.hidden = false;
@@ -386,3 +402,25 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
       </div>` : ''}
     </article>`;
 }
+
+// كروت "اشتغل معانا" (في الرئيسية وصفحة #/join)
+export const JOIN_LINKS = { restaurant: 'restaurant.html?join=1', driver: 'delivery.html?join=1' };
+export const joinCards = () => `
+  <section class="join-section" id="join">
+    <h2>🤝 اشتغل مع أريفو</h2>
+    <p class="muted">عندك مطعم أو عايز تشتغل مندوب؟ سجّل في دقيقة وفريقنا هيراجع طلبك.</p>
+    <div class="join-cards">
+      <a class="join-card" href="${JOIN_LINKS.restaurant}">
+        <span class="join-icon">🏪</span>
+        <b>سجّل مطعمك</b>
+        <ul><li>عملاء جداد في منطقتك</li><li>الطلبات بتوصلك لحظيًا بصوت تنبيه</li><li>تتحكم في المنيو والأسعار والعروض بنفسك</li></ul>
+        <span class="btn primary">ابدأ دلوقتي ←</span>
+      </a>
+      <a class="join-card" href="${JOIN_LINKS.driver}">
+        <span class="join-icon">🛵</span>
+        <b>اشتغل مندوب معانا</b>
+        <ul><li>اشتغل في الوقت اللي يناسبك</li><li>اختار الأوردرات اللي تناسبك</li><li>تابع مكسبك أول بأول</li></ul>
+        <span class="btn primary">قدّم دلوقتي ←</span>
+      </a>
+    </div>
+  </section>`;

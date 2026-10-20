@@ -37,7 +37,7 @@ function start() {
   renderDashNav(user, backend, openAccount);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
-    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
+    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, mode: new URLSearchParams(location.search).has('join') ? 'register' : 'login', title: 'المندوبين: سجّل دخول أو اعمل حساب جديد عشان تقدّم' });
     return;
   }
   if (renderBlocked(root, { backend, user })) return;

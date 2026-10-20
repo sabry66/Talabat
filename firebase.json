@@ -26,6 +26,23 @@
           }
         ]
       }
+    ],
+    "redirects": [
+      {
+        "source": "/join/restaurant",
+        "destination": "/restaurant.html?join=1",
+        "type": 302
+      },
+      {
+        "source": "/join/driver",
+        "destination": "/delivery.html?join=1",
+        "type": 302
+      },
+      {
+        "source": "/join",
+        "destination": "/#/join",
+        "type": 302
+      }
     ]
   },
   "emulators": {

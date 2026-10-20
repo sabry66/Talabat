@@ -91,6 +91,10 @@
           ? link(labelOf(el), el.getAttribute('href'))
           : item(labelOf(el), el)));
       }
+      // في الموقع الرئيسي: روابط الانضمام للمطاعم والمندوبين
+      if (isHome) {
+        body.append(section('اشتغل معانا'), link('🏪 سجّل مطعمك', 'restaurant.html?join=1'), link('🛵 اشتغل مندوب', 'delivery.html?join=1'));
+      }
       const who = document.querySelector('.topbar .nav .muted');
       if (who) {
         const w = document.createElement('div');

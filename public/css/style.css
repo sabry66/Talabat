@@ -648,6 +648,28 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 }
 body.picker-open { overflow: hidden; }
 
+/* ---------- اشتغل معانا ---------- */
+.join-section { margin: 28px 0 8px; padding: 22px; border-radius: 20px; background: var(--brand-soft); }
+.join-section h2 { margin: 0 0 4px; color: var(--brand); }
+.join-section > p { margin: 0 0 16px; }
+.join-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+.join-card {
+  display: flex; flex-direction: column; gap: 6px; background: var(--card); border-radius: 16px; padding: 18px;
+  box-shadow: var(--shadow); color: var(--text); text-decoration: none; transition: transform .15s;
+}
+.join-card:hover { transform: translateY(-3px); }
+.join-card b { font-size: 1.15rem; color: var(--brand); }
+.join-card ul { margin: 0 0 6px; padding-inline-start: 18px; color: var(--muted); font-size: .9rem; line-height: 1.8; }
+.join-card .btn { align-self: flex-start; margin-top: auto; }
+.join-icon { font-size: 2.4rem; }
+.role-pick { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.role-pick legend { font-weight: 700; margin-bottom: 6px; padding: 0; }
+.role-opt { display: flex; flex-direction: row; align-items: center; gap: 10px; margin: 0; padding: 10px 12px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; }
+.role-opt:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.role-opt input { width: 18px !important; height: 18px; flex: 0 0 auto; padding: 0 !important; margin: 0; border: 0; accent-color: var(--brand); }
+.role-opt span { display: flex; flex-direction: column; }
+.role-opt small { color: var(--muted); font-weight: 400; }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 

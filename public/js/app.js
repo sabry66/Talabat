@@ -8,7 +8,7 @@ import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked, homeFor,
-  changePasswordForm, bindChangePassword,
+  changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS,
 } from './ui.js';
 import { renderSupport } from './support.js';
 import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
@@ -138,7 +138,8 @@ function renderHome() {
         </button>`).join('')}
     </section>
 
-    <div id="results"></div>`;
+    <div id="results"></div>
+    ${joinCards()}`;
 
   drawResults();
 
@@ -776,9 +777,11 @@ function renderLogin(mode, next) {
   if (state.user) { location.hash = `#/${next || ''}`; return; }
   app.innerHTML = '<div id="authBox"></div>';
   renderAuthForm(document.getElementById('authBox'), {
-    backend, isDemo, mode,
+    backend, isDemo, mode, askRole: next !== 'checkout',
     title: next === 'checkout' ? 'سجّل دخولك عشان تكمل الطلب' : '',
-    onDone: () => {
+    onDone: (role) => {
+      // صاحب مطعم أو مندوب: نوديه على طلب الانضمام على طول
+      if (JOIN_LINKS[role]) { location.href = JOIN_LINKS[role].replace('?join=1', ''); return; }
       toast('أهلًا بيك 👋');
       // ممكن يكون اتنقل لوحده بالفعل لما الدخول اتسجل
       if (['login', 'register'].includes(page)) location.hash = `#/${next || ''}`;
@@ -863,6 +866,7 @@ function router() {
     case '': renderHome(); break;
     case 'restaurant': renderRestaurant(id); break;
     case 'offers': renderOffers(); break;
+    case 'join': app.innerHTML = `<a href="#/" class="back">→ رجوع للرئيسية</a>${joinCards()}`; break;
     case 'cart': renderCart(); break;
     case 'checkout': renderCheckout(); break;
     case 'orders': renderOrders(); break;

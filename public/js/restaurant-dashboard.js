@@ -47,7 +47,7 @@ function start() {
   renderDashNav(user, backend, openAccount);
   if (!user) {
     root.innerHTML = `${demoBanner(isDemo)}<div id="authBox"></div>`;
-    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, title: 'أصحاب المطاعم: سجّل دخول أو اعمل حساب جديد عشان تسجّل مطعمك' });
+    renderAuthForm(document.getElementById('authBox'), { backend, isDemo, mode: new URLSearchParams(location.search).has('join') ? 'register' : 'login', title: 'أصحاب المطاعم: سجّل دخول أو اعمل حساب جديد عشان تسجّل مطعمك' });
     return;
   }
   if (renderBlocked(root, { backend, user })) return;
