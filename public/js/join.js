@@ -1,6 +1,6 @@
 // طلبات الانضمام: المندوب أو صاحب المطعم يقدّم طلب، والأدمن يوافق عليه من لوحة الأدمن
-import { CATEGORIES } from './data.js';
-import { esc, toast, errorMessage, loader } from './ui.js';
+import { CATEGORIES, LEGAL_VERSION } from './data.js';
+import { esc, toast, errorMessage, loader, agreeBox } from './ui.js';
 
 export const VEHICLES = { motorcycle: '🏍️ موتوسيكل', bicycle: '🚲 عجلة', car: '🚗 عربية', walk: '🚶 مشي' };
 
@@ -47,6 +47,7 @@ export function renderJoin(el, { backend, user, type }) {
         <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" inputmode="numeric" value="${esc(a.phone || user.phone)}" dir="ltr"></label>
         ${type === 'driver' ? driverFields(a) : restaurantFields(a)}
         <label>ملاحظات (اختياري)<input name="notes" value="${esc(a.notes)}"></label>
+        ${agreeBox(` (وخصوصًا <a href="terms.html#${type === 'driver' ? 't11' : 't10'}" target="_blank" rel="noopener">${type === 'driver' ? 'شروط المندوبين' : 'شروط المطاعم'}</a>)`)}
         <button class="btn primary block" type="submit">📨 ابعت الطلب</button>
         ${a.status === 'pending' ? '<button class="btn block" type="button" id="cancelEdit">رجوع</button>' : ''}
         <p class="muted small center">الإدارة هتراجع طلبك، وأول ما يتوافق عليه الصفحة دي هتتفتح لوحدها.</p>
@@ -59,7 +60,9 @@ export function renderJoin(el, { backend, user, type }) {
       const btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true;
       try {
-        await backend.submitApplication(user, { ...d, type });
+        const { agree, ...data } = d;
+        if (!agree) throw Object.assign(new Error('terms'), { code: 'terms-required' });
+        await backend.submitApplication(user, { ...data, type, termsVersion: LEGAL_VERSION });
         editing = false;
         toast('تم إرسال طلبك ✅');
       } catch (err) {

@@ -71,6 +71,9 @@ service cloud.firestore {
         && request.resource.data.role == 'customer'
         && request.resource.data.get('restaurantId', null) == null
         && request.resource.data.email == request.auth.token.email.lower()
+        // لازم يكون وافق على الشروط وسياسة الخصوصية
+        && request.resource.data.terms.version is string
+        && request.resource.data.terms.version.size() > 0
         && (!('username' in request.resource.data) || ownsUsername(uid, request.resource.data.username))
         && (request.resource.data.get('phone', '') == '' || ownsPhone(uid, request.resource.data.phone));
       allow update: if isAdmin()
@@ -83,7 +86,9 @@ service cloud.firestore {
             && request.resource.data.role in ['driver', 'restaurant'])
         || (signedIn() && request.auth.uid == uid
             && resource.data.get('deleted', false) == false
-            && changedOnly(['name', 'phone', 'address', 'location', 'username'])
+            && changedOnly(['name', 'phone', 'address', 'location', 'username', 'terms'])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['terms'])
+                || request.resource.data.terms.version is string)
             // اسم المستخدم بيتحدد مرة واحدة بس
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['username'])
                 || (!('username' in resource.data) && ownsUsername(uid, request.resource.data.username)))

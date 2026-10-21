@@ -1,5 +1,5 @@
 // أدوات مشتركة بين صفحات التطبيق ولوحة المطعم ولوحة الأدمن
-import { ORDER_STATUSES, PAYMENT_LABELS } from './data.js';
+import { ORDER_STATUSES, PAYMENT_LABELS, LEGAL_VERSION } from './data.js';
 import { thumb } from './upload.js';
 
 export const fmt = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ج.م`;
@@ -59,6 +59,7 @@ export function errorMessage(e) {
     'permission-denied': 'مش مسموحلك تعمل العملية دي',
     'order-taken': 'الأوردر ده مندوب تاني أخده',
     'driver-limit': 'وصلت لأقصى عدد أوردرات معاك في نفس الوقت. وصّل اللي معاك الأول وبعدين خد جديد',
+    'terms-required': 'لازم توافق على الشروط والأحكام وسياسة الخصوصية الأول',
     'coupon-exists': 'الكود ده موجود قبل كده، اختار كود تاني',
     'username-taken': 'اسم المستخدم ده محجوز، اختار اسم تاني',
     'username-invalid': 'اسم المستخدم لازم يكون من 3 لـ 20 حرف إنجليزي صغير أو أرقام أو _ و . بس',
@@ -138,6 +139,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
           <label>الإيميل<input name="email" type="email" required autocomplete="email" dir="ltr"></label>
           <label>كلمة السر<input name="password" type="password" required minlength="6" dir="ltr"
             autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>
+          ${mode === 'register' ? agreeBox() : ''}
           <p class="form-error" id="authError" hidden></p>
           <button class="btn primary block" type="submit">${mode === 'login' ? 'دخول' : 'إنشاء الحساب'}</button>
           ${mode === 'login' ? '<button class="link block-link" type="button" id="forgotBtn">نسيت كلمة السر؟</button>' : ''}
@@ -174,7 +176,10 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       errEl.hidden = true;
       try {
         if (mode === 'login') await backend.signIn(d.email, d.password);
-        else await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password });
+        else {
+          if (!d.agree) throw Object.assign(new Error('terms'), { code: 'terms-required' });
+          await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password, termsVersion: LEGAL_VERSION });
+        }
         if (onDone) onDone(mode === 'register' ? role : null);
       } catch (err) {
         errEl.textContent = errorMessage(err);
@@ -184,6 +189,53 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
     });
   };
   draw();
+}
+
+// الموافقة على الشروط وسياسة الخصوصية (بتفتح في تاب جديدة عشان اللي كتبه ميضيعش)
+export const LEGAL_LINKS = '<a href="terms.html" target="_blank" rel="noopener">الشروط والأحكام</a> و<a href="privacy.html" target="_blank" rel="noopener">سياسة الخصوصية</a>';
+const agreeBox = (extra = '') => `
+  <label class="check agree"><input type="checkbox" name="agree" required>
+    <span>قريت ووافقت على ${LEGAL_LINKS}${extra}، وعندي 18 سنة أو أكتر</span></label>`;
+export { agreeBox };
+
+// الحساب لسه موافقش على النسخة الحالية من الشروط (حساب قديم أو الشروط اتعدلت)
+export const needsTerms = (user) => Boolean(user) && !user.deleted && user.terms?.version !== LEGAL_VERSION;
+
+export function renderAcceptTerms(el, { backend, user }) {
+  const updated = Boolean(user.terms?.version);
+  el.innerHTML = `
+    <form class="auth-card panel" id="termsForm">
+      <h2>${updated ? '📄 حدّثنا الشروط والأحكام' : '📄 قبل ما تكمل'}</h2>
+      <p class="muted">${updated ? 'عدّلنا الشروط والأحكام وسياسة الخصوصية. من فضلك اقراهم ووافق عشان تكمل استخدام أريفو.'
+        : 'عشان تكمل استخدام أريفو، لازم تقرا الشروط والأحكام وسياسة الخصوصية وتوافق عليهم.'}</p>
+      <div class="legal-links">
+        <a class="btn" href="terms.html" target="_blank" rel="noopener">📄 الشروط والأحكام</a>
+        <a class="btn" href="privacy.html" target="_blank" rel="noopener">🔒 سياسة الخصوصية</a>
+      </div>
+      ${agreeBox()}
+      <p class="form-error" id="termsError" hidden></p>
+      <button class="btn primary block" type="submit">موافق، كمّل</button>
+      <button class="btn block" type="button" id="termsLogout">خروج</button>
+    </form>`;
+  el.querySelector('#termsLogout').addEventListener('click', () => backend.signOut());
+  el.querySelector('#termsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = el.querySelector('#termsError');
+    if (!e.target.agree.checked) {
+      errEl.textContent = errorMessage({ code: 'terms-required' });
+      errEl.hidden = false;
+      return;
+    }
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await backend.acceptTerms(user.uid, LEGAL_VERSION);
+    } catch (err) {
+      errEl.textContent = errorMessage(err);
+      errEl.hidden = false;
+      btn.disabled = false;
+    }
+  });
 }
 
 // الخانة اسمها handle ومن غير autocomplete عشان الموبايل ميفتكرهاش خانة تسجيل دخول
@@ -279,7 +331,8 @@ export function renderAccountPanel(el, { backend, user, onBack }) {
       <button class="btn primary block" type="submit">حفظ</button>
     </form>
     ${changePasswordForm()}
-    <div class="narrow"><button class="btn block" type="button" id="accountLogout">🚪 تسجيل الخروج</button></div>`;
+    <div class="narrow"><button class="btn block" type="button" id="accountLogout">🚪 تسجيل الخروج</button>
+      <p class="muted small center legal-foot"><a href="terms.html" target="_blank" rel="noopener">📄 الشروط والأحكام</a> • <a href="privacy.html" target="_blank" rel="noopener">🔒 سياسة الخصوصية</a></p></div>`;
   el.querySelector('#accountBack')?.addEventListener('click', onBack);
   el.querySelector('#accountLogout').addEventListener('click', () => backend.signOut());
   el.querySelector('#profileForm').addEventListener('submit', async (e) => {

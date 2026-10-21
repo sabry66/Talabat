@@ -7,7 +7,7 @@ import { activeZones } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
-  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, usernameField, renderBlocked, homeFor,
+  loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, renderAcceptTerms, needsTerms, usernameField, renderBlocked, homeFor,
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS,
 } from './ui.js';
 import { renderSupport } from './support.js';
@@ -933,6 +933,13 @@ function router() {
     updateHeader();
     return;
   }
+  // لازم يوافق على الشروط وسياسة الخصوصية (حساب قديم أو الشروط اتعدلت)
+  if (needsTerms(state.user) && !state.user.banned) {
+    page = 'terms';
+    renderAcceptTerms(app, { backend, user: state.user });
+    updateHeader();
+    return;
+  }
   switch (name) {
     case '': renderHome(); break;
     case 'restaurant': renderRestaurant(id); break;
@@ -991,7 +998,7 @@ backend.onAuth((user) => {
   // نعيد الرسم لو حالة الدخول اتغيرت أو الصفحة بتعرض بيانات الحساب
   // صفحة الحساب مش بنعيد رسمها هنا عشان منمسحش اللي بيكتبه (زي كلمة السر)
   if (prev === undefined || !prev !== !user || prev?.uid !== user?.uid
-    || Boolean(prev?.username) !== Boolean(user?.username)
+    || Boolean(prev?.username) !== Boolean(user?.username) || prev?.terms?.version !== user?.terms?.version
     || Boolean(prev?.banned) !== Boolean(user?.banned) || Boolean(prev?.deleted) !== Boolean(user?.deleted)) router();
 });
 

@@ -190,6 +190,10 @@ export const NEW_RESTAURANT = {
 
 // إعدادات المنصة (الأدمن بيغيرها من لوحة الأدمن ← المناطق والنسب)
 // كل نسبة: { type: 'percent' | 'fixed', value }
+// إصدار الشروط والأحكام وسياسة الخصوصية (terms.html و privacy.html).
+// لو اتعدلوا تعديل مهم: غيّر الرقم ده، وكل المستخدمين هيتطلب منهم يوافقوا تاني
+export const LEGAL_VERSION = '2026-10-21';
+
 export const DEFAULT_SETTINGS = {
   zones: {}, // { zoneId: { name, fee, active } }
   rates: {

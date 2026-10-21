@@ -8,7 +8,7 @@ import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
-  renderAuthForm, renderDashNav, renderCompleteProfile, renderBlocked, renderAccountPanel, homeFor, orderCard, restaurantLogo,
+  renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, orderCard, restaurantLogo,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -54,6 +54,11 @@ function start() {
   if (!user.username) {
     root.innerHTML = '<div id="completeBox"></div>';
     renderCompleteProfile(document.getElementById('completeBox'), { backend, user });
+    return;
+  }
+  if (needsTerms(user)) {
+    root.innerHTML = '<div id="termsBox"></div>';
+    renderAcceptTerms(document.getElementById('termsBox'), { backend, user });
     return;
   }
   if (!user.restaurantId) {

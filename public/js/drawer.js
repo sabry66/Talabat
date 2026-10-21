@@ -95,6 +95,7 @@
       if (isHome) {
         body.append(section('اشتغل معانا'), link('🏪 سجّل مطعمك', 'restaurant.html?join=1'), link('🛵 اشتغل مندوب', 'delivery.html?join=1'));
       }
+      body.append(section('عن أريفو'), link('📄 الشروط والأحكام', 'terms.html'), link('🔒 سياسة الخصوصية', 'privacy.html'));
       const who = document.querySelector('.topbar .nav .muted');
       if (who) {
         const w = document.createElement('div');

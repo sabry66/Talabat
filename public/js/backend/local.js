@@ -1,7 +1,7 @@
 // الوضع التجريبي: قاعدة بيانات وهمية في localStorage بنفس واجهة باك إند Firebase.
 // البيانات بتتزامن بين التابات، والدخول لكل تاب لوحده: تقدر تفتح التطبيق كعميل في تاب
 // ولوحة المطعم كصاحب مطعم في تاب تاني.
-import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES, SAMPLE_COUPONS } from '../data.js';
+import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES, SAMPLE_COUPONS, LEGAL_VERSION } from '../data.js';
 import { withDefaults } from '../finance.js';
 import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 
@@ -19,7 +19,7 @@ const authError = (code) => Object.assign(new Error(code), { code });
 
 function seed() {
   const user = (uid, email, name, role, phone, restaurantId = null) =>
-    ({ uid, email, password: '123456', name, phone, username: uid.replace('u-', 'demo_'), address: '', role, restaurantId });
+    ({ uid, email, password: '123456', name, phone, username: uid.replace('u-', 'demo_'), address: '', role, restaurantId, terms: { version: LEGAL_VERSION, at: 0 } });
   const users = {
     'u-admin': user('u-admin', 'admin@demo.com', 'مدير التطبيق', 'admin', '01000000001'),
     'u-owner': user('u-owner', 'owner@demo.com', 'صاحب بيت البرجر', 'restaurant', '01000000002', 'burger-house'),
@@ -52,6 +52,9 @@ function db() {
     // قاعدة تجريبية قديمة من قبل الكوبونات
     cache.coupons ||= clone(SAMPLE_COUPONS);
     cache.couponUses ||= {};
+    // الحسابات التجريبية الجاهزة موافقة على الشروط عشان التجربة تبقى أسرع
+    Object.values(cache.users).filter((u) => ['u-admin', 'u-owner', 'u-customer', 'u-driver', 'u-staff'].includes(u.uid) && !u.terms)
+      .forEach((u) => { u.terms = { version: LEGAL_VERSION, at: 0 }; });
   }
   return cache;
 }
@@ -104,7 +107,8 @@ export function createBackend() {
       return watch(() => publicUser(db().users[session.get()]), cb);
     },
 
-    async signUp({ name, email, password, phone, username }) {
+    async signUp({ name, email, password, phone, username, termsVersion }) {
+      if (!termsVersion) throw idError('terms-required');
       email = email.trim().toLowerCase();
       username = normalizeUsername(username);
       phone = normalizePhone(phone);
@@ -117,7 +121,7 @@ export function createBackend() {
       if (all.some((u) => u.username === username)) throw idError('username-taken');
       if (all.some((u) => u.phone === phone)) throw idError('phone-taken');
       const uid = 'u-' + newId();
-      db().users[uid] = { uid, email, password, name, phone, username, address: '', role: 'customer', restaurantId: null };
+      db().users[uid] = { uid, email, password, name, phone, username, address: '', role: 'customer', restaurantId: null, terms: { version: termsVersion, at: Date.now() } };
       session.set(uid);
       commit();
     },
@@ -237,6 +241,11 @@ export function createBackend() {
     // ---------- الكوبونات ----------
     async getCoupon(code) {
       return clone(db().coupons[code] || null);
+    },
+
+    async acceptTerms(uid, version) {
+      db().users[uid].terms = { version, at: Date.now() };
+      commit();
     },
 
     async hasUsedCoupon(uid, code) {
