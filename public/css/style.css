@@ -685,6 +685,18 @@ body.picker-open { overflow: hidden; }
 #perOrderForm label { margin: 0; }
 #perOrderForm select { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 
+/* ---------- عدد أوردرات المندوب ---------- */
+.load-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  background: var(--card); border-radius: 14px; padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow);
+}
+.load-bar.full { background: #fff6e0; }
+.load-bar small { flex: 1 1 100%; color: #8a6100; }
+.load-dots { display: flex; gap: 6px; }
+.load-dots i { width: 14px; height: 14px; border-radius: 50%; background: var(--line); }
+.load-dots i.on { background: var(--accent); }
+.coupon-group { margin: 14px 0 4px; font-size: .95rem; color: var(--muted); }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 

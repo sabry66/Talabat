@@ -10,7 +10,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
-  updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, serverTimestamp,
+  updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove, serverTimestamp,
   runTransaction, increment,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
@@ -47,6 +47,18 @@ export function createBackend(config, { useEmulators }) {
   const coupons = collection(db, 'coupons');
   // couponUses/{uid}/codes/{code}: العميل استخدم الكوبون ده (للكوبونات اللي مرة واحدة لكل عميل)
   const couponUse = (uid, code) => doc(db, 'couponUses', uid, 'codes', code);
+  // driverLoads/{uid}: الأوردرات اللي مع المندوب دلوقتي، والقواعد بتمنعه يزود عن الحد اللي الأدمن حدده
+  const driverLoads = collection(db, 'driverLoads');
+  const FINAL = ['delivered', 'cancelled', 'rejected'];
+
+  // بيشيل الأوردر من لستة المندوب في نفس العملية (لو موجود فيها)
+  async function unload(batch, uid, orderId) {
+    if (!uid) return;
+    const load = await getDoc(doc(driverLoads, uid));
+    if (load.exists() && (load.data().orders || []).includes(orderId)) {
+      batch.update(load.ref, { orders: arrayRemove(orderId) });
+    }
+  }
   const message = (by, name, text) => ({ by, name, text, at: Date.now() });
 
   // بيرجّع الأوردرات اللي المندوب ماستلمهاش لسه لباقي المندوبين
@@ -234,6 +246,7 @@ export function createBackend(config, { useEmulators }) {
     saveSettings: (settings) => setDoc(settingsDoc, {
       zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
       couponsPerOrder: Number(settings.couponsPerOrder) || 0,
+        maxDriverOrders: Number(settings.maxDriverOrders) || 0,
     }),
 
     // ---------- الكوبونات ----------
@@ -401,31 +414,63 @@ export function createBackend(config, { useEmulators }) {
       return onSnapshot(q, (s) => cb(s.docs.map(toOrder).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
     },
 
-    // transaction عشان مندوبين اتنين ميخدوش نفس الأوردر
-    claimOrder(id, driver) {
+    // transaction عشان مندوبين اتنين ميخدوش نفس الأوردر، والمندوب ميزودش عن max أوردر معاه
+    claimOrder(id, driver, max = 0) {
       return runTransaction(db, async (tx) => {
         const ref = doc(orders, id);
+        const loadRef = doc(driverLoads, driver.uid);
         const o = (await tx.get(ref)).data();
+        const load = (await tx.get(loadRef)).data()?.orders || [];
         if (!o || o.driverUid || !CLAIMABLE.includes(o.status)) {
           throw Object.assign(new Error('taken'), { code: 'order-taken' });
         }
+        if (max > 0 && load.length >= max) throw Object.assign(new Error('limit'), { code: 'driver-limit' });
         tx.update(ref, {
           driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone,
           driverUsername: driver.username || null, claimedAt: Date.now(),
         });
+        tx.set(loadRef, { orders: [...load, id] });
       });
     },
 
-    releaseOrder: (id) => updateDoc(doc(orders, id), {
-      driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
-    }),
+    async releaseOrder(id, driverUid) {
+      const batch = writeBatch(db);
+      batch.update(doc(orders, id), {
+        driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
+      });
+      await unload(batch, driverUid, id);
+      return batch.commit();
+    },
 
-    setOrderStatus(id, status) {
-      return updateDoc(doc(orders, id), {
+    // driverUid: لما المندوب يسلّم الأوردر، بيتشال من لستته في نفس العملية
+    async setOrderStatus(id, status, { driverUid } = {}) {
+      const batch = writeBatch(db);
+      batch.update(doc(orders, id), {
         status,
         statusHistory: arrayUnion({ status, at: Date.now() }),
         updatedAt: serverTimestamp(),
       });
+      if (FINAL.includes(status)) await unload(batch, driverUid, id);
+      return batch.commit();
+    },
+
+    // بيصلّح لستة المندوب: يشيل الأوردرات اللي خلصت أو اتلغت أو راحت لمندوب تاني (مثلًا الأدمن غيّرها)،
+    // ويضيف أوردرات معاه مش متسجلة (من قبل الميزة دي). كل تغيير في عملية لوحده عشان القواعد بتتأكد منه.
+    async syncDriverLoad(uid, activeIds) {
+      const ref = doc(driverLoads, uid);
+      const snap = await getDoc(ref);
+      const load = snap.exists() ? snap.data().orders || [] : [];
+      for (const id of load.filter((x) => !activeIds.includes(x))) {
+        let stale = true;
+        try {
+          const o = await getDoc(doc(orders, id));
+          stale = !o.exists() || o.data().driverUid !== uid || FINAL.includes(o.data().status);
+        } catch { /* مش قادر يقراه = مبقاش بتاعه */ }
+        if (stale) await updateDoc(ref, { orders: arrayRemove(id) }).catch(() => {});
+      }
+      for (const id of activeIds.filter((x) => !load.includes(x))) {
+        await setDoc(ref, { orders: arrayUnion(id) }, { merge: true }).catch(() => {});
+      }
     },
   };
 }

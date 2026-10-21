@@ -58,6 +58,7 @@ export function errorMessage(e) {
     'auth/configuration-not-found': 'لازم تفعّل Authentication من Firebase Console',
     'permission-denied': 'مش مسموحلك تعمل العملية دي',
     'order-taken': 'الأوردر ده مندوب تاني أخده',
+    'driver-limit': 'وصلت لأقصى عدد أوردرات معاك في نفس الوقت. وصّل اللي معاك الأول وبعدين خد جديد',
     'coupon-exists': 'الكود ده موجود قبل كده، اختار كود تاني',
     'username-taken': 'اسم المستخدم ده محجوز، اختار اسم تاني',
     'username-invalid': 'اسم المستخدم لازم يكون من 3 لـ 20 حرف إنجليزي صغير أو أرقام أو _ و . بس',

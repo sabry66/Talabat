@@ -199,6 +199,7 @@ export const DEFAULT_SETTINGS = {
     driverPaysRestaurant: true, // المندوب بيدفع للمطعم كاش وقت الاستلام
   },
   couponsPerOrder: 1, // عدد كوبونات الخصم المسموح بيها في الطلب (0 = الكوبونات مقفولة)
+  maxDriverOrders: 3, // أقصى عدد أوردرات مع المندوب في نفس الوقت (0 = من غير حد)
 };
 
 export const SAMPLE_ZONES = {

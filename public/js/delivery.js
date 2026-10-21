@@ -18,8 +18,11 @@ let tab = 'available';
 let unsubs = [];
 let knownAvailable = null;
 let supportUnsub = null;
+let maxOrders = 0; // أقصى عدد أوردرات معاه في نفس الوقت (من إعدادات الأدمن)
+let syncTimer = null;
 
 function stop() {
+  clearTimeout(syncTimer);
   unsubs.forEach((u) => u());
   unsubs = [];
   if (supportUnsub) supportUnsub();
@@ -62,7 +65,14 @@ function start() {
   unsubs.push(backend.watchOrders({ driverUid: user.uid }, (list) => {
     mine = list;
     drawTabs();
-    if (tab === 'active' || tab === 'history') drawTab();
+    if (tab === 'active' || tab === 'history' || tab === 'available') drawTab();
+    // نظبط لستة الأوردرات اللي معاه (لو الأدمن لغى أو غيّر أوردر كان معاه)
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => backend.syncDriverLoad(user.uid, active().map((o) => o.id)).catch(console.error), 1500);
+  }));
+  unsubs.push(backend.watchSettings((s) => {
+    maxOrders = s.maxDriverOrders;
+    if (tab === 'available') drawTab();
   }));
 }
 
@@ -165,22 +175,30 @@ function tripCard(o, actions) {
 }
 
 function drawAvailable(body) {
+  const n = active().length;
+  const full = maxOrders > 0 && n >= maxOrders;
+  const loadBar = maxOrders > 0 ? `
+    <div class="load-bar ${full ? 'full' : ''}">
+      <span>🛵 معاك <b>${n}</b> من <b>${maxOrders}</b> أوردرات</span>
+      <span class="load-dots">${Array.from({ length: maxOrders }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span>
+      ${full ? '<small>وصلت للحد. وصّل الأوردرات اللي معاك الأول وبعدين تقدر تاخد جديد.</small>' : ''}
+    </div>` : '';
   if (!available.length) {
-    body.innerHTML = '<div class="empty-state"><div class="big">☕</div><h2>مفيش أوردرات متاحة دلوقتي</h2><p class="muted">أول ما مطعم يقبل أوردر هيظهر هنا بصوت تنبيه.</p></div>';
+    body.innerHTML = `${loadBar}<div class="empty-state"><div class="big">☕</div><h2>مفيش أوردرات متاحة دلوقتي</h2><p class="muted">أول ما مطعم يقبل أوردر هيظهر هنا بصوت تنبيه.</p></div>`;
     return;
   }
-  body.innerHTML = `<div class="trips">${available.map((o) => tripCard(o,
-    `<button class="btn primary" data-claim="${o.id}" type="button">✋ هاخد الأوردر ده</button>`)).join('')}</div>`;
+  body.innerHTML = `${loadBar}<div class="trips">${available.map((o) => tripCard(o,
+    `<button class="btn primary" data-claim="${o.id}" type="button" ${full ? 'disabled' : ''}>${full ? '🔒 وصّل اللي معاك الأول' : '✋ هاخد الأوردر ده'}</button>`)).join('')}</div>`;
   body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     try {
-      await backend.claimOrder(b.dataset.claim, user);
+      await backend.claimOrder(b.dataset.claim, user, maxOrders);
       toast('الأوردر بقى معاك ✅ روح استلمه من المطعم');
       tab = 'active';
       drawTabs();
       drawTab();
     } catch (err) {
-      toast(err.code === 'permission-denied' ? errorMessage({ code: 'order-taken' }) : errorMessage(err));
+      toast(errorMessage(err.code === 'permission-denied' ? { code: 'order-taken' } : err));
       b.disabled = false;
     }
   }));
@@ -209,7 +227,7 @@ function drawActive(body) {
     if (b.dataset.status === 'delivered' && !confirm('اتأكدت إن العميل استلم الأوردر؟')) return;
     b.disabled = true;
     try {
-      await backend.setOrderStatus(b.dataset.id, b.dataset.status);
+      await backend.setOrderStatus(b.dataset.id, b.dataset.status, { driverUid: user.uid });
       toast(b.dataset.status === 'delivered' ? 'تمام! اتسجل التوصيل 🎉' : 'في الطريق للعميل 🛵');
     } catch (err) {
       toast(errorMessage(err));
@@ -219,7 +237,7 @@ function drawActive(body) {
   body.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('هترجّع الأوردر لباقي المندوبين؟')) return;
     try {
-      await backend.releaseOrder(b.dataset.release);
+      await backend.releaseOrder(b.dataset.release, user.uid);
       toast('الأوردر رجع للمتاح');
     } catch (err) {
       toast(errorMessage(err));

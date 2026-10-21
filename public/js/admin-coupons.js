@@ -35,16 +35,19 @@ export function drawCoupons(body, { backend, getSettings, getOrders }) {
     const box = body.querySelector('#couponList');
     if (!box) return;
     if (!coupons) { box.innerHTML = '<div class="loader"></div>'; return; }
-    box.innerHTML = coupons.length ? coupons.map((c) => {
-      const problem = couponProblem(c, { subtotal: Infinity }); // الحد الأدنى شرط، مش مشكلة في الكوبون
+    // الحد الأدنى شرط على الطلب، مش مشكلة في الكوبون نفسه
+    const problemOf = (c) => couponProblem(c, { subtotal: Infinity });
+    const row = (c) => {
+      const problem = problemOf(c);
       const g = givenBy(c.code);
+      const left = Number(c.limit) > 0 ? Math.max(0, c.limit - (c.used || 0)) : null;
       return `
         <div class="coupon-row ${problem ? 'off' : ''}">
           <div class="grow">
             <div class="coupon-title"><b dir="ltr" class="coupon-code">${esc(c.code)}</b> ${esc(couponLabel(c))}
               <span class="status ${problem ? 'cancelled' : 'delivered'}">${c.active ? (problem ? `⏸ ${esc(problem.replace('الكود ده ', ''))}` : '🟢 شغال') : '⏸ موقوف'}</span></div>
             <div class="muted small">${esc(couponConditions(c)) || 'من غير شروط'}</div>
-            <div class="small">اتستخدم ${c.used || 0} مرة${Number(c.limit) > 0 ? ` من ${c.limit}` : ''} • إجمالي الخصم في الطلبات: ${fmt(g.total)}</div>
+            <div class="small">اتستخدم في ${c.used || 0} طلب${left !== null ? ` من ${c.limit} (فاضل ${left})` : ''} • إجمالي الخصم: ${fmt(g.total)}</div>
           </div>
           <div class="row-actions">
             <button type="button" class="btn small" data-edit="${esc(c.code)}">✏️ تعديل</button>
@@ -52,7 +55,19 @@ export function drawCoupons(body, { backend, getSettings, getOrders }) {
             <button type="button" class="btn small danger-outline" data-del="${esc(c.code)}">🗑️ حذف</button>
           </div>
         </div>`;
-    }).join('') : '<p class="muted">مفيش كوبونات لسه. اعمل أول كوبون من الفورم اللي فوق.</p>';
+    };
+    // شغالة / خلصت أو انتهت (بتقف لوحدها) / موقوفة من الأدمن
+    const working = coupons.filter((c) => c.active && !problemOf(c));
+    const finished = coupons.filter((c) => c.active && problemOf(c));
+    const paused = coupons.filter((c) => !c.active);
+    const group = (title, list, empty) => `
+      <h4 class="coupon-group">${title} (${list.length})</h4>
+      ${list.length ? list.map(row).join('') : `<p class="muted small">${empty}</p>`}`;
+    box.innerHTML = coupons.length ? `
+      ${group('🟢 شغالة', working, 'مفيش كوبونات شغالة دلوقتي.')}
+      ${group('⛔ خلصت أو انتهت', finished, 'مفيش. الكوبون اللي يوصل لعدد الطلبات المسموح أو يعدّي آخر يوم بيقف لوحده وينزل هنا، ولو عايز ترجّعه عدّل العدد أو التاريخ.')}
+      ${paused.length ? group('⏸ موقوفة', paused, '') : ''}`
+      : '<p class="muted">مفيش كوبونات لسه. اعمل أول كوبون من الفورم اللي فوق.</p>';
 
     box.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => {
       const c = coupons.find((x) => x.code === b.dataset.edit);
@@ -109,7 +124,7 @@ export function drawCoupons(body, { backend, getSettings, getOrders }) {
           <label>الحد الأدنى للطلب (ج.م) — 0 يعني أي طلب
             <input name="minOrder" type="number" min="0" step="any" value="${form.minOrder || 0}" inputmode="decimal">
           </label>
-          <label>عدد مرات الاستخدام الكلي — 0 يعني مفتوح
+          <label>عدد الطلبات المسموح بيها بالكوبون (مثلًا 100) — 0 يعني من غير حد
             <input name="limit" type="number" min="0" step="1" value="${form.limit || 0}" inputmode="numeric">
           </label>
           <label>آخر يوم للكوبون (اختياري)
@@ -117,6 +132,7 @@ export function drawCoupons(body, { backend, getSettings, getOrders }) {
           </label>
         </div>
         <label class="check"><input type="checkbox" name="onePerCustomer" ${form.onePerCustomer ? 'checked' : ''}> مرة واحدة بس لكل عميل</label>
+        <p class="muted small">💡 لو عايز الكوبون لـ 100 شخص مختلف: حط العدد 100 وعلّم "مرة واحدة بس لكل عميل". أول ما يتعمل بيه 100 طلب بيقف لوحده.</p>
         <label class="check"><input type="checkbox" name="active" ${form.active ? 'checked' : ''}> الكوبون شغال</label>
         <p class="example" id="couponPreview"></p>
         <div class="editor-actions">

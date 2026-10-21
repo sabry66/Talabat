@@ -39,7 +39,7 @@ export function couponLabel(c) {
 export const couponConditions = (c) => [
   Number(c.minOrder) > 0 ? `لطلب من ${fmt(c.minOrder)}` : '',
   c.expiresAt ? `لحد ${new Date(c.expiresAt).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' })}` : '',
-  Number(c.limit) > 0 ? `${c.used || 0} من ${c.limit} استخدام` : '',
+  Number(c.limit) > 0 ? `لأول ${c.limit} طلب` : '',
   c.onePerCustomer ? 'مرة واحدة لكل عميل' : '',
 ].filter(Boolean).join(' • ');
 

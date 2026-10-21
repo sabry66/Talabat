@@ -21,6 +21,7 @@ export function withDefaults(settings) {
     zones: s.zones || {},
     rates: { ...DEFAULT_SETTINGS.rates, ...(s.rates || {}) },
     supportPhone: s.supportPhone || '',
+    maxDriverOrders: Math.max(0, Math.floor(Number(s.maxDriverOrders ?? DEFAULT_SETTINGS.maxDriverOrders) || 0)),
     couponsPerOrder: Math.min(MAX_COUPONS_PER_ORDER, Math.max(0, Number(s.couponsPerOrder ?? DEFAULT_SETTINGS.couponsPerOrder) || 0)),
   };
 }

@@ -38,7 +38,7 @@ const TABS = [
   ['support', '🎧 الشكاوي'],
   ['finance', '💰 الحسابات'],
   ['restaurants', '🏪 المطاعم'],
-  ['zones', '📍 المناطق والنسب'],
+  ['zones', '📍 المناطق والإعدادات'],
   ['coupons', '🎟️ الكوبونات'],
   ['drivers', '🛵 المندوبين'],
   ['users', '👥 المستخدمين'],
@@ -651,13 +651,21 @@ function drawZones(body) {
         </section>
 
         <section class="panel">
+          <h3>🛵 المندوبين</h3>
+          <label>أقصى عدد أوردرات مع المندوب في نفس الوقت
+            <input id="maxDriverOrders" type="number" min="0" max="20" step="1" value="${draft.maxDriverOrders}" required inputmode="numeric">
+          </label>
+          <p class="muted small">مثلًا 3: المندوب ياخد لحد 3 أوردرات من المتاحة، ولما يوصّلهم (أو يرجّع واحد) يقدر ياخد غيرهم. 0 يعني من غير حد. بيتطبق على كل المندوبين.</p>
+        </section>
+
+        <section class="panel">
           <h3>🎧 خدمة العملاء</h3>
           <label>رقم واتساب خدمة العملاء (اختياري، بيظهر في صفحة الدعم)
             <input id="supportPhone" type="tel" pattern="01[0-9]{9}" value="${esc(draft.supportPhone)}" placeholder="01xxxxxxxxx" inputmode="numeric" dir="ltr">
           </label>
         </section>
         <div class="editor-actions">
-          <button class="btn primary" type="submit">💾 حفظ المناطق والنسب</button>
+          <button class="btn primary" type="submit">💾 حفظ الإعدادات</button>
         </div>
       </form>`;
 
@@ -673,6 +681,7 @@ function drawZones(body) {
       });
       draft.rates.driverPaysRestaurant = body.querySelector('#driverPays').checked;
       draft.supportPhone = body.querySelector('#supportPhone').value.trim();
+      draft.maxDriverOrders = Math.max(0, Math.floor(Number(body.querySelector('#maxDriverOrders').value) || 0));
     };
     const redraw = (fn) => () => { sync(); fn(); draw(); };
 
@@ -698,7 +707,7 @@ function drawZones(body) {
       if (pct) return toast('النسبة مينفعش تزيد عن 100%');
       try {
         await backend.saveSettings(draft);
-        toast('تم حفظ المناطق والنسب ✅');
+        toast('تم حفظ الإعدادات ✅');
       } catch (err) {
         toast(errorMessage(err));
       }
@@ -914,7 +923,8 @@ function drawOrders(body) {
 
   body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { orderFilter = b.dataset.filter; drawTab(); }));
   body.querySelectorAll('[data-order]').forEach((s) => s.addEventListener('change', () => {
-    backend.setOrderStatus(s.dataset.order, s.value)
+    const o = orders.find((x) => x.id === s.dataset.order);
+    backend.setOrderStatus(s.dataset.order, s.value, { driverUid: o?.driverUid })
       .then(() => toast('تم تحديث الحالة'))
       .catch((e) => toast(errorMessage(e)));
   }));

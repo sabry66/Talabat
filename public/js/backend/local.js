@@ -229,6 +229,7 @@ export function createBackend() {
       db().settings = clone({
         zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
         couponsPerOrder: Number(settings.couponsPerOrder) || 0,
+        maxDriverOrders: Number(settings.maxDriverOrders) || 0,
       });
       commit();
     },
@@ -413,14 +414,20 @@ export function createBackend() {
         .filter((o) => !o.driverUid && ['preparing', 'ready'].includes(o.status))), cb);
     },
 
-    async claimOrder(id, driver) {
+    // max: أقصى عدد أوردرات مع المندوب في نفس الوقت (0 = من غير حد)
+    async claimOrder(id, driver, max = 0) {
       const o = db().orders[id];
       if (o.driverUid || !['preparing', 'ready'].includes(o.status)) throw authError('permission-denied');
+      const load = Object.values(db().orders).filter((x) => x.driverUid === driver.uid && ['preparing', 'ready', 'on_way'].includes(x.status)).length;
+      if (max > 0 && load >= max) throw authError('driver-limit');
       Object.assign(o, {
         driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, driverUsername: driver.username || null, claimedAt: Date.now(),
       });
       commit();
     },
+
+    // في Firebase بنظبط لستة أوردرات المندوب، هنا مش محتاجين
+    async syncDriverLoad() {},
 
     async releaseOrder(id) {
       Object.assign(db().orders[id], { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null });

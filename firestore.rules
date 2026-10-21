@@ -4,7 +4,7 @@ rules_version = '2';
 // - أي حد يشوف المطاعم والمنيو.
 // - العميل يشوف طلباته بس، ويقدر يلغي الطلب قبل ما المطعم يقبله.
 // - صاحب المطعم يشوف طلبات مطعمه بس، ويقبلها ويجهزها ويعدل المنيو.
-// - المندوب يشوف الأوردرات اللي مستنية مندوب، وياخدها ويوصلها.
+// - المندوب يشوف الأوردرات اللي مستنية مندوب، وياخدها ويوصلها (لحد العدد اللي الأدمن حدده في نفس الوقت).
 // - الأدمن يقدر يعمل كل حاجة، وهو بس اللي يغير المناطق والنسب.
 // - الأدمن بس اللي يعمل كوبونات الخصم، والعميل بيستخدمها في حدود شروطها.
 service cloud.firestore {
@@ -212,6 +212,40 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // الأوردرات اللي مع المندوب دلوقتي. كل عملية بتضيف أوردر واحد أخده (في حدود العدد اللي الأدمن حدده)
+    // أو بتشيل أوردر واحد خلص أو اتلغى أو مبقاش معاه.
+    match /driverLoads/{uid} {
+      function before() {
+        return resource == null ? [] : resource.data.get('orders', []);
+      }
+      function added() {
+        return request.resource.data.orders.removeAll(before());
+      }
+      function removed() {
+        return before().removeAll(request.resource.data.orders);
+      }
+      function orderAfter(id) {
+        return getAfter(/databases/$(database)/documents/orders/$(id)).data;
+      }
+      function maxOrders() {
+        return get(/databases/$(database)/documents/settings/app).data.get('maxDriverOrders', 3);
+      }
+      allow read: if signedIn() && (request.auth.uid == uid || isTeam());
+      allow delete: if isAdmin();
+      allow create, update: if isAdmin()
+        || (isDriver()
+            && request.auth.uid == uid
+            && request.resource.data.keys().hasOnly(['orders'])
+            && request.resource.data.orders is list
+            && added().size() + removed().size() == 1
+            && (added().size() == 0
+                || ((maxOrders() == 0 || request.resource.data.orders.size() <= maxOrders())
+                    && orderAfter(added()[0]).driverUid == uid))
+            && (removed().size() == 0
+                || orderAfter(removed()[0]).driverUid != uid
+                || orderAfter(removed()[0]).status in ['delivered', 'cancelled', 'rejected']));
+    }
+
     match /orders/{orderId} {
       function restaurant() {
         return get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data;
@@ -282,12 +316,13 @@ service cloud.firestore {
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
             && ((resource.data.status == 'placed' && request.resource.data.status in ['preparing', 'rejected'])
                 || (resource.data.status == 'preparing' && request.resource.data.status == 'ready')))
-        // المندوب: ياخد أوردر محدش أخده
+        // المندوب: ياخد أوردر محدش أخده (ولازم يتسجل في لستة أوردراته اللي ليها حد أقصى)
         || (isDriver()
             && resource.data.driverUid == null
             && resource.data.status in ['preparing', 'ready']
             && request.resource.data.driverUid == request.auth.uid
-            && changedOnly(driverFields()))
+            && changedOnly(driverFields())
+            && orderId in getAfter(/databases/$(database)/documents/driverLoads/$(request.auth.uid)).data.get('orders', []))
         // المندوب: يسيب الأوردر قبل ما يستلمه
         || (isDriver()
             && resource.data.driverUid == request.auth.uid
