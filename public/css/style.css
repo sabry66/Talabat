@@ -670,6 +670,21 @@ body.picker-open { overflow: hidden; }
 .role-opt span { display: flex; flex-direction: column; }
 .role-opt small { color: var(--muted); font-weight: 400; }
 
+/* ---------- الكوبونات ---------- */
+.promo-applied { margin-bottom: 8px; align-items: center; gap: 8px; }
+.promo-applied > span { display: flex; flex-direction: column; }
+.promo-applied small { font-weight: 400; }
+.promo-applied.off { background: #fff6e0; color: #8a6100; }
+.coupon-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.coupon-row:last-child { border-bottom: 0; }
+.coupon-row.off { opacity: .7; }
+.coupon-row > .grow { flex: 1 1 260px; }
+.coupon-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 2px; }
+.coupon-code { background: var(--brand-soft); color: var(--brand); padding: 2px 10px; border-radius: 8px; letter-spacing: 1px; }
+#perOrderForm { align-items: end; flex-wrap: wrap; }
+#perOrderForm label { margin: 0; }
+#perOrderForm select { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 

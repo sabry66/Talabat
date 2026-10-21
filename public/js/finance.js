@@ -1,7 +1,8 @@
 // حسابات الفلوس: إجمالي الطلب، وتقسيمه بين المطعم والمندوب والمنصة.
 // كل طلب بيتحفظ معاه النسب اللي كانت شغالة وقت ما اتعمل (order.rates)،
 // فلو الأدمن غيّر النسب بعدين، حسابات الطلبات القديمة متتغيرش.
-import { DEFAULT_SETTINGS, PROMO_CODES } from './data.js';
+import { DEFAULT_SETTINGS } from './data.js';
+import { couponDiscount, MAX_COUPONS_PER_ORDER } from './coupons.js';
 
 export const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -20,6 +21,7 @@ export function withDefaults(settings) {
     zones: s.zones || {},
     rates: { ...DEFAULT_SETTINGS.rates, ...(s.rates || {}) },
     supportPhone: s.supportPhone || '',
+    couponsPerOrder: Math.min(MAX_COUPONS_PER_ORDER, Math.max(0, Number(s.couponsPerOrder ?? DEFAULT_SETTINGS.couponsPerOrder) || 0)),
   };
 }
 
@@ -28,17 +30,14 @@ export const activeZones = (settings) => Object.entries(settings.zones)
   .map(([id, z]) => ({ id, ...z }))
   .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
-// إجمالي طلب العميل
-export function orderTotals(subtotal, { zone, rates, promo }) {
+// إجمالي طلب العميل (coupons = الكوبونات المطبّقة)
+export function orderTotals(subtotal, { zone, rates, coupons = [] }) {
   const delivery = zone ? Number(zone.fee) || 0 : 0;
   const service = applyRate(rates.serviceFee, subtotal);
-  let discount = 0;
-  const p = promo && PROMO_CODES[promo];
-  if (p) {
-    if (p.type === 'percent') discount = round(subtotal * p.value / 100);
-    else if (p.type === 'fixed') discount = Math.min(p.value, subtotal);
-    else if (p.type === 'delivery') discount = delivery;
-  }
+  const discount = round(Math.min(
+    coupons.reduce((s, c) => s + couponDiscount(c, subtotal, delivery), 0),
+    subtotal + delivery,
+  ));
   return { subtotal: round(subtotal), delivery, service, discount, total: round(subtotal + delivery + service - discount) };
 }
 

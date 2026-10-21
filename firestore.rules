@@ -6,6 +6,7 @@ rules_version = '2';
 // - صاحب المطعم يشوف طلبات مطعمه بس، ويقبلها ويجهزها ويعدل المنيو.
 // - المندوب يشوف الأوردرات اللي مستنية مندوب، وياخدها ويوصلها.
 // - الأدمن يقدر يعمل كل حاجة، وهو بس اللي يغير المناطق والنسب.
+// - الأدمن بس اللي يعمل كوبونات الخصم، والعميل بيستخدمها في حدود شروطها.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -179,6 +180,38 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // كوبونات الخصم: اسم المستند هو الكود. أي حد يقدر يتأكد من كود يعرفه (get)،
+    // بس محدش يقدر يجيب لستة الأكواد غير الأدمن.
+    match /coupons/{code} {
+      function newOrder() {
+        return getAfter(/databases/$(database)/documents/orders/$(request.resource.data.lastOrder)).data;
+      }
+      allow get: if true;
+      allow list, create, delete: if isAdmin();
+      // العميل: بيزوّد عداد الاستخدام 1 مع طلب جديد بيعمله دلوقتي وفيه الكود ده
+      allow update: if isAdmin()
+        || (isActive()
+            && changedOnly(['used', 'lastOrder'])
+            && request.resource.data.used == resource.data.get('used', 0) + 1
+            && newOrder().customerUid == request.auth.uid
+            && newOrder().createdAt == request.time
+            && code in newOrder().get('promos', []));
+    }
+
+    // العميل استخدم كوبون "مرة واحدة لكل عميل" (بيتعمل مع الطلب، ومبيتعدلش)
+    match /couponUses/{uid}/codes/{code} {
+      function newOrder() {
+        return getAfter(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data;
+      }
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isActive()
+        && request.auth.uid == uid
+        && newOrder().customerUid == uid
+        && newOrder().createdAt == request.time
+        && code in newOrder().get('promos', []);
+      allow delete: if isAdmin();
+    }
+
     match /orders/{orderId} {
       function restaurant() {
         return get(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId)).data;
@@ -186,6 +219,30 @@ service cloud.firestore {
 
       function settings() {
         return get(/databases/$(database)/documents/settings/app).data;
+      }
+
+      // كوبون واحد: شغال ومخلصش وشروطه متحققة، وعداده زاد 1 في نفس العملية (وسجل الاستخدام لو مرة لكل عميل)
+      function couponOk(code) {
+        let path = /databases/$(database)/documents/coupons/$(code);
+        let c = get(path).data;
+        let after = getAfter(path).data;
+        return c.get('active', false) == true
+          && (c.get('expiresAt', null) == null || request.time.toMillis() <= c.expiresAt)
+          && request.resource.data.totals.subtotal >= c.get('minOrder', 0)
+          && after.get('used', 0) == c.get('used', 0) + 1
+          && (c.get('limit', 0) == 0 || after.get('used', 0) <= c.limit)
+          && (c.get('onePerCustomer', false) != true
+              || existsAfter(/databases/$(database)/documents/couponUses/$(request.auth.uid)/codes/$(code)));
+      }
+
+      // في حدود العدد اللي الأدمن سامح بيه (وأقصى حاجة 2)، ومن غير تكرار نفس الكود
+      function couponsOk(codes) {
+        return codes is list
+          && codes.size() <= settings().get('couponsPerOrder', 1)
+          && codes.size() <= 2
+          && codes.toSet().size() == codes.size()
+          && (codes.size() < 1 || couponOk(codes[0]))
+          && (codes.size() < 2 || couponOk(codes[1]));
       }
 
       function driverFields() {
@@ -207,17 +264,16 @@ service cloud.firestore {
         && request.resource.data.lines is list
         && request.resource.data.lines.size() > 0
         && request.resource.data.lines.size() <= 50
-        && exists(/databases/$(database)/documents/restaurants/$(request.resource.data.restaurantId))
         && restaurant().get('isOpen', true) == true
         && restaurant().get('blocked', false) == false
         && request.resource.data.ownerUid == restaurant().get('ownerUid', null)
         && request.resource.data.driverUid == null
         // رسوم التوصيل لازم تكون سعر المنطقة، والنسب هي نسب المنصة الحالية
-        && exists(/databases/$(database)/documents/settings/app)
         && request.resource.data.rates == settings().rates
         && request.resource.data.zoneId in settings().zones
         && settings().zones[request.resource.data.zoneId].get('active', true) == true
-        && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee;
+        && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee
+        && couponsOk(request.resource.data.get('promos', []));
 
       allow update: if isAdmin()
         // صاحب المطعم: يقبل أو يرفض، وبعدين "جاهز للتسليم"

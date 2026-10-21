@@ -155,10 +155,11 @@ export const SEED_RESTAURANTS = [
 ];
 
 // أكواد الخصم: نسبة مئوية أو مبلغ ثابت
-export const PROMO_CODES = {
-  ARRIVO20: { type: 'percent', value: 20, label: 'خصم 20%' },
-  WELCOME50: { type: 'fixed', value: 50, label: 'خصم 50 ج' },
-  FREEDEL: { type: 'delivery', value: 0, label: 'توصيل مجاني' }, // الخصم = رسوم التوصيل
+// كوبونات للوضع التجريبي بس. في الحقيقي الأدمن بيعملها من تبويب "الكوبونات"
+export const SAMPLE_COUPONS = {
+  ARRIVO20: { code: 'ARRIVO20', type: 'percent', value: 20, maxDiscount: 100, minOrder: 0, expiresAt: null, limit: 0, used: 0, onePerCustomer: false, active: true },
+  WELCOME50: { code: 'WELCOME50', type: 'fixed', value: 50, maxDiscount: 0, minOrder: 150, expiresAt: null, limit: 0, used: 0, onePerCustomer: true, active: true },
+  FREEDEL: { code: 'FREEDEL', type: 'delivery', value: 0, maxDiscount: 0, minOrder: 0, expiresAt: null, limit: 100, used: 0, onePerCustomer: false, active: true },
 };
 
 export const ORDER_STATUSES = {
@@ -197,6 +198,7 @@ export const DEFAULT_SETTINGS = {
     serviceFee: { type: 'percent', value: 0 }, // رسوم خدمة على العميل
     driverPaysRestaurant: true, // المندوب بيدفع للمطعم كاش وقت الاستلام
   },
+  couponsPerOrder: 1, // عدد كوبونات الخصم المسموح بيها في الطلب (0 = الكوبونات مقفولة)
 };
 
 export const SAMPLE_ZONES = {

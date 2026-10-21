@@ -1,7 +1,7 @@
 // الوضع التجريبي: قاعدة بيانات وهمية في localStorage بنفس واجهة باك إند Firebase.
 // البيانات بتتزامن بين التابات، والدخول لكل تاب لوحده: تقدر تفتح التطبيق كعميل في تاب
 // ولوحة المطعم كصاحب مطعم في تاب تاني.
-import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES } from '../data.js';
+import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES, SAMPLE_COUPONS } from '../data.js';
 import { withDefaults } from '../finance.js';
 import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 
@@ -36,7 +36,7 @@ function seed() {
     };
   }
   const settings = { ...clone(DEFAULT_SETTINGS), zones: clone(SAMPLE_ZONES) };
-  return { users, restaurants, orders: {}, settings, applications: {}, tickets: {} };
+  return { users, restaurants, orders: {}, settings, applications: {}, tickets: {}, coupons: clone(SAMPLE_COUPONS), couponUses: {} };
 }
 
 let cache = null;
@@ -49,6 +49,9 @@ function db() {
       cache = seed();
       persist();
     }
+    // قاعدة تجريبية قديمة من قبل الكوبونات
+    cache.coupons ||= clone(SAMPLE_COUPONS);
+    cache.couponUses ||= {};
   }
   return cache;
 }
@@ -223,7 +226,36 @@ export function createBackend() {
     },
 
     async saveSettings(settings) {
-      db().settings = clone({ zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '' });
+      db().settings = clone({
+        zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
+        couponsPerOrder: Number(settings.couponsPerOrder) || 0,
+      });
+      commit();
+    },
+
+    // ---------- الكوبونات ----------
+    async getCoupon(code) {
+      return clone(db().coupons[code] || null);
+    },
+
+    async hasUsedCoupon(uid, code) {
+      return Boolean(db().couponUses[`${uid}/${code}`]);
+    },
+
+    watchCoupons(cb) {
+      return watch(() => Object.values(db().coupons).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)), cb);
+    },
+
+    async saveCoupon(coupon, isNew) {
+      const { code, used, createdAt, lastOrder, ...data } = clone(coupon);
+      const old = db().coupons[code];
+      if (isNew && old) throw authError('coupon-exists');
+      db().coupons[code] = isNew ? { ...data, code, used: 0, createdAt: Date.now() } : { ...old, ...data };
+      commit();
+    },
+
+    async deleteCoupon(code) {
+      delete db().coupons[code];
       commit();
     },
 
@@ -346,8 +378,18 @@ export function createBackend() {
       commit();
     },
 
-    async createOrder(order) {
+    async createOrder(order, usedCoupons = []) {
       const id = newId();
+      for (const c of usedCoupons) {
+        const cur = db().coupons[c.code];
+        const key = `${order.customerUid}/${c.code}`;
+        if (!cur || !cur.active || (cur.limit && cur.used >= cur.limit) || (cur.expiresAt && Date.now() > cur.expiresAt)
+          || (cur.onePerCustomer && db().couponUses[key])) throw authError('permission-denied');
+      }
+      for (const c of usedCoupons) {
+        db().coupons[c.code].used = (db().coupons[c.code].used || 0) + 1;
+        if (c.onePerCustomer) db().couponUses[`${order.customerUid}/${c.code}`] = { orderId: id, at: Date.now() };
+      }
       db().orders[id] = { ...clone(order), id, createdAt: Date.now() };
       commit();
       return id;

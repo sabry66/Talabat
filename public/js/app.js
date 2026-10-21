@@ -1,6 +1,6 @@
 // تطبيق العميل: المطاعم، المنيو، السلة، الطلب، والتتبع (hash routing)
 import { backend, isDemo } from './backend/index.js';
-import { CATEGORIES, PROMO_CODES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
+import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
 import { Cart } from './cart.js';
 import { locationPicker } from './map.js';
 import { activeZones } from './finance.js';
@@ -11,6 +11,7 @@ import {
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS,
 } from './ui.js';
 import { renderSupport } from './support.js';
+import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
 import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
@@ -436,7 +437,9 @@ function renderCart() {
     return;
   }
   const t = cartTotals(r);
-  const promo = Cart.promo;
+  const perOrder = state.settings.couponsPerOrder;
+  // لو الأدمن قلّل عدد الكوبونات المسموح بيها، نشيل الزيادة
+  if (Cart.coupons.length > perOrder) Cart.setCoupons(Cart.coupons.slice(0, perOrder));
   const belowMin = t.subtotal < r.minOrder;
   const closed = r.isOpen === false || r.blocked;
   const blocked = belowMin || closed;
@@ -468,15 +471,8 @@ function renderCart() {
 
       <section class="panel">
         ${zoneSelect()}
-        <h3>كود الخصم</h3>
-        ${promo
-          ? `<div class="promo-applied">✅ ${promo} — ${PROMO_CODES[promo].label} <button class="link danger" id="removePromo" type="button">إزالة</button></div>`
-          : `<form class="promo-form" id="promoForm">
-               <input id="promoInput" placeholder="مثال: ARRIVO20" autocomplete="off" dir="ltr">
-               <button class="btn" type="submit">تطبيق</button>
-             </form>
-             <p class="muted small">جرّب: ARRIVO20 أو WELCOME50 أو FREEDEL</p>`}
-        ${summary(t, currentZone())}
+        ${perOrder ? couponBox(r, t) : ''}
+        ${summary(t, currentZone(), Cart.usableCoupons(r, state.settings).map((c) => c.code))}
         ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا، مش هتقدر تطلب دلوقتي.</p>' : ''}
         ${belowMin ? `<p class="warn">الحد الأدنى للطلب ${fmt(r.minOrder)} — ضيف ${fmt(r.minOrder - t.subtotal)} كمان</p>` : ''}
         <a href="#/checkout" class="btn primary block ${blocked ? 'disabled' : ''}" ${blocked ? 'aria-disabled="true"' : ''}>إتمام الطلب</a>
@@ -498,27 +494,93 @@ function renderCart() {
     }
   });
   const form = document.getElementById('promoForm');
-  if (form) form.addEventListener('submit', (e) => {
+  if (form) form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (Cart.applyPromo(document.getElementById('promoInput').value)) {
+    const btn = form.querySelector('button');
+    const code = normalizeCode(document.getElementById('promoInput').value);
+    if (!code) return;
+    if (Cart.coupons.some((c) => c.code === code)) return toast('الكود ده متطبّق بالفعل');
+    btn.disabled = true;
+    try {
+      Cart.addCoupon(await checkCoupon(code, Cart.subtotal(r)));
       toast('تم تطبيق الكود 🎉');
       renderCart();
-    } else toast('الكود غير صحيح');
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false;
+    }
   });
-  const rm = document.getElementById('removePromo');
-  if (rm) rm.addEventListener('click', () => { Cart.removePromo(); renderCart(); });
+  app.querySelectorAll('[data-remove-coupon]').forEach((b) => b.addEventListener('click', () => {
+    Cart.removeCoupon(b.dataset.removeCoupon);
+    renderCart();
+  }));
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); renderCart(); });
 }
 
+// خانة كوبونات الخصم في السلة
+function couponBox(r, t) {
+  const perOrder = state.settings.couponsPerOrder;
+  const subtotal = Cart.subtotal(r);
+  const delivery = t.delivery;
+  return `
+    <h3>كوبون الخصم</h3>
+    ${Cart.coupons.map((c) => {
+      const problem = couponProblem(c, { subtotal });
+      return `<div class="promo-applied ${problem ? 'off' : ''}">
+        <span>${problem ? '⚠️' : '✅'} <b dir="ltr">${esc(c.code)}</b> — ${esc(couponLabel(c))}
+          ${problem ? `<small>${esc(problem)}</small>` : `<small>وفّرت ${fmt(couponDiscount(c, subtotal, delivery))}</small>`}</span>
+        <button class="link danger" data-remove-coupon="${esc(c.code)}" type="button">إزالة</button>
+      </div>`;
+    }).join('')}
+    ${Cart.coupons.length < perOrder ? `
+      <form class="promo-form" id="promoForm">
+        <input id="promoInput" placeholder="اكتب كود الخصم" autocomplete="off" autocapitalize="characters" dir="ltr" aria-label="كود الخصم">
+        <button class="btn" type="submit">تطبيق</button>
+      </form>
+      ${perOrder > 1 ? `<p class="muted small">تقدر تستخدم لحد ${perOrder} كوبون في الطلب.</p>` : ''}` : ''}`;
+}
+
+// بيجيب الكوبون ويتأكد إنه ينفع، أو بيرمي رسالة الخطأ
+async function checkCoupon(code, subtotal) {
+  let c;
+  try {
+    c = await backend.getCoupon(code);
+  } catch {
+    throw new Error('مقدرناش نتأكد من الكود، جرّب تاني');
+  }
+  const problem = couponProblem(c, { subtotal });
+  if (problem) throw new Error(problem);
+  if (c.onePerCustomer && state.user && await backend.hasUsedCoupon(state.user.uid, code)) {
+    throw new Error('إنت استخدمت الكود ده قبل كده');
+  }
+  return c;
+}
+
+// قبل الطلب: نجيب الكوبونات تاني من السيرفر (يمكن الأدمن وقفها أو خلصت)
+async function refreshCoupons(rest) {
+  const subtotal = Cart.subtotal(rest);
+  const fresh = [];
+  const problems = [];
+  for (const c of Cart.coupons.slice(0, state.settings.couponsPerOrder)) {
+    try {
+      fresh.push(await checkCoupon(c.code, subtotal));
+    } catch (err) {
+      problems.push(`${c.code}: ${err.message}`);
+    }
+  }
+  Cart.setCoupons(fresh);
+  return problems;
+}
+
 // zone = null لما المنطقة لسه متختارتش في السلة أو الدفع، ومن غيرها لطلب اتعمل خلاص
-function summary(t, zone) {
+function summary(t, zone, codes = []) {
   const delivery = zone === null ? '<span class="muted">اختار منطقتك</span>' : t.delivery ? fmt(t.delivery) : 'مجاني';
   return `
     <div class="summary">
       <div><span>المجموع الفرعي</span><span>${fmt(t.subtotal)}</span></div>
       <div><span>رسوم التوصيل${zone?.name ? ` (${esc(zone.name)})` : ''}</span><span>${delivery}</span></div>
       ${t.service ? `<div><span>رسوم الخدمة</span><span>${fmt(t.service)}</span></div>` : ''}
-      ${t.discount ? `<div class="discount"><span>الخصم</span><span>− ${fmt(t.discount)}</span></div>` : ''}
+      ${t.discount ? `<div class="discount"><span>الخصم${codes.length ? ` (<span dir="ltr">${codes.map(esc).join(' + ')}</span>)` : ''}</span><span>− ${fmt(t.discount)}</span></div>` : ''}
       <div class="grand"><span>الإجمالي</span><span>${fmt(t.total)}</span></div>
     </div>`;
 }
@@ -567,7 +629,7 @@ function renderCheckout() {
       <section class="panel">
         <h3>ملخص الطلب — ${esc(r.name)}</h3>
         ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
-        <div id="checkoutSummary">${summary(t, currentZone())}</div>
+        <div id="checkoutSummary">${summary(t, currentZone(), Cart.usableCoupons(r, state.settings).map((c) => c.code))}</div>
         <button class="btn primary block" type="submit" id="placeBtn">تأكيد الطلب • ${fmt(t.total)}</button>
       </section>
     </form>`;
@@ -577,7 +639,7 @@ function renderCheckout() {
     const rest = cartRestaurant();
     if (!rest) return;
     const tt = cartTotals(rest);
-    document.getElementById('checkoutSummary').innerHTML = summary(tt, currentZone());
+    document.getElementById('checkoutSummary').innerHTML = summary(tt, currentZone(), Cart.usableCoupons(rest, state.settings).map((c) => c.code));
     document.getElementById('placeBtn').textContent = `تأكيد الطلب • ${fmt(tt.total)}`;
   };
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
@@ -598,6 +660,14 @@ function renderCheckout() {
     if (!rest || rest.isOpen === false || rest.blocked) return toast('المطعم مش متاح دلوقتي');
     const zone = currentZone();
     if (!zone) return toast('اختار منطقة التوصيل الأول');
+    btn.disabled = true;
+    const problems = await refreshCoupons(rest);
+    btn.disabled = false;
+    if (problems.length) {
+      refreshCheckout();
+      return toast(`اتشال كوبون: ${problems.join(' • ')}. راجع الإجمالي وأكّد تاني`);
+    }
+    const usedCoupons = Cart.usableCoupons(rest, state.settings);
     const totals = cartTotals(rest);
     const order = {
       customerUid: u.uid,
@@ -619,7 +689,8 @@ function renderCheckout() {
       driverPhone: null,
       lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty, ...(l.item.fullPrice > l.item.price ? { fullPrice: l.item.fullPrice } : {}) })),
       totals,
-      promo: Cart.promo,
+      promos: usedCoupons.map((c) => c.code),
+      coupons: usedCoupons.map((c) => ({ code: c.code, label: couponLabel(c), amount: couponDiscount(c, totals.subtotal, totals.delivery) })),
       address: d.address.trim(),
       location: location_,
       notes: d.notes.trim(),
@@ -630,7 +701,7 @@ function renderCheckout() {
     btn.disabled = true;
     btn.textContent = 'جاري إرسال الطلب...';
     try {
-      const id = await backend.createOrder(order);
+      const id = await backend.createOrder(order, usedCoupons);
       backend.updateProfile(u.uid, { name: order.customerName, phone: order.customerPhone, address: order.address, location: location_ })
         .catch(console.error);
       Cart.clear();
@@ -694,7 +765,7 @@ function drawOrder(o) {
       <section class="panel">
         <h3>تفاصيل الطلب</h3>
         ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
-        ${summary(o.totals)}
+        ${summary(o.totals, undefined, o.promos || (o.promo ? [o.promo] : []))}
       </section>
       <section class="panel">
         <h3>التوصيل</h3>

@@ -4,6 +4,7 @@ import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPL
 import { VEHICLES } from './join.js';
 import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
+import { drawCoupons } from './admin-coupons.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
@@ -29,6 +30,7 @@ let orderFilter = 'active';
 let period = 'today';
 let unsubs = [];
 let settingsCreated = false;
+let couponsUnsub = null; // متابعة الكوبونات بتشتغل بس وتبويب الكوبونات مفتوح
 
 const TABS = [
   ['overview', '📊 نظرة عامة'],
@@ -37,15 +39,18 @@ const TABS = [
   ['finance', '💰 الحسابات'],
   ['restaurants', '🏪 المطاعم'],
   ['zones', '📍 المناطق والنسب'],
+  ['coupons', '🎟️ الكوبونات'],
   ['drivers', '🛵 المندوبين'],
   ['users', '👥 المستخدمين'],
   ['orders', '📋 الطلبات'],
 ];
 
 // الصفحات اللي فيها فورم، مش بنعيد رسمها لما البيانات تتغير عشان منمسحش اللي الأدمن بيكتبه
-const isEditing = () => editing || tab === 'zones' || tab === 'account' || (tab === 'support' && openTicket);
+const isEditing = () => editing || tab === 'zones' || tab === 'coupons' || tab === 'account' || (tab === 'support' && openTicket);
 
 function stop() {
+  if (couponsUnsub) couponsUnsub();
+  couponsUnsub = null;
   unsubs.forEach((u) => u());
   unsubs = [];
   restaurants = null;
@@ -172,8 +177,11 @@ function openAccount() {
 function drawTab() {
   const body = document.getElementById('tabBody');
   if (!body) return;
+  if (couponsUnsub) couponsUnsub();
+  couponsUnsub = null;
   if (!orders || (!isStaff() && (!restaurants || !settings))) { body.innerHTML = loader(); return; }
   ({
+    coupons: (b) => { couponsUnsub = drawCoupons(b, { backend, getSettings: () => settings, getOrders: () => orders }); },
     account: (b) => renderAccountPanel(b, { backend, user, onBack: () => { tab = isStaff() ? 'support' : 'overview'; drawTabs(); drawTab(); } }),
     overview: drawOverview, requests: drawRequests, support: drawSupport, finance: drawFinance, restaurants: drawRestaurants,
     zones: drawZones, drivers: drawDrivers, users: drawUsers, orders: drawOrders,

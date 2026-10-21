@@ -1,15 +1,20 @@
 // السلة: محفوظة في المتصفح. الأسعار بتتحسب من المنيو الحالي للمطعم عشان لو السعر اتغير.
-import { PROMO_CODES } from './data.js';
 import { isAvailable } from './ui.js';
 import { orderTotals } from './finance.js';
 import { priceOf } from './offers.js';
+import { couponProblem } from './coupons.js';
 
 const KEY = 'talabaty_cart_v2';
 const ZONE_KEY = 'arrivo_zone'; // منطقة التوصيل اللي العميل اختارها آخر مرة
-const empty = () => ({ restaurantId: null, items: {}, promo: null });
+const empty = () => ({ restaurantId: null, items: {}, coupons: [] });
 
 function load() {
-  try { return { ...empty(), ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return empty(); }
+  try {
+    const c = { ...empty(), ...JSON.parse(localStorage.getItem(KEY)) };
+    delete c.promo; // الأكواد القديمة كانت ثابتة في الكود
+    if (!Array.isArray(c.coupons)) c.coupons = [];
+    return c;
+  } catch { return empty(); }
 }
 
 let cart = load();
@@ -24,7 +29,8 @@ function save() {
 export const Cart = {
   subscribe: (fn) => listeners.push(fn),
   get restaurantId() { return cart.restaurantId; },
-  get promo() { return cart.promo; },
+  // الكوبونات المطبّقة (نسخة من بيانات الكوبون، وبتتراجع تاني قبل الطلب)
+  get coupons() { return cart.coupons; },
   get zoneId() { try { return localStorage.getItem(ZONE_KEY); } catch { return null; } },
   setZone(id) {
     try { localStorage.setItem(ZONE_KEY, id); } catch { /* التخزين غير متاح */ }
@@ -56,16 +62,18 @@ export const Cart = {
     save();
   },
 
-  applyPromo(code) {
-    const c = code.trim().toUpperCase();
-    if (!PROMO_CODES[c]) return false;
-    cart.promo = c;
+  addCoupon(coupon) {
+    cart.coupons = [...cart.coupons.filter((c) => c.code !== coupon.code), coupon];
     save();
-    return true;
   },
 
-  removePromo() {
-    cart.promo = null;
+  removeCoupon(code) {
+    cart.coupons = cart.coupons.filter((c) => c.code !== code);
+    save();
+  },
+
+  setCoupons(list) {
+    cart.coupons = list;
     save();
   },
 
@@ -80,9 +88,19 @@ export const Cart = {
   },
 
   // settings = إعدادات المنصة (المناطق والنسب)
+  subtotal(restaurant) {
+    return this.lines(restaurant).reduce((s, l) => s + l.item.price * l.qty, 0);
+  },
+
+  // الكوبونات اللي هتتحسب فعلًا (في حدود العدد المسموح، وشروطها متحققة زي الحد الأدنى)
+  usableCoupons(restaurant, settings) {
+    const subtotal = this.subtotal(restaurant);
+    return cart.coupons.slice(0, settings.couponsPerOrder ?? 1).filter((c) => !couponProblem(c, { subtotal }));
+  },
+
   totals(restaurant, settings) {
-    const subtotal = this.lines(restaurant).reduce((s, l) => s + l.item.price * l.qty, 0);
     const zone = settings.zones[this.zoneId];
-    return orderTotals(subtotal, { zone: zone && zone.active !== false ? zone : null, rates: settings.rates, promo: cart.promo });
+    return orderTotals(this.subtotal(restaurant), { zone: zone && zone.active !== false ? zone : null, rates: settings.rates,
+      coupons: this.usableCoupons(restaurant, settings) });
   },
 };

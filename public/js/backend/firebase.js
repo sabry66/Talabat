@@ -11,7 +11,7 @@ import {
 import {
   getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, serverTimestamp,
-  runTransaction,
+  runTransaction, increment,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const toMillis = (t) => (t && typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.now());
@@ -43,6 +43,10 @@ export function createBackend(config, { useEmulators }) {
   const usernames = collection(db, 'usernames');
   const phones = collection(db, 'phones');
   const tickets = collection(db, 'tickets');
+  // كوبونات الخصم: المستند اسمه هو الكود نفسه، ومحدش يقدر يجيب لستة الأكواد غير الأدمن
+  const coupons = collection(db, 'coupons');
+  // couponUses/{uid}/codes/{code}: العميل استخدم الكوبون ده (للكوبونات اللي مرة واحدة لكل عميل)
+  const couponUse = (uid, code) => doc(db, 'couponUses', uid, 'codes', code);
   const message = (by, name, text) => ({ by, name, text, at: Date.now() });
 
   // بيرجّع الأوردرات اللي المندوب ماستلمهاش لسه لباقي المندوبين
@@ -227,7 +231,39 @@ export function createBackend(config, { useEmulators }) {
       return onSnapshot(settingsDoc, (s) => cb({ ...withDefaults(s.data()), exists: s.exists() }), logError(cb, withDefaults()));
     },
 
-    saveSettings: (settings) => setDoc(settingsDoc, { zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '' }),
+    saveSettings: (settings) => setDoc(settingsDoc, {
+      zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
+      couponsPerOrder: Number(settings.couponsPerOrder) || 0,
+    }),
+
+    // ---------- الكوبونات ----------
+    async getCoupon(code) {
+      if (!code) return null;
+      const s = await getDoc(doc(coupons, code));
+      return s.exists() ? { ...s.data(), code: s.id } : null;
+    },
+
+    async hasUsedCoupon(uid, code) {
+      return (await getDoc(couponUse(uid, code))).exists();
+    },
+
+    watchCoupons(cb) {
+      return onSnapshot(coupons, (s) => cb(s.docs.map((d) => ({ ...d.data(), code: d.id }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))), logError(cb, []));
+    },
+
+    // isNew: كوبون جديد (لو الكود موجود قبل كده بيرجع خطأ)، غير كده تعديل من غير ما نلمس عدد الاستخدام
+    async saveCoupon(coupon, isNew) {
+      const { code, used, createdAt, lastOrder, ...data } = coupon;
+      const ref = doc(coupons, code);
+      if (isNew) {
+        if ((await getDoc(ref)).exists()) throw Object.assign(new Error('exists'), { code: 'coupon-exists' });
+        return setDoc(ref, { ...data, used: 0, createdAt: Date.now() });
+      }
+      return updateDoc(ref, data);
+    },
+
+    deleteCoupon: (code) => deleteDoc(doc(coupons, code)),
 
     watchUsersByRole(role, cb) {
       return onSnapshot(query(users, where('role', '==', role)),
@@ -333,8 +369,17 @@ export function createBackend(config, { useEmulators }) {
 
     setRestaurantBlocked: (id, blocked) => updateDoc(doc(restaurants, id), blocked ? { blocked: true, isOpen: false } : { blocked: false }),
 
-    async createOrder(order) {
-      return (await addDoc(orders, { ...order, createdAt: serverTimestamp() })).id;
+    // الطلب وعداد استخدام الكوبونات بيتسجلوا مع بعض (batch)، والقواعد بتتأكد إن الكوبون صالح
+    async createOrder(order, usedCoupons = []) {
+      const ref = doc(orders);
+      const batch = writeBatch(db);
+      batch.set(ref, { ...order, createdAt: serverTimestamp() });
+      usedCoupons.forEach((c) => {
+        batch.update(doc(coupons, c.code), { used: increment(1), lastOrder: ref.id });
+        if (c.onePerCustomer) batch.set(couponUse(order.customerUid, c.code), { orderId: ref.id, at: Date.now() });
+      });
+      await batch.commit();
+      return ref.id;
     },
 
     watchOrder(id, cb) {
