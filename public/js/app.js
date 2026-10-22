@@ -968,11 +968,15 @@ window.addEventListener('hashchange', () => {
 });
 Cart.subscribe(updateHeader);
 
+// الصفحات اللي بتعتمد على بيانات المطاعم والإعدادات (والباقي زي الدخول والحساب الجديد
+// منعيدش رسمها، عشان اللي العميل بيكتبه في الفورم ميتمسحش لما البيانات توصل)
+const DATA_PAGES = ['', 'restaurant', 'cart', 'offers'];
+// أو أي صفحة لسه بتعرض "جاري التحميل" ومستنية البيانات (زي الدفع وخدمة العملاء)
+const needsData = () => DATA_PAGES.includes(page) || Boolean(app.querySelector(':scope > .loader'));
+
 backend.watchRestaurants((list) => {
-  const first = state.restaurants === null;
   state.restaurants = list;
-  // صفحات بتعتمد على بيانات المطاعم بس، فنحدثها لما المطاعم تتغير
-  if (first || ['', 'restaurant', 'cart', 'offers'].includes(page)) {
+  if (needsData()) {
     const y = window.scrollY;
     router();
     window.scrollTo(0, y);
@@ -983,7 +987,7 @@ backend.watchSettings((settings) => {
   const first = state.settings === null;
   state.settings = settings;
   if (page === 'checkout' && !first && refreshCheckout) return refreshCheckout();
-  if (first || ['', 'restaurant', 'cart', 'offers'].includes(page)) {
+  if (needsData()) {
     const y = window.scrollY;
     router();
     window.scrollTo(0, y);
