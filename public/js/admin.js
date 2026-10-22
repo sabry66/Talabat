@@ -5,6 +5,7 @@ import { VEHICLES } from './join.js';
 import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { drawCoupons } from './admin-coupons.js';
+import { matches, normalize } from './search.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
@@ -105,7 +106,8 @@ function start() {
     <div class="tabs" id="tabs"></div>
     <div id="tabBody">${loader()}</div>`;
   drawTabs();
-  const refresh = () => { if (!isEditing()) drawTab(); };
+  // تبويب المستخدمين: بنحدّث الجدول بس عشان خانة البحث متتمسحش والكيبورد ميقفلش وإنت بتكتب
+  const refresh = () => { if (tab === 'users' && usersRedraw) usersRedraw(); else if (!isEditing()) drawTab(); };
   unsubs.push(backend.watchOrders({}, (list) => {
     orders = list;
     drawTabs();
@@ -861,13 +863,18 @@ function drawUsers(body) {
       <input class="search-in" id="userSearch" type="search" placeholder="دوّر بالاسم أو @اسم المستخدم أو الموبايل أو الإيميل" value="${esc(userQuery)}">
     </div>
     <div id="usersTable"></div>`;
+  const restName = (id) => (restaurants || []).find((r) => r.id === id)?.name;
   const draw = () => {
-    const q = userQuery.trim().toLowerCase().replace(/^@/, '');
-    const list = users.filter((u) => !q || [u.name, u.username, u.phone, u.email].some((v) => String(v || '').toLowerCase().includes(q)))
+    // بيقبل أرقام عربي (٠١٢) وحروف زي أ/ا و ة/ه، والرقم بـ +20 أو من غيرها
+    const q = userQuery.trim().replace(/^@/, '');
+    const phoneQ = normalize(q).replace(/\s|-/g, '').replace(/^\+?20(?=1)/, '0');
+    const list = users.filter((u) => !q || matches(q, u.name, u.username, u.email, u.restaurantId ? restName(u.restaurantId) : '')
+      || (/^\d{3,}$/.test(phoneQ) && String(u.phone || '').includes(phoneQ)))
       .sort((a, b) => String(a.username || '~').localeCompare(String(b.username || '~')));
     const ordersBy = (uid) => orders.filter((o) => o.customerUid === uid).length;
-    const restName = (id) => restaurants.find((r) => r.id === id)?.name;
-    body.querySelector('#usersTable').innerHTML = `
+    const table = body.querySelector('#usersTable');
+    if (!table) return;
+    table.innerHTML = `
       <div class="table-wrap"><table class="table">
         <thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الموبايل</th><th>الإيميل</th><th>النوع</th><th>طلباته</th><th></th></tr></thead>
         <tbody>${list.map((u) => `

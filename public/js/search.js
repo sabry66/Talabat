@@ -5,6 +5,8 @@ import { priceOf } from './offers.js';
 export function normalize(text) {
   return String(text || '')
     .toLowerCase()
+    .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)) // أرقام عربي → إنجليزي
+    .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
     .replace(/[ً-ْـ]/g, '') // التشكيل والتطويل
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ة/g, 'ه')
