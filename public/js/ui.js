@@ -59,6 +59,7 @@ export function errorMessage(e) {
     'permission-denied': 'مش مسموحلك تعمل العملية دي',
     'order-taken': 'الأوردر ده مندوب تاني أخده',
     'driver-limit': 'وصلت لأقصى عدد أوردرات معاك في نفس الوقت. وصّل اللي معاك الأول وبعدين خد جديد',
+    'transfer-required': 'لازم توافق على تخزين البيانات على السيرفرات عشان التطبيق يشتغل',
     'terms-required': 'لازم توافق على الشروط والأحكام وسياسة الخصوصية الأول',
     'coupon-exists': 'الكود ده موجود قبل كده، اختار كود تاني',
     'username-taken': 'اسم المستخدم ده محجوز، اختار اسم تاني',
@@ -139,7 +140,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
           <label>الإيميل<input name="email" type="email" required autocomplete="email" dir="ltr"></label>
           <label>كلمة السر<input name="password" type="password" required minlength="6" dir="ltr"
             autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}"></label>
-          ${mode === 'register' ? agreeBox() : ''}
+          ${mode === 'register' ? agreeBox() + transferBox() : ''}
           <p class="form-error" id="authError" hidden></p>
           <button class="btn primary block" type="submit">${mode === 'login' ? 'دخول' : 'إنشاء الحساب'}</button>
           ${mode === 'login' ? '<button class="link block-link" type="button" id="forgotBtn">نسيت كلمة السر؟</button>' : ''}
@@ -178,7 +179,11 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
         if (mode === 'login') await backend.signIn(d.email, d.password);
         else {
           if (!d.agree) throw Object.assign(new Error('terms'), { code: 'terms-required' });
-          await backend.signUp({ name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password, termsVersion: LEGAL_VERSION });
+          if (!d.agreeTransfer) throw Object.assign(new Error('transfer'), { code: 'transfer-required' });
+          await backend.signUp({
+            name: d.name.trim(), phone: d.phone.trim(), username: d.handle, email: d.email, password: d.password,
+            termsVersion: LEGAL_VERSION, transferConsent: true,
+          });
         }
         if (onDone) onDone(mode === 'register' ? role : null);
       } catch (err) {
@@ -198,8 +203,15 @@ const agreeBox = (extra = '') => `
     <span>قريت ووافقت على ${LEGAL_LINKS}${extra}، وعندي 18 سنة أو أكتر</span></label>`;
 export { agreeBox };
 
+// موافقة صريحة ومنفصلة على تخزين البيانات على سيرفرات خارج مصر (قانون حماية البيانات الشخصية)
+const transferBox = () => `
+  <label class="check agree"><input type="checkbox" name="agreeTransfer" required>
+    <span>أوافق صراحةً على تخزين بياناتي ومعالجتها على سيرفرات خارج مصر عند مقدمي الخدمة اللي أريفو بتستخدمهم
+      (Google Firebase وCloudinary)، زي ما هو موضح في <a href="privacy.html#p10" target="_blank" rel="noopener">سياسة الخصوصية</a></span></label>`;
+
 // الحساب لسه موافقش على النسخة الحالية من الشروط (حساب قديم أو الشروط اتعدلت)
-export const needsTerms = (user) => Boolean(user) && !user.deleted && user.terms?.version !== LEGAL_VERSION;
+export const needsTerms = (user) => Boolean(user) && !user.deleted
+  && (user.terms?.version !== LEGAL_VERSION || user.terms?.transfer !== true);
 
 export function renderAcceptTerms(el, { backend, user }) {
   const updated = Boolean(user.terms?.version);
@@ -213,6 +225,7 @@ export function renderAcceptTerms(el, { backend, user }) {
         <a class="btn" href="privacy.html" target="_blank" rel="noopener">🔒 سياسة الخصوصية</a>
       </div>
       ${agreeBox()}
+      ${transferBox()}
       <p class="form-error" id="termsError" hidden></p>
       <button class="btn primary block" type="submit">موافق، كمّل</button>
       <button class="btn block" type="button" id="termsLogout">خروج</button>
@@ -221,8 +234,8 @@ export function renderAcceptTerms(el, { backend, user }) {
   el.querySelector('#termsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errEl = el.querySelector('#termsError');
-    if (!e.target.agree.checked) {
-      errEl.textContent = errorMessage({ code: 'terms-required' });
+    if (!e.target.agree.checked || !e.target.agreeTransfer.checked) {
+      errEl.textContent = errorMessage({ code: e.target.agree.checked ? 'transfer-required' : 'terms-required' });
       errEl.hidden = false;
       return;
     }

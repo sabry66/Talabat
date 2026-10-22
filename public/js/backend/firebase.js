@@ -111,8 +111,9 @@ export function createBackend(config, { useEmulators }) {
       };
     },
 
-    async signUp({ name, email, password, phone, username, termsVersion }) {
+    async signUp({ name, email, password, phone, username, termsVersion, transferConsent }) {
       if (!termsVersion) throw idError('terms-required');
+      if (!transferConsent) throw idError('transfer-required');
       username = normalizeUsername(username);
       phone = normalizePhone(phone);
       checkUsername(username);
@@ -127,7 +128,8 @@ export function createBackend(config, { useEmulators }) {
         batch.set(doc(users, user.uid), {
           email: (user.email || '').toLowerCase(), name, phone, username, address: '',
           role: 'customer', restaurantId: null, createdAt: serverTimestamp(),
-          terms: { version: termsVersion, at: Date.now() }, // الموافقة على الشروط وسياسة الخصوصية
+          // الموافقة على الشروط وسياسة الخصوصية، والموافقة الصريحة على التخزين خارج مصر
+          terms: { version: termsVersion, at: Date.now(), transfer: true },
         });
         batch.set(doc(usernames, username), { uid: user.uid });
         batch.set(doc(phones, phone), { uid: user.uid });
@@ -259,7 +261,7 @@ export function createBackend(config, { useEmulators }) {
     },
 
     // موافقة حساب موجود على نسخة جديدة من الشروط وسياسة الخصوصية
-    acceptTerms: (uid, version) => updateDoc(doc(users, uid), { terms: { version, at: Date.now() } }),
+    acceptTerms: (uid, version) => updateDoc(doc(users, uid), { terms: { version, at: Date.now(), transfer: true } }),
 
     async hasUsedCoupon(uid, code) {
       return (await getDoc(couponUse(uid, code))).exists();

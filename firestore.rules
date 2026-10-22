@@ -74,6 +74,8 @@ service cloud.firestore {
         // لازم يكون وافق على الشروط وسياسة الخصوصية
         && request.resource.data.terms.version is string
         && request.resource.data.terms.version.size() > 0
+        // وموافقة صريحة ومنفصلة على تخزين البيانات خارج مصر
+        && request.resource.data.terms.transfer == true
         && (!('username' in request.resource.data) || ownsUsername(uid, request.resource.data.username))
         && (request.resource.data.get('phone', '') == '' || ownsPhone(uid, request.resource.data.phone));
       allow update: if isAdmin()
@@ -88,7 +90,7 @@ service cloud.firestore {
             && resource.data.get('deleted', false) == false
             && changedOnly(['name', 'phone', 'address', 'location', 'username', 'terms'])
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['terms'])
-                || request.resource.data.terms.version is string)
+                || (request.resource.data.terms.version is string && request.resource.data.terms.transfer == true))
             // اسم المستخدم بيتحدد مرة واحدة بس
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['username'])
                 || (!('username' in resource.data) && ownsUsername(uid, request.resource.data.username)))
