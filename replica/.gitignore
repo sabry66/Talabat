@@ -1,0 +1,4 @@
+# نصوص التقييمات الخام: للبحث بس، مش بنعيد نشرها في المستودع العام
+reviews*.csv
+reviews-all.json
+reddit-raw.json

@@ -1,0 +1,36 @@
+{
+  "_about": "ثيمات تطبيقات توصيل الأكل في مصر (عربي + إنجليزي + فرانكو). patterns = Python regex بدون حساسية للحروف.",
+  "request_patterns": [
+    "\\bi wish\\b", "\\bplease add\\b", "\\bwould be (nice|great|good|helpful)\\b", "\\bneeds? (a|an|the|to|more)\\b",
+    "\\bno (way|option) to\\b", "\\bwhy (can'?t|isn'?t|doesn'?t)\\b", "\\bfeature\\b",
+    "ياريت", "يا ريت", "نفسي", "أتمنى|اتمنى", "محتاجين", "لازم يكون", "مفيش (خيار|اختيار|طريقة)", "ضيفوا|اضيفوا|أضيفوا|تضيفوا", "لو (تضيفوا|يبقى فيه)"
+  ],
+  "themes": [
+    {"id": "late", "label": "Late delivery / long waits", "kind": "complaint",
+     "patterns": ["\\blate\\b", "\\bdelay", "\\bwaited\\b", "\\bwaiting\\b", "\\bhours?\\b", "\\btook (so|too) long\\b", "\\bslow\\b", "اتأخر|تأخير|تاخير|تأخر|متأخر|اتاخر", "ساعة|ساعتين|ساعات", "استنيت|مستني|انتظار|بستنى"]},
+    {"id": "support", "label": "Customer service doesn't solve anything", "kind": "complaint",
+     "patterns": ["customer (service|support|care)", "\\bsupport\\b", "\\bchat\\b", "\\bagent", "\\bbot\\b", "\\bcomplain", "خدمة العملاء|خدمه العملاء|الدعم|الشات|شكوى|شكوي|اشتكيت|بتاع الشات|رد آلي|رد الي"]},
+    {"id": "refund", "label": "Refunds go to wallet/credit, not money back", "kind": "complaint",
+     "patterns": ["\\brefund", "\\bcredit\\b", "\\bwallet\\b", "\\bmoney back\\b", "\\bcompensat", "فلوسي|استرجاع|استرداد|رصيد|المحفظة|محفظة|تعويض|يرجعوا"]},
+    {"id": "wrong_missing", "label": "Wrong or missing items", "kind": "complaint",
+     "patterns": ["\\bwrong (order|item)", "\\bmissing\\b", "\\bincomplete\\b", "\\bnot what i ordered\\b", "ناقص|ناقصة|غلط|مش اللي طلبته|نسيوا|مش كامل"]},
+    {"id": "fees", "label": "Service/delivery fees and high prices", "kind": "complaint",
+     "patterns": ["\\bservice fee", "\\bdelivery fee", "\\bfees?\\b", "\\bexpensive\\b", "\\bprices?\\b", "\\boverpriced\\b", "رسوم|مصاريف|خدمة توصيل|سعر|أسعار|اسعار|غالي|غالية|زيادة في السعر"]},
+    {"id": "cancel", "label": "Orders cancelled (by app/restaurant)", "kind": "complaint",
+     "patterns": ["\\bcancel+(ed|led)\\b", "\\bcancellation\\b", "اتلغى|اتلغي|إلغاء|الغاء|لغوا|لغى الطلب|ألغى"]},
+    {"id": "food_quality", "label": "Cold / bad food quality", "kind": "complaint",
+     "patterns": ["\\bcold\\b", "\\bspilled\\b", "\\bquality\\b", "\\bstale\\b", "بارد|برد|ساقع|سقع|بايظ|مدلوق|اتدلق|وحش"]},
+    {"id": "rider", "label": "Rider behaviour / can't find address", "kind": "complaint",
+     "patterns": ["\\brider\\b", "\\bdriver\\b", "\\bdelivery (guy|man|boy)\\b", "\\brude\\b", "المندوب|الطيار|الدليفري|الديليفري|السواق|مش عارف العنوان"]},
+    {"id": "app_bugs", "label": "App bugs, login, payment failures", "kind": "complaint",
+     "patterns": ["\\bbug", "\\bcrash", "\\berror\\b", "\\bglitch", "\\blog ?in\\b", "\\botp\\b", "\\bpayment (failed|declined)", "\\bcard\\b", "مش راضي|بيقفل|مشكلة في الدفع|الكارت|الفيزا|كود التفعيل|مش بيفتح|معلق|بيهنج"]},
+    {"id": "blocked", "label": "Account blocked / cash disabled", "kind": "complaint",
+     "patterns": ["\\bblock(ed)?\\b", "\\bbanned\\b", "\\bsuspend", "\\bcash (is )?(disabled|not available)", "حظر|اتحظر|اتقفل الحساب|الكاش مش متاح|قفلوا الكاش|بلوك"]},
+    {"id": "pro", "label": "Pro subscription / promos misleading", "kind": "complaint",
+     "patterns": ["\\bpro\\b", "\\bsubscription\\b", "\\bpromo", "\\bvoucher", "\\bdiscount", "اشتراك|برو|خصم|كوبون|عرض|العروض|بروموكود|برومو"]},
+    {"id": "tracking", "label": "Tracking / ETA inaccurate", "kind": "complaint",
+     "patterns": ["\\btrack", "\\beta\\b", "\\bestimated\\b", "\\blocation\\b", "التتبع|تتبع|الوقت المتوقع|مكان المندوب|اللوكيشن"]},
+    {"id": "rider_pay", "label": "Riders: pay, penalties, assignment (Rider app)", "kind": "complaint",
+     "patterns": ["\\bpay(ment)?s?\\b", "\\bsalary\\b", "\\bpenalt", "\\bshift", "\\bbonus", "\\bpoints\\b", "\\bbatch", "فلوس|المرتب|مرتب|خصم|غرامة|شيفت|الشيفت|بونص|حافز|نقاط|البطاقة|الكاش اللي معايا"]}
+  ]
+}
