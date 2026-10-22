@@ -31,7 +31,8 @@ let orderFilter = 'active';
 let period = 'today';
 let unsubs = [];
 let settingsCreated = false;
-let couponsUnsub = null; // متابعة الكوبونات بتشتغل بس وتبويب الكوبونات مفتوح
+let couponsUnsub = null;
+let waitingData = false; // التبويب بيعرض "جاري التحميل" ومستني البيانات توصل // متابعة الكوبونات بتشتغل بس وتبويب الكوبونات مفتوح
 
 const TABS = [
   ['overview', '📊 نظرة عامة'],
@@ -107,7 +108,12 @@ function start() {
     <div id="tabBody">${loader()}</div>`;
   drawTabs();
   // تبويب المستخدمين: بنحدّث الجدول بس عشان خانة البحث متتمسحش والكيبورد ميقفلش وإنت بتكتب
-  const refresh = () => { if (tab === 'users' && usersRedraw) usersRedraw(); else if (!isEditing()) drawTab(); };
+  // (لو التبويب لسه مستني البيانات، بنرسمه حتى لو فيه فورم، وإلا كان بيفضل على "جاري التحميل")
+  const refresh = () => {
+    if (waitingData) drawTab();
+    else if (tab === 'users' && usersRedraw) usersRedraw();
+    else if (!isEditing()) drawTab();
+  };
   unsubs.push(backend.watchOrders({}, (list) => {
     orders = list;
     drawTabs();
@@ -136,7 +142,7 @@ function start() {
       settingsCreated = true;
       backend.saveSettings(withDefaults()).catch((e) => toast(errorMessage(e)));
     }
-    if (first || tab !== 'zones') refresh();
+    if (first || waitingData || tab !== 'zones') refresh();
   }));
   unsubs.push(backend.watchUsers((list) => {
     users = list;
@@ -186,7 +192,8 @@ function drawTab() {
   if (!body) return;
   if (couponsUnsub) couponsUnsub();
   couponsUnsub = null;
-  if (!orders || (!isStaff() && (!restaurants || !settings))) { body.innerHTML = loader(); return; }
+  waitingData = !orders || (!isStaff() && (!restaurants || !settings));
+  if (waitingData) { body.innerHTML = loader(); return; }
   ({
     coupons: (b) => { couponsUnsub = drawCoupons(b, { backend, getSettings: () => settings, getOrders: () => orders }); },
     account: (b) => renderAccountPanel(b, { backend, user, onBack: () => { tab = isStaff() ? 'support' : 'overview'; drawTabs(); drawTab(); } }),
