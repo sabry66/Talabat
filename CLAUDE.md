@@ -22,6 +22,8 @@
 | `css/style.css` | كل الستايل (الألوان متغيرات في `:root`، والوضع الليلي تحتها؛ متكتبش ألوان ثابتة)؛ الأقسام بعناوين `/* ---------- ... ---------- */`، والموبايل تحت `@media (max-width: 900px/760px)` |
 | `terms.html` / `privacy.html` | الشروط والخصوصية (لو اتعدلوا تعديل مهم غيّر `LEGAL_VERSION`) |
 
+**لو ضفت أو شيلت `import`:** شغّل `node scripts/preload.mjs` (بيحدّث لستة `modulepreload` في الصفحات عشان المتصفح يحمّل كل الملفات مرة واحدة)، والاختبار بيفشل لو نسيت.
+
 برّه public: `firestore.rules` (كل الصلاحيات)، `firebase.json` (لينكات `/join/*`)، `functions/` (إشعارات Push، بتتنشر لوحدها بـ `firebase.functions.json`)، `android/` (APK؛ ملف التوقيع ممنوع)، `tests/`، `replica/` (تحليل السوق وخطة البناء `replica/build-plan.md`).
 
 ## توفير السياق (زي Headroom بس محلي وآمن)

@@ -10,7 +10,7 @@ import {
   RecaptchaVerifier, signInWithPhoneNumber, linkWithPhoneNumber,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
-  getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove, serverTimestamp,
   runTransaction, increment,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
@@ -29,7 +29,15 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
   const app = initializeApp(config);
   const auth = getAuth(app);
   auth.languageCode = 'ar'; // إيميلات Firebase (زي استرجاع كلمة السر) بالعربي
-  const db = getFirestore(app);
+  // البيانات بتتحفظ على الجهاز (IndexedDB): من تاني زيارة المطاعم بتظهر على طول وبعدين تتحدث من السيرفر.
+  // لو المتصفح مش بيسمح بالتخزين (زي التصفح الخفي في بعض المتصفحات) بنشتغل من الذاكرة عادي
+  let db;
+  try {
+    db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (err) {
+    console.warn('firestore cache', err);
+    db = initializeFirestore(app, { localCache: memoryLocalCache() });
+  }
   if (useEmulators) {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     auth.settings.appVerificationDisabledForTesting = true; // كود الموبايل في الـ Emulator من غير reCAPTCHA
