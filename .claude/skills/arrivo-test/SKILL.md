@@ -1,0 +1,39 @@
+---
+name: arrivo-test
+description: Runs Arrivo's end-to-end test suite (demo mode in Playwright + Firestore security rules on the Firebase emulator) and reports results. Use before every `firebase deploy`, after changing firestore.rules or any file in public/js, or when the user says "اختبر", "جرّب كل حاجة", "شغّل الاختبارات", "test", "check before deploy".
+---
+
+# arrivo-test
+
+الاختبارات في `tests/` (مش في فولدر مؤقت). شغّلها من جذر المشروع:
+
+```bash
+bash tests/run.sh          # الافتراضي: demo + rules (قبل كل deploy)
+bash tests/run.sh demo     # الوضع التجريبي بس، سريع ومن غير Firebase
+bash tests/run.sh rules    # قواعد الحماية على المحاكي (30+ محاولة تلاعب لازم تترفض)
+bash tests/run.sh full     # الكل + الدوس على كل زرار في كل صفحة (حوالي 10 دقايق)
+bash tests/run.sh live     # فحص قراءة بس للموقع الحقيقي arrivo-932e4.web.app (مفيش كتابة)
+```
+
+أول مرة على جهاز جديد: `cd tests && npm install && npx playwright install chromium` (والمحاكي محتاج Java).
+
+## إيه اللي بيتختبر
+| الملف | بيختبر |
+|---|---|
+| `demo-responsive-roles` | مقاسات 360/390/768/1280 مفيش حاجة طالعة برّه الشاشة + كل دور بيروح لوحته |
+| `demo-mobile-tabs` | شريط الأقسام مستخبي على الموبايل والقايمة الجانبية شغالة |
+| `demo-offers-map` | العروض والخصومات، السلة بالسعر بعد الخصم، الخريطة والحفظ، حذف صنف |
+| `demo-coupons-ui` | شكل الكوبونات في الأدمن والسلة |
+| `demo-join` | "اشتغل معانا" وسؤال "إنت مين؟" |
+| `demo-terms-consent` | خانتين الموافقة، شاشة الموافقة للحسابات القديمة |
+| `demo-admin-user-search` | بحث المستخدمين (أرقام عربي، +20) ومبيتمسحش مع التحديث اللحظي |
+| `emulator-rules-coupons-drivers-terms` | قواعد الحماية: الكوبونات، حد المندوب، الموافقة — كل محاولة تلاعب لازم `permission-denied` |
+| `emulator-admin-tabs-load` | تبويبات الأدمن متفضلش "جاري التحميل" |
+| `emulator-slow-network-forms` | فورم الدخول مبيتمسحش لما النت بطيء |
+
+## القواعد
+- لو أي اختبار فشل: اقرا `tests/out/<اسم>.log`، صلّح السبب الحقيقي، وشغّل تاني. **ممنوع** تعدّل الاختبار عشان ينجح من غير ما تفهم ليه فشل.
+- أي ميزة جديدة: ضيف اختبارها في `tests/e2e/` وسطر في `run.sh`.
+- أي تعديل في `firestore.rules`: ضيف محاولة تلاعب جديدة في `emulator-rules-coupons-drivers-terms.mjs` لازم تترفض.
+- **ممنوع** تشغيل اختبارات بتكتب على الموقع الحقيقي من غير ما صاحب المشروع يوافق صراحةً في نفس المحادثة.
+- قول النتيجة بالأرقام: كام اختبار نجح، كام فشل، وإيه اللي فشل.

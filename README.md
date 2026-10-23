@@ -66,3 +66,10 @@ public/
 firestore.rules          قواعد الحماية
 firebase.json            إعدادات الاستضافة
 ```
+
+
+## الاختبارات وإعدادات Claude Code
+- الاختبارات في `tests/`: شغّلها قبل كل `firebase deploy` بـ `bash tests/run.sh` (أو `/arrivo-test` في Claude Code). أول مرة: `cd tests && npm install && npx playwright install chromium`.
+- `.claude/skills/`: مهارات أريفو (`arrivo-test`، `arrivo-conventions`) + مهارات Replica + claude-automation-recommender.
+- `.claude/agents/`: مراجع قواعد الحماية (`rules-reviewer`) ومراجع شكل الموبايل والعربي (`rtl-mobile-reviewer`).
+- `.claude/settings.json`: hook بيمنع لمس ملف التوقيع وكلمات السر، وhook بيفحص أي ملف JavaScript بعد تعديله.

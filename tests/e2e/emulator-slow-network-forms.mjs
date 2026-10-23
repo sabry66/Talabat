@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+const SP = ROOT + '/out';
+const B = 'http://127.0.0.1:8765/', PROJECT = 'demo-talabaty', FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const cfg = `export const firebaseConfig = { apiKey: 'demo-key', authDomain: '${PROJECT}.firebaseapp.com', projectId: '${PROJECT}', appId: 'demo' }; export const useEmulators = true;`;
+const b = await chromium.launch(); const errs = [];
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+await ctx.route(/fonts\.googleapis|cdnjs|tile\.openstreetmap/, r => r.abort());
+await ctx.route(FB + '*', r => r.fulfill({ path: `${ROOT}/node_modules/firebase/${r.request().url().split('/').pop()}`, contentType: 'application/javascript', headers: { 'access-control-allow-origin': '*' } }));
+await ctx.route('**/js/firebase-config.js', r => r.fulfill({ body: cfg, contentType: 'application/javascript' }));
+// نبطّأ قاعدة البيانات 4 ثواني زي نت ضعيف
+await ctx.route('http://127.0.0.1:8080/**', async r => { await new Promise(x => setTimeout(x, 4000)); r.continue(); });
+const p = await ctx.newPage(); p.on('pageerror', e => errs.push(e.message));
+await p.goto(B + '#/register'); await p.waitForSelector('[name=name]');
+await p.fill('[name=name]', 'كتبت بسرعة'); await p.fill('[name=email]', 'fast@test.com');
+await p.waitForTimeout(9000);
+console.log('form after data arrived → name:', JSON.stringify(await p.inputValue('[name=name]').catch(() => 'GONE')), 'email:', JSON.stringify(await p.inputValue('[name=email]').catch(() => 'GONE')));
+await p.goto(B + '#/'); await p.waitForSelector('.card, .empty', { timeout: 20000 }).then(() => console.log('home drew after slow data ✔'), () => console.log('home STUCK ✘'));
+await p.goto(B + '#/offers'); await p.reload(); await p.waitForSelector('.offers-hero', { timeout: 20000 }).then(() => console.log('offers drew after reload ✔'), () => console.log('offers STUCK ✘'));
+console.log('errors', errs); await b.close();
