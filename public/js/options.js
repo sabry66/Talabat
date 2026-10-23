@@ -7,6 +7,19 @@ export const newOptId = (p) => p + Date.now().toString(36).slice(-4) + Math.rand
 
 export const hasOptions = (it) => (it?.options || []).some((g) => (g.choices || []).length);
 
+// مجموعة "السعر" (زي الحجم: ربع / نص / كيلو): سعر الاختيار هو سعر الصنف نفسه مش زيادة عليه.
+// المطعم بيحددها بـ g.sets، ولو محددش: إجبارية، اختيار واحد، وكل اختياراتها ليها سعر
+export const setsPrice = (g) => !g.multi && (g.sets ?? (Boolean(g.required) && (g.choices || []).length > 0
+  && g.choices.every((c) => Number(c.price) > 0)));
+export const priceGroup = (it) => (it?.options || []).find((g) => (g.choices || []).length && setsPrice(g)) || null;
+
+// أقل سعر للصنف قبل الخصم (أرخص حجم متاح، أو السعر العادي)
+export function basePrice(it) {
+  const g = priceGroup(it);
+  const prices = (g?.choices || []).filter((c) => c.available !== false).map((c) => Number(c.price) || 0);
+  return prices.length ? Math.min(...prices) : Number(it.price) || 0;
+}
+
 // sel = { groupId: [choiceId, ...] }
 export function lineKey(itemId, sel = {}) {
   const parts = Object.keys(sel).filter((g) => sel[g]?.length).sort()
@@ -22,8 +35,11 @@ export function parseKey(key) {
 }
 
 // بيتأكد إن الاختيارات صحيحة لسه (المطعم ممكن يكون غيّرها) ويحسب الزيادة في السعر
+// base: سعر الحجم المختار لو الصنف ليه مجموعة سعر (بيحل محل سعر الصنف)، وإلا null
 export function resolveOptions(item, sel = {}) {
   let extra = 0;
+  let base = null;
+  const pg = priceGroup(item);
   const labels = [];
   for (const g of item.options || []) {
     const picked = (sel[g.id] || []).map((id) => (g.choices || []).find((c) => c.id === id));
@@ -32,7 +48,8 @@ export function resolveOptions(item, sel = {}) {
     if (!g.multi && picked.length > 1) return { ok: false, error: `اختار حاجة واحدة بس من ${g.name}` };
     if (g.multi && Number(g.max) > 0 && picked.length > Number(g.max)) return { ok: false, error: `أقصى حاجة ${g.max} من ${g.name}` };
     if (picked.length) {
-      extra += picked.reduce((s, c) => s + (Number(c.price) || 0), 0);
+      const sum = picked.reduce((s, c) => s + (Number(c.price) || 0), 0);
+      if (g === pg) base = sum; else extra += sum;
       labels.push(`${g.name}: ${picked.map((c) => c.name).join('، ')}`);
     }
   }
@@ -40,12 +57,13 @@ export function resolveOptions(item, sel = {}) {
   if (Object.keys(sel).some((gid) => sel[gid]?.length && !(item.options || []).some((g) => g.id === gid))) {
     return { ok: false, error: 'الاختيارات اتغيرت، اختار تاني' };
   }
-  return { ok: true, extra: Math.round(extra * 100) / 100, labels };
+  return { ok: true, extra: Math.round(extra * 100) / 100, base, labels };
 }
 
 // أقل سعر ممكن للصنف بالإضافات الإجبارية (عشان نكتب "من X")
 export function minExtra(item) {
-  return (item.options || []).filter((g) => g.required).reduce((s, g) => {
+  const pg = priceGroup(item);
+  return (item.options || []).filter((g) => g.required && g !== pg).reduce((s, g) => {
     const prices = (g.choices || []).filter((c) => c.available !== false).map((c) => Number(c.price) || 0);
     return s + (prices.length ? Math.min(...prices) : 0);
   }, 0);

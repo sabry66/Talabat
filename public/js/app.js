@@ -15,10 +15,10 @@ import {
 import { renderSupport } from './support.js';
 import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
-import { hasOptions, resolveOptions, lineKey } from './options.js';
+import { hasOptions, resolveOptions, lineKey, priceGroup } from './options.js';
 import { ratingOf, ratingValue, ratingBadge, stars } from './ratings.js';
 import { MAX_ADDRESSES, ADDRESS_KINDS, addressIcon, addressTitle, newAddressId, savedAddresses, nextKind, cleanAddress } from './addresses.js';
-import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
+import { activeOffer, priceOf, priceHtml, linePrice, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
 
@@ -364,13 +364,11 @@ function openItemSheet(r, it, onDone) {
   window.addEventListener('hashchange', close);
   back.addEventListener('click', close);
 
-  const pickedExtra = () => groups.reduce((s, g) => s + (sel[g.id] || [])
-    .reduce((a, id) => a + (Number(g.choices.find((c) => c.id === id)?.price) || 0), 0), 0);
-
+  const pg = priceGroup(it);
   const opener = document.activeElement;
   const draw = (focusValue) => {
     const res = resolveOptions(it, sel);
-    const unit = priceOf(it) + pickedExtra();
+    const unit = res.ok ? linePrice(it, res).price : priceOf(it);
     const scroll = sh.querySelector('.sheet-body')?.scrollTop || 0; // منرجعش لفوق مع كل اختيار
     sh.innerHTML = `
       <div class="sheet-head">
@@ -387,7 +385,7 @@ function openItemSheet(r, it, onDone) {
                 <input type="${g.multi ? 'checkbox' : 'radio'}" name="g-${esc(g.id)}" value="${esc(c.id)}" data-g="${esc(g.id)}"
                   ${(sel[g.id] || []).includes(c.id) ? 'checked' : ''} ${c.available === false ? 'disabled' : ''}>
                 <span class="grow">${esc(c.name)}${c.available === false ? ' <small class="muted">(خلص)</small>' : ''}</span>
-                <b>${Number(c.price) ? `+ ${fmt(c.price)}` : ''}</b>
+                <b>${g === pg ? fmt(c.price) : Number(c.price) ? `+ ${fmt(c.price)}` : ''}</b>
               </label>`).join('')}
           </fieldset>`).join('')}
       </div>

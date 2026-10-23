@@ -3,7 +3,7 @@ import { CATEGORIES } from './data.js';
 import { esc, toast, restaurantLogo, itemImage } from './ui.js';
 import { uploadImage, uploadsEnabled } from './upload.js';
 import { locationPicker } from './map.js';
-import { newOptId } from './options.js';
+import { newOptId, priceGroup, basePrice, setsPrice } from './options.js';
 
 const newItemId = () => 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
@@ -74,7 +74,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       const c = ci !== undefined && !Number.isNaN(ci) ? g.choices[ci] : null;
       const v = inp.type === 'checkbox' ? inp.checked : inp.value;
       ({
-        gname: () => { g.name = v.trim(); }, greq: () => { g.required = v; }, gmulti: () => { g.multi = v; },
+        gname: () => { g.name = v.trim(); }, greq: () => { g.required = v; }, gmulti: () => { g.multi = v; }, gsets: () => { g.sets = v; },
         gmax: () => { g.max = Math.max(0, Math.floor(Number(v) || 0)); },
         cname: () => { c.name = v.trim(); }, cprice: () => { c.price = Math.max(0, Number(v) || 0); },
         cavail: () => { c.available = v; },
@@ -84,7 +84,8 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
 
   // قوالب جاهزة عشان صاحب المطعم يبدأ بسرعة
   const OPT_TEMPLATES = {
-    size: () => ({ name: 'الحجم', required: true, multi: false, choices: ['صغير', 'وسط', 'كبير'].map((n, i) => ({ id: newOptId('c'), name: n, price: i * 15, available: true })) }),
+    // الحجم: سعر كل حجم هو سعر الصنف نفسه (مش زيادة)
+    size: (it) => ({ name: 'الحجم', required: true, multi: false, sets: true, choices: ['صغير', 'وسط', 'كبير'].map((n, i) => ({ id: newOptId('c'), name: n, price: (Number(it.price) || 0) + i * 15, available: true })) }),
     extras: () => ({ name: 'إضافات', required: false, multi: true, max: 0, choices: [{ id: newOptId('c'), name: 'جبنة زيادة', price: 10, available: true }] }),
     blank: () => ({ name: '', required: false, multi: false, choices: [{ id: newOptId('c'), name: '', price: 0, available: true }] }),
   };
@@ -93,19 +94,21 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
     <div class="opt-editor">
       ${(it.options || []).map((g, gi) => {
         const k = `${si}:${ii}:${gi}`;
+        const sets = g === priceGroup(it);
         return `
         <div class="opt-group-edit">
           <div class="opt-g-row">
             <input data-o="gname" data-k="${k}" value="${esc(g.name)}" placeholder="اسم المجموعة (مثلًا الحجم)" aria-label="اسم المجموعة">
             <label class="check"><input type="checkbox" data-o="greq" data-k="${k}" ${g.required ? 'checked' : ''}> إجباري</label>
             <label class="check"><input type="checkbox" data-o="gmulti" data-k="${k}" data-redraw ${g.multi ? 'checked' : ''}> أكتر من اختيار</label>
+            ${g.multi ? '' : `<label class="check" title="سعر الاختيار هو سعر الصنف (زي ربع / نص / كيلو)"><input type="checkbox" data-o="gsets" data-k="${k}" data-redraw ${setsPrice(g) ? 'checked' : ''}> السعر نفسه (مش زيادة)</label>`}
             ${g.multi ? `<label class="check">لحد <input class="mini-in" dir="ltr" type="number" min="0" data-o="gmax" data-k="${k}" value="${g.max || 0}" aria-label="أقصى عدد"> <small class="muted">(0 = مفتوح)</small></label>` : ''}
             <button type="button" class="icon-btn danger" data-del-g="${k}" aria-label="حذف المجموعة">🗑️</button>
           </div>
           ${(g.choices || []).map((c, ci) => `
             <div class="opt-c-row">
               <input data-o="cname" data-k="${k}:${ci}" value="${esc(c.name)}" placeholder="الاختيار (مثلًا كبير)" aria-label="اسم الاختيار">
-              <label class="check">+ <input class="mini-in" dir="ltr" type="number" min="0" step="any" data-o="cprice" data-k="${k}:${ci}" value="${c.price ?? 0}" aria-label="زيادة السعر"> ج.م</label>
+              <label class="check">${sets ? '' : '+ '}<input class="mini-in" dir="ltr" type="number" min="${sets ? 1 : 0}" step="any" data-o="cprice" data-k="${k}:${ci}" ${sets ? 'data-redraw required' : ''} value="${c.price ?? 0}" aria-label="${sets ? 'السعر' : 'زيادة السعر'}"> ج.م</label>
               <label class="check"><input type="checkbox" data-o="cavail" data-k="${k}:${ci}" ${c.available !== false ? 'checked' : ''}> متاح</label>
               <button type="button" class="icon-btn danger" data-del-c="${k}:${ci}" aria-label="حذف الاختيار">✕</button>
             </div>`).join('')}
@@ -117,7 +120,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         <button type="button" class="btn small" data-add-g="${si}:${ii}:extras">+ إضافات</button>
         <button type="button" class="btn small" data-add-g="${si}:${ii}:blank">+ مجموعة فاضية</button>
       </div>
-      <p class="muted small">الرقم جنب كل اختيار بيتزود على سعر الصنف. لو الحجم بيغيّر السعر: خلّي سعر الصنف = سعر الأصغر، وحط الفرق جنب الأكبر. "إجباري" يعني العميل لازم يختار.</p>
+      <p class="muted small">الرقم جنب كل اختيار بيتزود على سعر الصنف. لو علّمت "السعر نفسه" (زي ربع / نص / كيلو): اكتب سعر كل حجم كامل، وهو اللي هيتحسب بدل سعر الصنف. "إجباري" يعني العميل لازم يختار.</p>
     </div>`;
 
   const canUpload = uploadsEnabled();
@@ -134,7 +137,8 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         <input data-f="desc" data-sec="${si}" data-item="${ii}" value="${esc(it.desc)}" placeholder="الوصف">
       </div>
       <input class="emoji-in" data-f="emoji" data-sec="${si}" data-item="${ii}" value="${esc(it.emoji || '🍽️')}" aria-label="أيقونة لو مفيش صورة" title="أيقونة لو مفيش صورة">
-      <input class="price-in" type="number" min="1" step="any" data-f="price" data-sec="${si}" data-item="${ii}" value="${it.price ?? ''}" placeholder="السعر" required aria-label="السعر">
+      ${priceGroup(it) ? `<span class="price-in muted small" title="السعر من الاختيارات">من ${basePrice(it)}</span>`
+        : `<input class="price-in" type="number" min="1" step="any" data-f="price" data-sec="${si}" data-item="${ii}" value="${it.price ?? ''}" placeholder="السعر" required aria-label="السعر">`}
       <label class="check"><input type="checkbox" data-f="available" data-sec="${si}" data-item="${ii}" ${it.available !== false ? 'checked' : ''}> متاح</label>
       ${it.image ? `<button type="button" class="icon-btn" data-del-photo="${si}:${ii}" title="شيل الصورة" aria-label="شيل الصورة">🖼️✕</button>` : ''}
       <button type="button" class="btn small" data-toggle-opt="${si}:${ii}" aria-expanded="${openOpts.has(`${si}:${ii}`)}">🧩 الاختيارات${(it.options || []).length ? ` (${it.options.length})` : ''}</button>
@@ -259,7 +263,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
     el.querySelectorAll('[data-add-g]').forEach((b) => b.addEventListener('click', redraw(() => {
       const [si, ii, tpl] = b.dataset.addG.split(':');
       const it = itemAt(`${si}:${ii}`);
-      (it.options ||= []).push({ id: newOptId('g'), ...OPT_TEMPLATES[tpl]() });
+      (it.options ||= []).push({ id: newOptId('g'), ...OPT_TEMPLATES[tpl](it) });
     })));
     el.querySelectorAll('[data-del-g]').forEach((b) => b.addEventListener('click', redraw(() => {
       const [si, ii, gi] = b.dataset.delG.split(':').map(Number);
@@ -295,6 +299,8 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         it.options = it.options.filter((g) => g.name && g.choices.length);
         dropped += n - it.options.length;
         if (!it.options.length) delete it.options;
+        // الصنف اللي سعره من الأحجام: سعره = أرخص حجم (للترتيب والبحث)
+        if (priceGroup(it)) it.price = basePrice(it);
       }));
       if (dropped) toast(`اتشال ${dropped} اختيار/مجموعة من غير اسم`);
       if (!form.checkValidity()) {

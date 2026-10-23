@@ -1,7 +1,7 @@
 // السلة: محفوظة في المتصفح. الأسعار بتتحسب من المنيو الحالي للمطعم عشان لو السعر اتغير.
 import { isAvailable } from './ui.js';
 import { orderTotals, deliversTo } from './finance.js';
-import { priceOf } from './offers.js';
+import { linePrice } from './offers.js';
 import { couponProblem } from './coupons.js';
 import { parseKey, resolveOptions } from './options.js';
 
@@ -105,7 +105,7 @@ export const Cart = {
       if (!opt.ok) return null; // المطعم غيّر الاختيارات: السطر ده مبقاش صالح
       return {
         key, qty, options: opt.labels, note: cart.notes[key] || '',
-        item: { ...item, price: priceOf(item) + opt.extra, fullPrice: Number(item.price) + opt.extra },
+        item: { ...item, ...linePrice(item, opt) },
       };
     }).filter(Boolean);
   },
