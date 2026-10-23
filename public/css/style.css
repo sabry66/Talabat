@@ -67,8 +67,8 @@ h1, h2, h3 { margin: 0 0 .4em; line-height: 1.3; }
 .topbar { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
 .topbar-inner { display: flex; align-items: center; gap: 16px; height: 64px; }
 .logo { display: flex; align-items: center; gap: 6px; font-size: 1.5rem; font-weight: 800; color: var(--brand); }
-.logo img { height: 40px; width: auto; }
-.footer-logo { height: 70px; margin-bottom: 4px; }
+.logo img { height: 38px; width: auto; }
+.footer-logo { height: 84px; margin-bottom: 6px; }
 .address-btn {
   display: flex; flex-direction: column; align-items: flex-start;
   background: none; border: 0; font: inherit; cursor: pointer; padding: 4px 8px; border-radius: 8px;
@@ -866,7 +866,7 @@ body.sheet-open { overflow: hidden; }
   .container { padding: 0 14px; }
   main { padding-block: 14px 32px; }
   .logo { font-size: 1.3rem; }
-  .logo img { height: 34px; }
+  .logo img { height: 32px; }
   input, select, textarea { font-size: 16px !important; } /* الآيفون بيعمل زووم لو الخط أصغر من 16 */
   .page-title { font-size: 1.25rem; }
   .panel { padding: 14px; border-radius: 14px; }
@@ -1091,8 +1091,10 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 [data-theme="dark"] .photo-badge { background: var(--surface-2); }
 [data-theme="dark"] .item-img { background: var(--surface-2); }
 
-/* اللوجو اللي تحت كتابته غامقة، فبيبقى فاتح */
-[data-theme="dark"] .footer-logo { filter: brightness(0) invert(.92); opacity: .9; }
+/* اللوجو (SVG): نسخة بالكحلي الفاتح للوضع الليلي، نفس الشكل والدهبي */
+[data-theme="dark"] img[src$="img/logo-mark.svg"] { content: url(../img/logo-mark-dark.svg); }
+[data-theme="dark"] img[src$="img/logo-full.svg"] { content: url(../img/logo-full-dark.svg); }
+[data-theme="dark"] .logo { color: #b7adff; }
 [data-theme="dark"] .footer { border-top: 1px solid var(--line); }
 
 /* الخريطة: نفس ألوان الصفحة */

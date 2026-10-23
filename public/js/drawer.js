@@ -22,7 +22,7 @@
     drawer.setAttribute('aria-hidden', 'true');
     drawer.innerHTML = `
       <div class="drawer-head">
-        <a href="${location.pathname.split('/').pop() || 'index.html'}" class="logo"><img src="img/logo-icon.png" alt=""><span>أريفو</span></a>
+        <a href="${location.pathname.split('/').pop() || 'index.html'}" class="logo"><img src="img/logo-mark.svg" alt=""><span>أريفو</span></a>
         <button class="drawer-close" type="button" aria-label="قفل القايمة">✕</button>
       </div>
       <nav class="drawer-body" id="drawerBody"></nav>`;

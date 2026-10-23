@@ -1,9 +1,9 @@
 // Service worker: بيخلّي الموقع يتنزّل كتطبيق، ويفتح بسرعة من الكاش.
 // الشبكة الأول دايمًا (عشان أي تحديث يظهر على طول)، والكاش لو مفيش نت.
-const CACHE = 'arrivo-v2';
+const CACHE = 'arrivo-v3';
 const SHELL = [
   '/', '/index.html', '/restaurant.html', '/delivery.html', '/admin.html',
-  '/css/style.css', '/fonts/Cairo-Variable.woff2', '/img/logo-icon.png', '/img/logo.png',
+  '/css/style.css', '/fonts/Cairo-Variable.woff2', '/img/logo-mark.svg', '/img/logo-mark-dark.svg', '/img/logo-full.svg', '/img/logo-full-dark.svg',
 ];
 
 self.addEventListener('install', (e) => {
