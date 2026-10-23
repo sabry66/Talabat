@@ -125,6 +125,23 @@
 
 ---
 
+## 🚀 النشر الأوتوماتيك من GitHub (مرة واحدة وخلاص)
+
+بعد الخطوات دي، مش هتحتاج تعمل `firebase deploy` تاني: كل تعديل بيترفع على الفرع، GitHub بيشغّل الاختبارات كلها، ولو نجحت بينشر الموقع وقواعد Firestore لوحده. لو اختبار فشل، **مفيش نشر** والموقع بيفضل زي ما هو.
+
+1. **المفتاح:** من الـ CMD في فولدر المشروع:
+   ```
+   firebase init hosting:github
+   ```
+   - هيفتحلك GitHub تسجّل دخول وتوافق.
+   - اكتب الـ repository: `sabry66/Talabat`
+   - هو بيعمل حساب خدمة (service account) ويحط مفتاحه في أسرار GitHub باسم `FIREBASE_SERVICE_ACCOUNT_ARRIVO_932E4`.
+   - لما يسألك **"Set up the workflow to run a build script..."** قول **No**، و**"Set up automatic deployment ... when a PR is merged?"** قول **No** (ملف النشر موجود خلاص في `.github/workflows/deploy.yml`).
+2. **صلاحية قواعد Firestore:** الحساب اللي اتعمل بيقدر ينشر الموقع بس. افتح [Google Cloud ← IAM](https://console.cloud.google.com/iam-admin/iam?project=arrivo-932e4)، دوّر على الحساب اللي اسمه بيبدأ بـ `github-action-`، دوس ✏️، وضيف الدورين:
+   - **Firebase Rules Admin**
+   - **Service Usage Consumer**
+3. خلاص. تقدر تتابع كل نشر من تبويب **Actions** في GitHub، أو تشغّله بإيدك من "Run workflow".
+
 ## 🔔 الإشعارات والتطبيق مقفول (اختياري، محتاج خطة Blaze)
 
 من غير الخطوات دي الإشعارات شغالة **والتطبيق مفتوح** بس (حتى لو في الخلفية): صوت عالي + اهتزاز + إشعار من المتصفح بعد ما المستخدم يدوس "🔔 فعّل الإشعارات".

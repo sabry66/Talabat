@@ -1,0 +1,77 @@
+# نشر أريفو أوتوماتيك: مع كل push على الفرع، الاختبارات بتشتغل، ولو نجحت كلها الموقع وقواعد Firestore بيتنشروا.
+# المفتاح متخزن في GitHub (Settings ← Secrets) باسم FIREBASE_SERVICE_ACCOUNT_ARRIVO_932E4، ومحدش بيشوفه.
+# الـ Cloud Functions (الإشعارات) مش هنا: محتاجة خطة Blaze، وبتتنشر لوحدها (SETUP.md).
+name: Deploy Arrivo
+
+on:
+  push:
+    branches: [claude/web-orders-app-design-1utclh]
+    # تعديلات التوثيق والتحليل والأندرويد مش محتاجة نشر
+    paths-ignore: ['replica/**', '**/*.md', 'android/**', '.claude/**']
+  workflow_dispatch: # زرار "Run workflow" من تبويب Actions
+
+# نشر واحد في المرة، ومنلغيش نشر شغال في النص
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: الاختبارات
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4 # محاكي Firestore محتاج Java
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: تنزيل أدوات الاختبار
+        run: |
+          npm install --prefix tests --no-audit --no-fund
+          npx --prefix tests playwright install --with-deps chromium
+      - name: الاختبارات (الوضع التجريبي + قواعد الحماية)
+        run: bash tests/run.sh
+      - name: حفظ تفاصيل الاختبارات
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: tests/out/*.log
+          retention-days: 7
+
+  deploy:
+    name: النشر على Firebase
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: مفتاح Firebase (من أسرار GitHub)
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ARRIVO_932E4 }}
+        run: |
+          if [ -z "$SA" ]; then echo "::error::مفيش مفتاح: ضيف FIREBASE_SERVICE_ACCOUNT_ARRIVO_932E4 في Settings ← Secrets and variables ← Actions"; exit 1; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+      - name: النشر (الموقع + قواعد Firestore)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@13.35.1 deploy --only hosting,firestore:rules --project arrivo-932e4 --non-interactive
+      - name: التأكد إن الموقع شغال
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://arrivo-932e4.web.app/)
+          echo "الموقع رد بـ $code"
+          test "$code" = "200"
+      - name: مسح المفتاح
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
