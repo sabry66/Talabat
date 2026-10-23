@@ -718,7 +718,7 @@ function renderCheckout() {
           <textarea name="address" required rows="2" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(u.address)}</textarea>
         </label>
         <div class="form-grid">
-          <label>الاسم<input name="name" required value="${esc(u.name)}" autocomplete="name"></label>
+          <label>الاسم<input name="name" required maxlength="60" value="${esc(u.name)}" autocomplete="name"></label>
           <label>رقم الموبايل
             <input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" value="${esc(u.phone)}" autocomplete="tel">
           </label>
@@ -887,7 +887,8 @@ function drawOrder(o) {
         ${o.notes ? `<p>📝 ${esc(o.notes)}</p>` : ''}
         ${o.status === 'placed' ? '<button class="btn block danger-outline" id="cancelOrder" type="button">إلغاء الطلب</button>' : ''}
         <button class="btn block" id="reorder" type="button">🔁 اطلب نفس الطلب تاني</button>
-        <a class="btn block" href="#/support/order/${o.id}">🎧 عندك مشكلة في الطلب ده؟</a>
+        <a class="btn block problem-btn" href="#/support/order/${o.id}">⚠️ مشكلة في الطلب؟</a>
+        <p class="muted small center">ناقص صنف؟ حاجة غلط؟ اتأخر؟ ابعتلنا ومعاها صورة، وهيرد عليك موظف حقيقي.</p>
       </section>
     </div>`;
 
@@ -980,7 +981,7 @@ function renderAccount() {
     <form class="panel narrow" id="profileForm">
       <p class="muted" dir="ltr">${esc(u.email)}</p>
       ${usernameField(u.username, true)}
-      <label>الاسم<input name="name" required value="${esc(u.name)}"></label>
+      <label>الاسم<input name="name" required maxlength="60" value="${esc(u.name)}"></label>
       <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(u.phone)}" inputmode="numeric" dir="ltr"></label>
       <label>العنوان<textarea name="address" rows="2">${esc(u.address)}</textarea></label>
       <button class="btn primary block" type="submit">حفظ</button>

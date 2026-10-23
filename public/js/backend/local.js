@@ -318,7 +318,7 @@ export function createBackend() {
     },
 
     // ---------- خدمة العملاء ----------
-    async createTicket(user, { topic, subject, text, orderId }) {
+    async createTicket(user, { topic, subject, text, orderId, image }) {
       const d = db();
       d.tickets ||= {};
       const id = 't' + newId();
@@ -326,15 +326,15 @@ export function createBackend() {
       d.tickets[id] = {
         id, uid: user.uid, name: user.name, username: user.username || null, role: user.role, phone: user.phone || '',
         topic, subject, orderId: orderId || null, status: 'open', lastBy: 'user', createdAt: now, updatedAt: now,
-        messages: [{ by: user.uid, name: user.name, text, at: now }],
+        messages: [{ by: user.uid, name: user.name, text, at: now, ...(image ? { image } : {}) }],
       };
       commit();
       return id;
     },
 
-    async replyTicket(id, user, text) {
+    async replyTicket(id, user, text, image) {
       const t = db().tickets[id];
-      t.messages.push({ by: user.uid, name: user.name, text, at: Date.now() });
+      t.messages.push({ by: user.uid, name: user.name, text, at: Date.now(), ...(image ? { image } : {}) });
       Object.assign(t, { updatedAt: Date.now(), lastBy: 'user', status: 'open' });
       commit();
     },

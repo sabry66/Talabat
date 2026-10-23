@@ -35,7 +35,7 @@ for (const h of ['#/', '#/offers', '#/restaurant/burger-house', '#/cart', '#/ord
   await sweep(c, 'عميل ' + h, async () => { await c.goto(B + h); await c.waitForTimeout(400); });
 }
 // السلة والدفع
-await c.evaluate(() => localStorage.removeItem('talabaty_cart_v2')); await c.goto(B + '#/'); await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh1"]'); await c.click('[data-add="bh1"]'); await c.click('[data-inc="bh1"]');
+await c.evaluate(() => localStorage.removeItem('talabaty_cart_v2')); await c.goto(B + '#/'); await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh3"]'); await c.click('[data-add="bh3"]'); await c.click('[data-inc="bh3"]');
 await sweep(c, 'عميل السلة بأصناف', async () => { await c.goto(B + '#/cart'); });
 await c.goto(B + '#/cart'); await c.waitForSelector('#zoneSelect'); await c.selectOption('#zoneSelect', { index: 1 });
 await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'عنوان'); await c.click('#placeBtn'); await c.waitForSelector('.track');

@@ -25,7 +25,7 @@ for (const [w, h] of [[360, 740], [390, 844], [768, 1024], [1280, 860]]) {
   const shot = async (name) => { const o = await overflow(p); console.log(`${w}px ${name.padEnd(14)} overflow=${o.scroll}px ${o.bad.join(' ')}`); await p.screenshot({ path: `${SP}/${w}-${name}.png`, fullPage: false }); };
   await p.goto(B); await p.waitForSelector('.card'); await shot('home');
   await p.goto(B + '#/login'); await login(p, 'customer@demo.com'); await p.waitForSelector('.card');
-  await p.goto(B + '#/restaurant/burger-house'); await p.waitForSelector('[data-add="bh1"]'); await p.click('[data-add="bh1"]'); await p.click('[data-add="bh2"]'); await p.waitForTimeout(350); await shot('restaurant');
+  await p.goto(B + '#/restaurant/burger-house'); await p.waitForSelector('[data-add="bh3"]'); await p.click('[data-add="bh3"]'); await p.click('[data-add="bh2"]'); await p.waitForTimeout(350); await shot('restaurant');
   if (w < 800) { await p.click('#menuBtn'); await p.waitForTimeout(400); await shot('drawer'); await p.click('.drawer-backdrop', { position: { x: 10, y: 300 } }); await p.waitForTimeout(300); }
   await p.goto(B + '#/cart'); await p.waitForSelector('#zoneSelect'); await p.selectOption('#zoneSelect', 'nasr_city'); await shot('cart');
   await p.goto(B + '#/checkout'); await p.waitForSelector('#checkoutForm'); await p.fill('textarea[name=address]', 'مدينة نصر'); await p.click('#placeBtn'); await p.waitForSelector('.track'); await p.waitForTimeout(300); await shot('order');

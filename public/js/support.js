@@ -1,5 +1,6 @@
 // خدمة العملاء: شكاوي واستفسارات بين المستخدم (عميل، مطعم، مندوب) والإدارة
 import { esc, toast, errorMessage, loader, shortId, timeAgo } from './ui.js';
+import { uploadImage, uploadsEnabled } from './upload.js';
 
 export const TICKET_TOPICS = {
   order: '📦 مشكلة في طلب',
@@ -8,6 +9,14 @@ export const TICKET_TOPICS = {
   suggestion: '💡 اقتراح',
   other: '💬 حاجة تانية',
 };
+
+// أسباب جاهزة لمشكلة في طلب (بتملا العنوان)
+export const ORDER_ISSUES = ['صنف ناقص', 'صنف غلط', 'الطلب اتأخر', 'الأكل بارد أو بايظ', 'مشكلة مع المندوب', 'حاجة تانية'];
+
+// صورة مرفقة: من Cloudinary (أو صورة تجريبية في الوضع التجريبي)
+const safeImage = (url) => typeof url === 'string' && (/^https:\/\/res\.cloudinary\.com\//.test(url) || /^data:image\/(jpeg|png|webp);base64,/.test(url));
+const msgImage = (url) => (safeImage(url)
+  ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="msg-img"><img src="${esc(url)}" alt="صورة مرفقة" loading="lazy"></a>` : '');
 
 export const ROLE_NAMES = { customer: 'عميل', restaurant: 'مطعم', driver: 'مندوب', admin: 'أدمن' };
 
@@ -19,7 +28,7 @@ export function thread(t, myId, showStaff = false) {
     return `
       <div class="msg ${mine ? 'mine' : ''} ${m.by === 'admin' ? 'admin' : ''}">
         <div class="msg-head">${m.by === 'admin' ? `🎧 خدمة العملاء${showStaff && m.name ? ` (${esc(m.name)})` : ''}` : esc(m.name)} • <span>${timeAgo(m.at)}</span></div>
-        <div class="msg-body">${esc(m.text).replace(/\n/g, '<br>')}</div>
+        <div class="msg-body">${esc(m.text).replace(/\n/g, '<br>')}</div>${msgImage(m.image)}
       </div>`;
   }).join('');
 }
@@ -27,6 +36,39 @@ export function thread(t, myId, showStaff = false) {
 export const ticketStatus = (t) => (t.status === 'closed' ? '<span class="status delivered">✅ اتقفلت</span>'
   : t.lastBy === 'admin' ? '<span class="status ready">💬 الإدارة ردت</span>'
     : '<span class="status placed">⏳ مستنية رد</span>');
+
+// خانة إرفاق صورة (بتظهر بس لو رفع الصور متظبط)
+const photoPicker = (compact = false) => (uploadsEnabled() ? `
+  <div class="photo-pick ${compact ? 'compact' : ''}">
+    <label class="btn small">📷 ${compact ? '' : 'ارفق صورة (اختياري)'}<input type="file" accept="image/*" data-photo hidden></label>
+    <span class="photo-preview" hidden><img alt=""><button type="button" class="link danger" data-photo-clear>شيل</button></span>
+  </div>` : '');
+
+// بيربط خانة الصورة بالفورم، ويرجّع دالة بترفع الصورة وقت الإرسال (أو null)
+function bindPhoto(form) {
+  let file = null;
+  const input = form.querySelector('[data-photo]');
+  const prev = form.querySelector('.photo-preview');
+  const clear = () => {
+    file = null;
+    if (input) input.value = '';
+    if (prev) prev.hidden = true;
+  };
+  input?.addEventListener('change', () => {
+    file = input.files[0] || null;
+    if (!file) return clear();
+    prev.querySelector('img').src = URL.createObjectURL(file);
+    prev.hidden = false;
+  });
+  form.querySelector('[data-photo-clear]')?.addEventListener('click', clear);
+  const get = async () => {
+    if (!file) return null;
+    toast('جاري رفع الصورة... ⏳');
+    return uploadImage(file);
+  };
+  get.clear = clear;
+  return get;
+}
 
 // صفحة الدعم للمستخدم. options.orderId: لو جاي من صفحة طلب معين
 export function renderSupport(el, { backend, user, settings, orderId = null }) {
@@ -66,19 +108,29 @@ export function renderSupport(el, { backend, user, settings, orderId = null }) {
           </select>
         </label>
         ${orderId ? `<p class="muted small">بخصوص الطلب #${shortId(orderId)}</p>` : ''}
+        ${orderId ? `<div class="issue-chips">${ORDER_ISSUES.map((x) => `<button type="button" class="chip" data-issue="${esc(x)}">${esc(x)}</button>`).join('')}</div>` : ''}
         <label>العنوان<input name="subject" required maxlength="100" placeholder="مثال: الأكل وصل بارد"></label>
-        <label>اكتب التفاصيل<textarea name="text" required rows="5" maxlength="2000"></textarea></label>
+        <label>اكتب التفاصيل<textarea name="text" required rows="5" maxlength="2000" placeholder="${orderId ? 'مثلًا: الطلب جه من غير البطاطس' : ''}"></textarea></label>
+        ${photoPicker()}
+        <p class="human-promise">👤 هيرد عليك <b>موظف حقيقي</b> من فريق أريفو، مش رد آلي.</p>
         <button class="btn primary block" type="submit">📨 ابعت</button>
         <button class="btn block" type="button" id="cancelNew">رجوع</button>
       </form>`;
     el.querySelector('#cancelNew').addEventListener('click', () => { composing = false; orderId = null; draw(); });
+    el.querySelectorAll('[data-issue]').forEach((b) => b.addEventListener('click', () => {
+      el.querySelectorAll('[data-issue]').forEach((x) => x.classList.toggle('active', x === b));
+      el.querySelector('[name=subject]').value = b.dataset.issue;
+      el.querySelector('[name=text]').focus();
+    }));
+    const getPhoto = bindPhoto(el.querySelector('#ticketForm'));
     el.querySelector('#ticketForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       const btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true;
       try {
-        openId = await backend.createTicket(user, { topic: d.topic, subject: d.subject.trim(), text: d.text.trim(), orderId });
+        const image = await getPhoto();
+        openId = await backend.createTicket(user, { topic: d.topic, subject: d.subject.trim(), text: d.text.trim(), orderId, image });
         composing = false;
         orderId = null;
         toast('وصلتنا رسالتك ✅ هنرد عليك قريب');
@@ -104,20 +156,23 @@ export function renderSupport(el, { backend, user, settings, orderId = null }) {
           <div class="messages" id="messages"></div>
           <form id="replyForm" class="reply">
             <textarea name="text" required rows="2" maxlength="2000" placeholder="اكتب ردك..."></textarea>
+            ${photoPicker(true)}
             <button class="btn primary" type="submit">إرسال</button>
           </form>
         </section>`;
       el.querySelector('#backList').addEventListener('click', () => { openId = null; draw(); });
+      const getReplyPhoto = bindPhoto(el.querySelector('#replyForm'));
       el.querySelector('#replyForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const ta = e.target.querySelector('textarea');
         const text = ta.value.trim();
         if (!text) return;
-        const btn = e.target.querySelector('button');
+        const btn = e.target.querySelector('button[type=submit]');
         btn.disabled = true;
         try {
-          await backend.replyTicket(openId, user, text);
+          await backend.replyTicket(openId, user, text, await getReplyPhoto());
           ta.value = '';
+          getReplyPhoto.clear();
         } catch (err) {
           toast(errorMessage(err));
         } finally {

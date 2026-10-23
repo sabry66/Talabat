@@ -159,6 +159,17 @@ service cloud.firestore {
 
     // خدمة العملاء: كل واحد يشوف شكاويه بس ويضيف رسايل جديدة (ميعدلش القديمة)، والأدمن يرد ويقفل
     match /tickets/{ticketId} {
+      // رسالة من المستخدم: نص لحد 2000 حرف، وصورة اختيارية من حساب Cloudinary بتاع أريفو (qrp8inik) بس
+      // (لو غيّرت حساب Cloudinary في cloudinary-config.js غيّر الاسم هنا كمان)
+      function userMessageOk(m) {
+        return m.by == request.auth.uid
+          && m.name is string && m.name.size() <= 60
+          && m.at is int
+          && m.text is string && m.text.size() <= 2000
+          && m.keys().hasOnly(['by', 'name', 'text', 'at', 'image'])
+          && (!('image' in m) || (m.image is string && m.image.size() <= 500
+              && m.image.matches('^https://res[.]cloudinary[.]com/qrp8inik/[A-Za-z0-9_./,:-]+$')));
+      }
       allow read: if signedIn() && (resource.data.uid == request.auth.uid || isTeam());
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
@@ -167,8 +178,7 @@ service cloud.firestore {
         && request.resource.data.lastBy == 'user'
         && request.resource.data.subject is string && request.resource.data.subject.size() <= 100
         && request.resource.data.messages.size() == 1
-        && request.resource.data.messages[0].by == request.auth.uid
-        && request.resource.data.messages[0].text.size() <= 2000;
+        && userMessageOk(request.resource.data.messages[0]);
       allow update: if isAdmin()
         // الموظف: يرد ويقفل ويفتح، بس ميعدلش أو يمسح رسايل قديمة
         || (isStaff()
@@ -182,8 +192,7 @@ service cloud.firestore {
             && request.resource.data.status == 'open'
             && request.resource.data.messages.size() == resource.data.messages.size() + 1
             && request.resource.data.messages.hasAll(resource.data.messages)
-            && request.resource.data.messages[resource.data.messages.size()].by == request.auth.uid
-            && request.resource.data.messages[resource.data.messages.size()].text.size() <= 2000);
+            && userMessageOk(request.resource.data.messages[resource.data.messages.size()]));
       allow delete: if isAdmin();
     }
 

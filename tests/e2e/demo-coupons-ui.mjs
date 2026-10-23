@@ -14,7 +14,7 @@ await a.waitForTimeout(500); await a.screenshot({ path: SP + '/coupons-admin-390
 const ov = await a.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 console.log('admin overflow', ov);
 const c = await ctx.newPage(); c.on('pageerror', e => errs.push(e.message));
-await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh1"]'); await c.click('[data-add="bh1"]'); await c.click('[data-inc="bh1"]');
+await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh3"]'); await c.click('[data-add="bh3"]'); await c.click('[data-inc="bh3"]');
 await c.goto(B + '#/cart'); await c.waitForSelector('#promoInput'); await c.fill('#promoInput', 'arrivo20'); await c.click('#promoForm button'); await c.waitForTimeout(500);
 await c.screenshot({ path: SP + '/coupons-cart-390.png', fullPage: true });
 console.log('cart bar', await c.evaluate(() => [location.hash, document.querySelector('.mobile-cart-bar').className])); console.log('cart overflow', await c.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth));

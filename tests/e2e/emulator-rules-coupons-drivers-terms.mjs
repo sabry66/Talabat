@@ -73,7 +73,7 @@ console.log('coupons list:', await a.$$eval('.coupon-code', x => x.map(e => e.te
 // ---- العميل
 const c = await newCtx('customer');
 await c.goto(B + '#/register'); await register(c, 'عميل', 'cust@test.com', 'cust1'); await c.waitForTimeout(1500);
-await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh1"]'); await c.click('[data-add="bh1"]'); await c.click('[data-inc="bh1"]'); await c.click('[data-inc="bh1"]');
+await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh2"]'); await c.click('[data-add="bh2"]'); await c.click('[data-inc="bh2"]'); await c.click('[data-inc="bh2"]');
 await c.goto(B + '#/cart'); await c.waitForSelector('#zoneSelect'); await c.selectOption('#zoneSelect', 'maadi'); await c.waitForSelector('#promoInput');
 console.log('cart has example hint?', (await c.textContent('#app')).includes('جرّب'), '| placeholder:', await c.getAttribute('#promoInput', 'placeholder'));
 const apply = async (code) => { await c.fill('#promoInput', code); await c.click('#promoForm button'); await c.waitForTimeout(700); return (await c.textContent('#toast')).trim(); };
@@ -89,7 +89,7 @@ await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fi
 console.log('order with 2 coupons placed ✔', (await c.textContent('.summary')).replace(/\s+/g, ' '));
 
 // once50 تاني لنفس العميل
-await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh1"]'); await c.click('[data-add="bh1"]'); await c.click('[data-inc="bh1"]');
+await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh2"]'); await c.click('[data-add="bh2"]'); await c.click('[data-inc="bh2"]');
 await c.goto(B + '#/cart'); await c.waitForSelector('#promoInput');
 console.log('once50 again ->', await apply('ONCE50'));
 console.log('free1 ->', await apply('FREE1'));
@@ -139,6 +139,20 @@ console.log('SAVE10 used count:', ok);
 const ad = await api(a, `(F, db) => ({ adminList: async () => { const n = (await F.getDocs(F.collection(db, 'coupons'))).size; throw Object.assign(new Error(), { code: 'OK list=' + n }); } })`);
 console.log(ad);
 
+// ---- صور الشكاوى: Cloudinary بس
+console.log(await api(c, `(F, db, me) => {
+  const t = (image, extra = {}) => F.addDoc(F.collection(db, 'tickets'), { uid: me, name: 'x', topic: 'order', subject: 'صنف ناقص', status: 'open', lastBy: 'user', createdAt: 1, updatedAt: 1,
+    messages: [{ by: me, name: 'x', text: 'ناقص', at: 1, ...(image ? { image } : {}), ...extra }] });
+  return {
+    validTicketCloudinaryImage: () => t('https://res.cloudinary.com/qrp8inik/image/upload/c_limit,w_1200/v1/arrivo/x.jpg'),
+    ticketEvilImage: () => t('https://evil.example.com/x.jpg'),
+    ticketOtherCloudinaryAccount: () => t('https://res.cloudinary.com/someoneelse/image/upload/x.jpg'),
+    ticketLongName: () => F.addDoc(F.collection(db, 'tickets'), { uid: me, name: 'x', topic: 'order', subject: 's', status: 'open', lastBy: 'user', createdAt: 1, updatedAt: 1, messages: [{ by: me, name: 'خدمة العملاء'.repeat(10), text: 'x', at: 1 }] }),
+    ticketJsImage: () => t('javascript:alert(1)'),
+    ticketHtmlInjectExtraKey: () => t(null, { html: '<img src=x onerror=alert(1)>' }),
+  };
+}`));
+
 // ---- قايمة الكوبونات اللي خلصت
 await a.click('[data-tab="overview"]'); await a.click('[data-tab="coupons"]'); await a.waitForSelector('.coupon-group');
 console.log('coupon groups:', await a.$$eval('.coupon-group', x => x.map(e => e.textContent.trim())));
@@ -154,7 +168,7 @@ const drvUid = all2.userInfo.find(u => u.email === 'drv@test.com').localId;
 await fetch(docUrl(`users/${drvUid}?updateMask.fieldPaths=role`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { role: { stringValue: 'driver' } } }) });
 // 3 طلبات جديدة من العميل، والأدمن يخليها "بتتجهز"
 for (let i = 0; i < 3; i++) {
-  await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh1"]'); await c.click('[data-add="bh1"]'); await c.click('[data-inc="bh1"]');
+  await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh2"]'); await c.click('[data-add="bh2"]'); await c.click('[data-inc="bh2"]');
   await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click('#placeBtn'); await c.waitForSelector('.track', { timeout: 15000 });
 }
 const ordersList = (await (await fetch(docUrl('orders?pageSize=50'), { headers: H })).json()).documents;

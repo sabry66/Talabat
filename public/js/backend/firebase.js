@@ -59,7 +59,8 @@ export function createBackend(config, { useEmulators }) {
       batch.update(load.ref, { orders: arrayRemove(orderId) });
     }
   }
-  const message = (by, name, text) => ({ by, name, text, at: Date.now() });
+  // image: لينك صورة على Cloudinary (اختياري، مثلًا صورة الأكل الناقص)
+  const message = (by, name, text, image) => ({ by, name: String(name || '').slice(0, 60), text, at: Date.now(), ...(image ? { image } : {}) });
 
   // بيرجّع الأوردرات اللي المندوب ماستلمهاش لسه لباقي المندوبين
   async function releaseDriverOrders(batch, uid) {
@@ -329,18 +330,18 @@ export function createBackend(config, { useEmulators }) {
     rejectApplication: (uid, reviewer = null) => updateDoc(doc(applications, uid), { status: 'rejected', reviewedAt: Date.now(), reviewedBy: reviewer }),
 
     // ---------- خدمة العملاء ----------
-    async createTicket(user, { topic, subject, text, orderId }) {
+    async createTicket(user, { topic, subject, text, orderId, image }) {
       const now = Date.now();
       const ref = await addDoc(tickets, {
         uid: user.uid, name: user.name, username: user.username || null, role: user.role, phone: user.phone || '',
         topic, subject, orderId: orderId || null, status: 'open', lastBy: 'user',
-        createdAt: now, updatedAt: now, messages: [message(user.uid, user.name, text)],
+        createdAt: now, updatedAt: now, messages: [message(user.uid, user.name, text, image)],
       });
       return ref.id;
     },
 
-    replyTicket: (id, user, text) => updateDoc(doc(tickets, id), {
-      messages: arrayUnion(message(user.uid, user.name, text)), updatedAt: Date.now(), lastBy: 'user', status: 'open',
+    replyTicket: (id, user, text, image) => updateDoc(doc(tickets, id), {
+      messages: arrayUnion(message(user.uid, user.name, text, image)), updatedAt: Date.now(), lastBy: 'user', status: 'open',
     }),
 
     adminReplyTicket: (id, admin, text) => updateDoc(doc(tickets, id), {

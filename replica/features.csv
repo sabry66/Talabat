@@ -38,7 +38,7 @@ Order history,after order,must,yes,yes,
 Reorder a past order in one tap,after order,should,yes,yes,on the order page (keeps options)
 Rate and review an order,after order,should,yes,no,
 Contact support about a specific order,after order,must,yes,yes,human staff + WhatsApp
-Report a problem with photo,after order,should,yes,no,
+Report a problem with photo,after order,should,yes,yes,ready reasons + photo + human reply promise
 Cancel before the restaurant accepts,after order,must,yes,yes,
 Refunds handled through support,after order,should,yes,partial,manual by admin; no refund record yet
 Referral / invite friends,growth,could,yes,no,

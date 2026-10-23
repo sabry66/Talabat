@@ -134,7 +134,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
                   <span><b>${l}</b><small>${d}</small></span></label>`).join('')}
             </fieldset>` : ''}
           ${mode === 'register' ? `
-            <label>الاسم<input name="name" required autocomplete="name"></label>
+            <label>الاسم<input name="name" required maxlength="60" autocomplete="name"></label>
             ${usernameField()}
             <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" autocomplete="tel" dir="ltr"></label>` : ''}
           <label>الإيميل<input name="email" type="email" required autocomplete="email" dir="ltr"></label>
@@ -339,7 +339,7 @@ export function renderAccountPanel(el, { backend, user, onBack }) {
       <h3>👤 بياناتي</h3>
       <p class="muted" dir="ltr">${esc(user.email)}</p>
       ${usernameField(user.username, true)}
-      <label>الاسم<input name="name" required value="${esc(user.name)}"></label>
+      <label>الاسم<input name="name" required maxlength="60" value="${esc(user.name)}"></label>
       <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(user.phone)}" inputmode="numeric" dir="ltr"></label>
       <button class="btn primary block" type="submit">حفظ</button>
     </form>
