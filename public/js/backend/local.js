@@ -16,6 +16,8 @@ const session = {
   clear: () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* غير متاح */ } },
 };
 const authError = (code) => Object.assign(new Error(code), { code });
+const DEMO_CODE = '123456';
+let pendingPhone = null;
 
 function seed() {
   const user = (uid, email, name, role, phone, restaurantId = null) =>
@@ -105,6 +107,34 @@ export function createBackend() {
   return {
     onAuth(cb) {
       return watch(() => publicUser(db().users[session.get()]), cb);
+    },
+
+    // الدخول بالموبايل في الوضع التجريبي: الكود دايمًا 123456، والرقم لازم يكون اتربط من "حسابي"
+    phoneLogin: true,
+    async sendLoginCode(phone) {
+      pendingPhone = { mode: 'login', phone: normalizePhone(phone) };
+    },
+    async confirmLoginCode(code) {
+      if (!pendingPhone || pendingPhone.mode !== 'login') throw authError('auth/code-expired');
+      if (String(code).trim() !== DEMO_CODE) throw authError('auth/invalid-verification-code');
+      const u = Object.values(db().users).find((x) => x.phoneLinked && x.phoneLinked === pendingPhone.phone);
+      pendingPhone = null;
+      if (!u || u.deleted) throw authError('phone-not-linked');
+      session.set(u.uid);
+      commit();
+    },
+    phoneLinked: () => db().users[session.get()]?.phoneLinked || null,
+    async sendLinkCode(phone) {
+      const p = normalizePhone(phone);
+      if (Object.values(db().users).some((x) => x.phoneLinked === p && x.uid !== session.get())) throw authError('auth/credential-already-in-use');
+      pendingPhone = { mode: 'link', phone: p };
+    },
+    async confirmLinkCode(code) {
+      if (!pendingPhone || pendingPhone.mode !== 'link') throw authError('auth/code-expired');
+      if (String(code).trim() !== DEMO_CODE) throw authError('auth/invalid-verification-code');
+      db().users[session.get()].phoneLinked = pendingPhone.phone;
+      pendingPhone = null;
+      commit();
     },
 
     async signUp({ name, email, password, phone, username, termsVersion, transferConsent }) {

@@ -8,7 +8,7 @@ import { locationPicker, trackMap } from './map.js';
 import { activeZones, deliversTo, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
-  fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel, timeAgo,
+  fmt, esc, toast, errorMessage, phoneLinkBox, shortId, isAvailable, statusBadge, paymentLabel, timeAgo,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, renderAcceptTerms, needsTerms, usernameField, renderBlocked, homeFor,
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS, lineOptions,
 } from './ui.js';
@@ -1515,8 +1515,10 @@ function renderAccount() {
       <button class="btn block" type="button" id="logout">تسجيل الخروج</button>
     </form>
     <section class="panel narrow addr-book" id="addrBook"></section>
+    <section class="panel narrow" id="phoneLinkBox" hidden></section>
     ${changePasswordForm()}`;
   drawAddressBook();
+  phoneLinkBox(document.getElementById('phoneLinkBox'), { backend, user: u });
   bindChangePassword(app, backend);
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();

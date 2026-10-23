@@ -55,6 +55,15 @@ export function errorMessage(e) {
     'auth/weak-password': 'كلمة السر لازم تكون 6 حروف أو أرقام على الأقل',
     'auth/invalid-email': 'الإيميل مكتوب غلط',
     'auth/too-many-requests': 'محاولات كتير، استنى شوية وجرب تاني',
+    'auth/invalid-verification-code': 'الكود غلط، اتأكد منه وجرّب تاني',
+    'auth/code-expired': 'الكود خلص وقته، اطلب كود جديد',
+    'auth/invalid-phone-number': 'رقم الموبايل لازم يكون 11 رقم ويبدأ بـ 01',
+    'auth/credential-already-in-use': 'الرقم ده مربوط بحساب تاني',
+    'auth/account-exists-with-different-credential': 'الرقم ده مربوط بحساب تاني',
+    'auth/provider-already-linked': 'الدخول بالموبايل متفعّل خلاص',
+    'auth/captcha-check-failed': 'التحقق فشل، جرّب تاني',
+    'auth/quota-exceeded': 'رسايل الكود خلصت النهارده، ادخل بالإيميل',
+    'phone-not-linked': 'الرقم ده مش متفعّل للدخول. ادخل بالإيميل مرة وفعّل "الدخول بالموبايل" من حسابي',
     'auth/network-request-failed': 'مفيش اتصال بالإنترنت',
     'auth/operation-not-allowed': 'لازم تفعّل تسجيل الدخول بالإيميل من Firebase Console',
     'auth/configuration-not-found': 'لازم تفعّل Authentication من Firebase Console',
@@ -118,6 +127,61 @@ export const SIGNUP_ROLES = [
 ];
 
 // askRole: يظهر سؤال "إنت مين؟" في الحساب الجديد، و onDone بيتنادى بالنوع اللي اختاره
+// خطوتين: رقم الموبايل ← الكود اللي وصل في رسالة. send وconfirm من الباك إند (دخول أو ربط الرقم بالحساب)
+export function phoneCodeForm(el, { phone = '', intro = '', submitLabel = 'تأكيد', send, confirm, onDone }) {
+  let step = 'phone';
+  let number = phone;
+  const draw = () => {
+    el.innerHTML = step === 'phone' ? `
+      <form class="phone-form">
+        ${intro ? `<p class="muted small">${intro}</p>` : ''}
+        <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" placeholder="01xxxxxxxxx" inputmode="numeric" autocomplete="tel" dir="ltr" value="${esc(number)}"></label>
+        <p class="form-error" hidden></p>
+        <button class="btn primary block" type="submit">📩 ابعتلي الكود</button>
+        <div class="recaptcha-box"></div>
+      </form>` : `
+      <form class="phone-form">
+        <p class="small">بعتنا كود على <b dir="ltr">${esc(number)}</b> <button class="link small" type="button" data-change>غيّر الرقم</button></p>
+        <label>الكود<input name="code" required inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" dir="ltr" placeholder="______" class="code-input"></label>
+        <p class="form-error" hidden></p>
+        <button class="btn primary block" type="submit">${submitLabel}</button>
+      </form>`;
+    const form = el.querySelector('form');
+    const err = form.querySelector('.form-error');
+    form.querySelector('[data-change]')?.addEventListener('click', () => { step = 'phone'; draw(); });
+    // الأرقام العربي (٠١٢...) بتتحول وهو بيكتب
+    form.querySelectorAll('[name=phone], [name=code]').forEach((inp) => inp.addEventListener('input', () => {
+      const v = inp.value.replace(/[٠-٩]/g, (x) => '٠١٢٣٤٥٦٧٨٩'.indexOf(x));
+      if (v !== inp.value) inp.value = v;
+    }));
+    form.querySelector('[name=code]')?.focus();
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      err.hidden = true;
+      try {
+        if (step === 'phone') {
+          number = form.querySelector('[name=phone]').value.trim();
+          await send(number, form.querySelector('.recaptcha-box'));
+          step = 'code';
+          draw();
+        } else {
+          await confirm(form.querySelector('[name=code]').value);
+          onDone?.();
+        }
+      } catch (ex) {
+        err.textContent = errorMessage(ex);
+        err.hidden = false;
+        btn.disabled = false;
+        // الصفحة ممكن تتعاد لو الرقم دخل لحظة واترفض، فالرسالة تظهر كمان تحت
+        if (ex?.code === 'phone-not-linked') toast(errorMessage(ex));
+      }
+    });
+  };
+  draw();
+}
+
 export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = '', onDone, askRole = false, role = 'customer' }) {
   const draw = () => {
     el.innerHTML = `
@@ -126,7 +190,9 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
         <div class="auth-tabs">
           <button type="button" data-mode="login" class="${mode === 'login' ? 'active' : ''}">تسجيل الدخول</button>
           <button type="button" data-mode="register" class="${mode === 'register' ? 'active' : ''}">حساب جديد</button>
+          ${backend.phoneLogin ? `<button type="button" data-mode="phone" class="${mode === 'phone' ? 'active' : ''}">📱 بالموبايل</button>` : ''}
         </div>
+        ${mode === 'phone' ? '<div id="phoneLogin"></div>' : `
         <form id="authForm">
           ${mode === 'register' && askRole ? `
             <fieldset class="role-pick">
@@ -146,7 +212,7 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
           <p class="form-error" id="authError" hidden></p>
           <button class="btn primary block" type="submit">${mode === 'login' ? 'دخول' : 'إنشاء الحساب'}</button>
           ${mode === 'login' ? '<button class="link block-link" type="button" id="forgotBtn">نسيت كلمة السر؟</button>' : ''}
-        </form>
+        </form>`}
         ${isDemo && mode === 'login' ? `
           <div class="demo-accounts">
             <p class="muted small">حسابات تجريبية (كلمة السر 123456):</p>
@@ -159,6 +225,16 @@ export function renderAuthForm(el, { backend, isDemo, mode = 'login', title = ''
       </div>`;
 
     el.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { mode = b.dataset.mode; draw(); }));
+    if (mode === 'phone') {
+      phoneCodeForm(el.querySelector('#phoneLogin'), {
+        intro: 'هنبعتلك كود في رسالة على رقمك.',
+        submitLabel: 'دخول',
+        send: (phone, box) => backend.sendLoginCode(phone, box),
+        confirm: (code) => backend.confirmLoginCode(code),
+        onDone: () => onDone?.(null),
+      });
+      return;
+    }
     el.querySelectorAll('[name=signupRole]').forEach((r) => r.addEventListener('change', () => { role = r.value; }));
     el.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => {
       el.querySelector('[name=email]').value = b.dataset.demo;
@@ -345,6 +421,7 @@ export function renderAccountPanel(el, { backend, user, onBack }) {
       <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(user.phone)}" inputmode="numeric" dir="ltr"></label>
       <button class="btn primary block" type="submit">حفظ</button>
     </form>
+    <section class="panel narrow" id="phoneLinkBox" hidden></section>
     ${changePasswordForm()}
     <div class="narrow"><button class="btn block" type="button" id="accountLogout">🚪 تسجيل الخروج</button>
       <p class="muted small center legal-foot"><a href="terms.html" target="_blank" rel="noopener">📄 الشروط والأحكام</a> • <a href="privacy.html" target="_blank" rel="noopener">🔒 سياسة الخصوصية</a></p></div>`;
@@ -362,6 +439,30 @@ export function renderAccountPanel(el, { backend, user, onBack }) {
     }
   });
   bindChangePassword(el, backend);
+  phoneLinkBox(el.querySelector('#phoneLinkBox'), { backend, user });
+}
+
+// "الدخول بالموبايل": بيربط رقم الحساب عشان يقدر يدخل بكود SMS من غير كلمة السر
+export function phoneLinkBox(box, { backend, user }) {
+  if (!box || !backend.phoneLogin) return;
+  box.hidden = false;
+  const linked = backend.phoneLinked();
+  if (linked) {
+    box.innerHTML = `<h3>📱 الدخول بالموبايل</h3><p class="ok-text">✅ متفعّل على <b dir="ltr">${esc(String(linked).replace(/^\+20/, '0'))}</b>. تقدر تدخل بكود SMS من غير كلمة السر.</p>`;
+    return;
+  }
+  box.innerHTML = '<h3>📱 الدخول بالموبايل</h3><p class="muted small">فعّله عشان تدخل بعد كده بكود يوصلك في رسالة، من غير ما تفتكر كلمة السر.</p><button class="btn block" type="button" data-start-link>📱 فعّل الدخول بالموبايل</button>';
+  box.querySelector('[data-start-link]').addEventListener('click', () => {
+    const form = document.createElement('div');
+    box.querySelector('[data-start-link]').replaceWith(form);
+    phoneCodeForm(form, {
+      phone: user.phone || '',
+      submitLabel: '✅ تفعيل',
+      send: (phone, rc) => backend.sendLinkCode(phone, rc),
+      confirm: (code) => backend.confirmLinkCode(code),
+      onDone: () => { toast('اتفعّل الدخول بالموبايل ✅'); phoneLinkBox(box, { backend, user }); },
+    });
+  });
 }
 
 // كل نوع حساب ليه لوحته؛ المطعم والمندوب والموظف مش بيستخدموا تطبيق العملاء

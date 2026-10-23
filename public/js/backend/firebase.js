@@ -7,6 +7,7 @@ import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signOut, updateProfile as updateAuthProfile, connectAuthEmulator,
   sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+  RecaptchaVerifier, signInWithPhoneNumber, linkWithPhoneNumber,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   getFirestore, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
@@ -24,13 +25,14 @@ const toOrder = (snap) => {
 const withoutId = ({ id, ...rest }) => rest;
 const CLAIMABLE = ['preparing', 'ready'];
 
-export function createBackend(config, { useEmulators, pushVapidKey = '' }) {
+export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLogin = false }) {
   const app = initializeApp(config);
   const auth = getAuth(app);
   auth.languageCode = 'ar'; // إيميلات Firebase (زي استرجاع كلمة السر) بالعربي
   const db = getFirestore(app);
   if (useEmulators) {
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+    auth.settings.appVerificationDisabledForTesting = true; // كود الموبايل في الـ Emulator من غير reCAPTCHA
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
   }
 
@@ -53,6 +55,16 @@ export function createBackend(config, { useEmulators, pushVapidKey = '' }) {
   // pushTokens/{token} = { uid, at }: الأجهزة اللي هيوصلها إشعار والتطبيق مقفول (Cloud Function بتبعت عليها)
   const pushTokens = collection(db, 'pushTokens');
   let pushToken = null;
+
+  // الدخول برقم الموبايل (كود SMS). الرقم لازم يكون اتربط بالحساب الأول من "حسابي"
+  let phoneConfirm = null;
+  let verifier = null;
+  const e164 = (p) => `+2${normalizePhone(p)}`;
+  function recaptcha(container) {
+    try { verifier?.clear(); } catch { /* اتشال خلاص */ }
+    verifier = new RecaptchaVerifier(auth, container, { size: 'invisible' });
+    return verifier;
+  }
 
   // بيسجّل الجهاز ده للإشعارات (لو فيه مفتاح VAPID والإشعارات مسموحة). من غير ما يوقف أي حاجة لو فشل
   async function registerPush(uid) {
@@ -136,6 +148,34 @@ export function createBackend(config, { useEmulators, pushVapidKey = '' }) {
         unsubAuth();
         if (unsubUser) unsubUser();
       };
+    },
+
+    phoneLogin: Boolean(phoneLogin),
+    async sendLoginCode(phone, container) {
+      phoneConfirm = await signInWithPhoneNumber(auth, e164(phone), recaptcha(container));
+    },
+    async confirmLoginCode(code) {
+      if (!phoneConfirm) throw idError('auth/code-expired');
+      signingUp = true; // منعملش مستند عميل لرقم مش مربوط بحساب
+      try {
+        const { user } = await phoneConfirm.confirm(String(code).trim());
+        const snap = await getDoc(doc(users, user.uid));
+        if (!snap.exists()) {
+          await user.delete().catch(() => signOut(auth));
+          throw idError('phone-not-linked');
+        }
+      } finally {
+        signingUp = false;
+      }
+    },
+    phoneLinked: () => auth.currentUser?.phoneNumber || null,
+    async sendLinkCode(phone, container) {
+      phoneConfirm = await linkWithPhoneNumber(auth.currentUser, e164(phone), recaptcha(container));
+    },
+    async confirmLinkCode(code) {
+      if (!phoneConfirm) throw idError('auth/code-expired');
+      await phoneConfirm.confirm(String(code).trim());
+      await auth.currentUser.reload();
     },
 
     async signUp({ name, email, password, phone, username, termsVersion, transferConsent }) {

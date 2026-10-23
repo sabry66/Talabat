@@ -151,6 +151,20 @@
 
 `firebase deploy` العادي **مش بينشر** الـ Functions (هي في ملف إعدادات لوحدها)، فمش هيبوّظ النشر وإنت على الخطة المجانية.
 
+## 📱 الدخول برقم الموبايل (اختياري، الرسايل بفلوس)
+
+العميل (أو المطعم أو المندوب) بيفعّله مرة من "حسابي" بكود يوصله، وبعدها يقدر يدخل بكود من غير كلمة السر.
+مقفول لحد ما تعمل الخطوات دي:
+
+1. Firebase Console ← **Authentication** ← Sign-in method ← **Phone** ← Enable. (لازم خطة Blaze؛ كل رسالة SMS بفلوس حسب الدولة، فحط Budget alert.)
+2. نفس الصفحة ← Settings ← **SMS region policy**: اسمح لمصر بس (Allow ← Egypt)، عشان محدش يبعت رسايل لدول تانية على حسابك.
+3. Authentication ← Settings ← **Authorized domains**: اتأكد إن `arrivo-932e4.web.app` موجود.
+4. في `public/js/firebase-config.js` غيّر:
+   ```js
+   export const phoneLogin = true;
+   ```
+   وبعدين `firebase deploy`.
+
 ## الحسابات بتتحسب إزاي؟
 
 لكل أوردر اتوصّل:

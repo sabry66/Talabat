@@ -1,6 +1,6 @@
 feature,area,priority,original,clone,notes
 Sign up with email and password,account,must,yes,yes,
-Sign in with phone number + SMS code,account,should,yes,no,Arrivo uses email; SMS costs money
+Sign in with phone number + SMS code,account,should,yes,partial,built (link from account then sign in by code; works in demo and emulator); turns on after enabling Phone in Firebase (SMS costs)
 Sign in with Google or Apple,account,could,yes,no,
 Forgot password by email,account,must,yes,yes,
 Edit profile (name phone),account,must,yes,yes,

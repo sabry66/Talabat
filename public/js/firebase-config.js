@@ -17,5 +17,8 @@ export const firebaseConfig = {
 // Firebase Console ← Project settings ← Cloud Messaging ← Web Push certificates ← Generate key pair، وانسخ المفتاح هنا.
 export const pushVapidKey = '';
 
+// 📱 الدخول برقم الموبايل بكود SMS. خليها false لحد ما تفعّل Phone في Firebase (الرسايل بفلوس، شوف SETUP.md)
+export const phoneLogin = false;
+
 // للمطورين: true لتشغيل التطبيق على Firebase Emulators على جهازك
 export const useEmulators = false;
