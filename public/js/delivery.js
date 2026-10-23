@@ -1,11 +1,12 @@
 // صفحة المندوب: الأوردرات المتاحة، استلامها من المطعم وتوصيلها، وحساب أرباحه
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
+import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
 import { orderSplit, sum, missingItems, missingRefund, paidTotal } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
-  esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
+  esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
   renderAuthForm, lineOptions, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, paymentLabel,
 } from './ui.js';
 
@@ -87,8 +88,9 @@ function alertNew() {
   knownAvailable = ids;
   document.title = ids.size ? `(${ids.size}) أوردرات متاحة - ${baseTitle}` : baseTitle;
   if (fresh.length) {
-    beep();
+    alarm();
     toast('🔔 فيه أوردر جديد متاح!');
+    notify('🛵 أوردر جديد متاح', fresh.length > 1 ? `${fresh.length} أوردرات جديدة مستنية مندوب` : 'فيه أوردر جديد مستني مندوب، الحق خده', { tag: 'available', url: `${location.origin}/delivery.html` });
   }
 }
 
@@ -209,11 +211,13 @@ function drawAvailable(body) {
       ${full ? '<small>وصلت للحد. وصّل الأوردرات اللي معاك الأول وبعدين تقدر تاخد جديد.</small>' : ''}
     </div>` : '';
   if (!available.length) {
-    body.innerHTML = `${loadBar}<div class="empty-state"><div class="big">☕</div><h2>مفيش أوردرات متاحة دلوقتي</h2><p class="muted">أول ما مطعم يقبل أوردر هيظهر هنا بصوت تنبيه.</p></div>`;
+    body.innerHTML = `${loadBar}${notifyButton()}<div class="empty-state"><div class="big">☕</div><h2>مفيش أوردرات متاحة دلوقتي</h2><p class="muted">أول ما مطعم يقبل أوردر هيظهر هنا بصوت تنبيه.</p></div>`;
+    bindNotifyButton(body, drawTab);
     return;
   }
-  body.innerHTML = `${loadBar}<div class="trips">${available.map((o) => tripCard(o,
+  body.innerHTML = `${loadBar}${notifyButton()}<div class="trips">${available.map((o) => tripCard(o,
     `<button class="btn primary" data-claim="${o.id}" type="button" ${full ? 'disabled' : ''}>${full ? '🔒 وصّل اللي معاك الأول' : '✋ هاخد الأوردر ده'}</button>`)).join('')}</div>`;
+  bindNotifyButton(body, drawTab);
   body.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', async () => {
     b.disabled = true;
     try {

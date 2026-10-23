@@ -52,7 +52,7 @@ Restaurant earnings report,partners,should,yes,yes,
 Rider app: available orders claim and statuses,partners,must,yes,yes,
 Rider sees drop-off location before accepting,partners,should,yes,yes,riders ask for this in reviews
 Rider earnings and cash settlement,partners,must,yes,yes,
-Rider loud alerts and vibration,partners,should,yes,partial,sound only while page is open
+Rider loud alerts and vibration,partners,should,yes,yes,loud two-tone alarm + vibration + notification while the app is open (closed app needs push)
 Admin: zones fees and commission,admin,must,yes,yes,
 Admin: users ban delete and staff roles,admin,must,yes,yes,
 Admin: finance per restaurant and rider,admin,must,yes,yes,

@@ -2,13 +2,14 @@
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
+import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
 import { renderOffersEditor } from './offers-editor.js';
 import { orderSplit, sum, missingItems, missingValue } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import { ratingOf, stars } from './ratings.js';
 import {
-  esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, timeAgo, shortId,
+  esc, fmt, toast, errorMessage, loader, demoBanner, isToday, timeAgo, shortId,
   renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, orderCard, restaurantLogo,
 } from './ui.js';
 
@@ -96,7 +97,8 @@ function alertNewOrders() {
   knownNew = ids;
   document.title = ids.size ? `(${ids.size}) طلبات جديدة - ${baseTitle}` : baseTitle;
   if (fresh.length) {
-    beep();
+    alarm();
+    notify('🔔 طلب جديد', fresh.length > 1 ? `وصلك ${fresh.length} طلبات جديدة` : 'وصلك طلب جديد، اقبله بسرعة', { tag: 'new-orders', url: `${location.origin}/restaurant.html` });
     toast(`🔔 وصلك ${fresh.length > 1 ? `${fresh.length} طلبات جديدة` : 'طلب جديد'}!`);
   }
 }
@@ -125,7 +127,8 @@ function drawHead() {
       </div>
       ${r.blocked ? '' : `<button class="btn ${open ? '' : 'primary'}" id="toggleOpen" type="button">${open ? 'اقفل المطعم' : 'افتح المطعم'}</button>`}
     </section>
-    ${r.blocked ? '<p class="warn">⛔ المطعم موقوف من إدارة أريفو ومش ظاهر للعملاء. كلّم خدمة العملاء من تبويب "🎧 الدعم".</p>' : ''}`;
+    ${r.blocked ? '<p class="warn">⛔ المطعم موقوف من إدارة أريفو ومش ظاهر للعملاء. كلّم خدمة العملاء من تبويب "🎧 الدعم".</p>' : notifyButton()}`;
+  bindNotifyButton(document.getElementById('dashHead'), drawHead);
   document.getElementById('toggleOpen')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     try {

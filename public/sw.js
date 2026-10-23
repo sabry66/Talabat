@@ -32,3 +32,14 @@ self.addEventListener('fetch', (e) => {
       .catch(() => caches.match(e.request, { ignoreSearch: true })),
   );
 });
+
+// دوسة على الإشعار: نفتح الصفحة اللي الإشعار جاي منها (أو نرجع لها لو مفتوحة)
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || '/';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    const same = list.find((c) => c.url === url) || list.find((c) => new URL(c.url).pathname === new URL(url).pathname);
+    if (same) return same.focus().then((c) => (c && c.url !== url ? c.navigate(url) : c));
+    return self.clients.openWindow(url);
+  }));
+});

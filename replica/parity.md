@@ -1,6 +1,6 @@
-## Parity: 82.0 / 100
+## Parity: 82.7 / 100
 
-features 82.0  (62 counted, must-haves 29 of 30 done)
+features 82.7  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
@@ -12,8 +12,8 @@ Not shippable yet: 1 must-have features are not done.
 - account                       78.6  (6 features)
 - discovery                     88.1  (9 features)
 - menu                          90.9  (4 features)
-- partners                      91.3  (9 features)
 - after order                   94.1  (7 features)
+- partners                      95.7  (9 features)
 - offers                       100.0  (3 features)
 - cart                         100.0  (1 features)
 - admin                        100.0  (4 features)
@@ -29,7 +29,6 @@ Not shippable yet: 1 must-have features are not done.
 - [should] after order: Refunds handled through support, partial  (manual by admin; no refund record yet)
 - [should] menu: Note per item, partial  (one note per order only)
 - [should] partners: Busy mode / change prep time quickly, partial  (prep time editable in settings only)
-- [should] partners: Rider loud alerts and vibration, partial  (sound only while page is open)
 - [should] platform: iPhone app in the App Store, partial  (installable web app on iPhone; not in App Store)
 - [should] tracking: Accurate ETA that updates, partial  (fixed time range per restaurant)
 - [could] account: Sign in with Google or Apple, no

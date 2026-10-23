@@ -11,6 +11,7 @@ import {
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS, lineOptions,
 } from './ui.js';
 import { renderSupport } from './support.js';
+import { alarm, notify } from './notify.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
 import { hasOptions, resolveOptions, lineKey } from './options.js';
 import { ratingOf, ratingValue, ratingBadge, stars } from './ratings.js';
@@ -1064,8 +1065,61 @@ function renderOrder(id) {
   app.innerHTML = loader();
   setCleanup(backend.watchOrder(id, (o) => {
     if (!o) return renderNotFound();
+    orderAlerts(o);
     drawOrder(o);
   }));
+}
+
+// ---------- تنبيهات الطلب (تغيير المندوب والحالة) ----------
+
+const DRIVER_SEEN = 'arrivo_driver_seen';
+const ENDED = ['delivered', 'cancelled', 'rejected'];
+const readSeen = () => { try { return JSON.parse(localStorage.getItem(DRIVER_SEEN)) || {}; } catch { return {}; } };
+const writeSeen = (m) => { try { localStorage.setItem(DRIVER_SEEN, JSON.stringify(m)); } catch { /* مفيش تخزين */ } };
+const lastStatus = {};
+
+// بنفتكر آخر مندوب شوفناه لكل طلب، ولو اتغير (اعتذر أو اتبدل) نعرّف العميل بصوت ورسالة تفضل ظاهرة
+function orderAlerts(o) {
+  const url = `${location.origin}/#/order/${o.id}`;
+  if (lastStatus[o.id] && lastStatus[o.id] !== o.status) {
+    notify(`طلبك من ${o.restaurantName}`, `${ORDER_STATUSES[o.status]?.icon || ''} ${ORDER_STATUSES[o.status]?.label || ''}`, { tag: `order-${o.id}`, url });
+  }
+  lastStatus[o.id] = o.status;
+
+  const all = readSeen();
+  const prev = all[o.id];
+  if (ENDED.includes(o.status)) {
+    if (prev) { delete all[o.id]; writeSeen(all); }
+    return;
+  }
+  const cur = o.driverUid || '';
+  let note = prev?.note || null;
+  if (prev && prev.uid !== cur) {
+    if (!cur) note = { kind: 'released', name: prev.name };
+    else if (prev.uid || note?.kind === 'released') note = { kind: 'switched', name: o.driverName || '' };
+    else note = null;
+    if (note) {
+      const msg = note.kind === 'released'
+        ? 'المندوب اعتذر عن طلبك، وبندوّر على مندوب تاني دلوقتي'
+        : `طلبك اتنقل لمندوب جديد: ${o.driverName || ''}`;
+      alarm({ times: 1 });
+      toast(`🔄 ${msg}`);
+      notify('🔄 المندوب اتغير', msg, { tag: `order-${o.id}`, url });
+    } else toast(`🛵 ${o.driverName || 'مندوب'} مسك طلبك`);
+  }
+  all[o.id] = { uid: cur, name: o.driverName || '', note };
+  // منخليش اللستة تكبر على الفاضي
+  const ids = Object.keys(all);
+  if (ids.length > 30) ids.slice(0, ids.length - 30).forEach((k) => delete all[k]);
+  writeSeen(all);
+}
+
+function driverNote(o) {
+  const note = readSeen()[o.id]?.note;
+  if (!note || ENDED.includes(o.status)) return '';
+  return note.kind === 'released'
+    ? `<p class="driver-changed">🔄 المندوب${note.name ? ` (${esc(note.name)})` : ''} اعتذر عن طلبك. بندوّر على مندوب تاني دلوقتي، وطلبك لسه شغال ومش محتاج تعمل حاجة.</p>`
+    : `<p class="driver-changed">🔄 طلبك اتنقل لمندوب جديد: <b>${esc(note.name)}</b>. بياناته تحت، وده الرقم اللي هيكلمك.</p>`;
 }
 
 function drawOrder(o) {
@@ -1097,6 +1151,7 @@ function drawOrder(o) {
               ${historyAt(s) ? `<span class="muted small">${new Date(historyAt(s)).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' })}</span>` : ''}
             </li>`).join('')}
         </ol>
+        ${driverNote(o)}
         ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
         ${missingPanel(o)}
         ${reviewPanel(o)}
