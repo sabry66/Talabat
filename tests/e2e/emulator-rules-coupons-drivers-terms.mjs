@@ -288,6 +288,20 @@ let r2b = await fetch(docUrl(`users/${su.localId}?updateMask.fieldPaths=terms`),
 console.log('update terms dropping transfer ->', r2b.status);
 let r3 = await fetch(docUrl(`users/${su.localId}?updateMask.fieldPaths=terms`), { method: 'PATCH', headers: asUser, body: JSON.stringify({ fields: { terms: { mapValue: { fields: { version: { stringValue: '2027-01-01' }, at: { integerValue: '2' }, transfer: { booleanValue: true } } } } } }) });
 console.log('update own terms ->', r3.status);
+
+// ---- المفضلة: لستة بحد أقصى 50، ومينفعش تتلزق في تعديل دور أو حاجة تانية
+const favPatch = (fields, mask) => fetch(docUrl(`users/${su.localId}?${mask.map(m => 'updateMask.fieldPaths=' + m).join('&')}`), { method: 'PATCH', headers: asUser, body: JSON.stringify({ fields }) });
+const ids = (n) => ({ arrayValue: { values: Array.from({ length: n }, (_, i) => ({ stringValue: 'r' + i })) } });
+const favChecks = [
+  ['validFavorites', await favPatch({ favorites: ids(3) }, ['favorites']), 200],
+  ['favorites50', await favPatch({ favorites: ids(50) }, ['favorites']), 200],
+  ['favorites51', await favPatch({ favorites: ids(51) }, ['favorites']), 403],
+  ['favoritesNotList', await favPatch({ favorites: { stringValue: 'x' } }, ['favorites']), 403],
+  ['favoritesPlusRole', await favPatch({ favorites: ids(1), role: { stringValue: 'admin' } }, ['favorites', 'role']), 403],
+];
+const favBad = favChecks.filter(([, r, want]) => r.status !== want);
+favChecks.forEach(([n, r, want]) => console.log(`${n} -> ${r.status} (want ${want})`));
+if (favBad.length) errs.push('favorites rules: ' + favBad.map(x => x[0]).join(','));
 const custDoc = (await (await fetch(docUrl('users?pageSize=50'), { headers: H })).json()).documents.find(d => d.fields.email?.stringValue === 'cust@test.com');
 console.log('UI signup stored terms:', custDoc.fields.terms?.mapValue.fields.version.stringValue, '| transfer:', custDoc.fields.terms?.mapValue.fields.transfer?.booleanValue);
 console.log('errors:', errs); await b.close();

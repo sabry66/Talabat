@@ -1,6 +1,6 @@
-## Parity: 79.3 / 100
+## Parity: 80.6 / 100
 
-features 79.3  (62 counted, must-haves 29 of 30 done)
+features 80.6  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
@@ -10,7 +10,7 @@ Not shippable yet: 1 must-have features are not done.
 - checkout                      53.8  (7 features)
 - account                       64.3  (6 features)
 - platform                      76.9  (5 features)
-- discovery                     78.6  (9 features)
+- discovery                     88.1  (9 features)
 - menu                          90.9  (4 features)
 - partners                      91.3  (9 features)
 - after order                   94.1  (7 features)
@@ -24,7 +24,6 @@ Not shippable yet: 1 must-have features are not done.
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] checkout: Schedule an order for later, no
-- [should] discovery: Favourite restaurants, no
 - [should] discovery: Only show restaurants that deliver to my area, no  (zones are platform-wide; restaurants not tied to zones)
 - [should] platform: English language, no
 - [should] tracking: Rider location live on a map, no

@@ -189,6 +189,9 @@ export function createBackend(config, { useEmulators }) {
       await updateDoc(doc(users, uid), { name, address, location: location ?? null });
     },
 
+    // المفضلة: لستة أرقام المطاعم في مستند العميل
+    setFavorite: (uid, restaurantId, on) => updateDoc(doc(users, uid), { favorites: on ? arrayUnion(restaurantId) : arrayRemove(restaurantId) }),
+
     // بالإيميل أو اسم المستخدم (@ahmed) أو رقم الموبايل
     async findUser(identifier) {
       const id = String(identifier || '').trim();

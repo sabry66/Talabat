@@ -93,6 +93,7 @@ function updateHeader() {
        ${u.role === 'driver' ? '<a href="delivery.html" class="nav-link">🛵 صفحة المندوب</a>' : ''}
        <a href="#/offers" class="nav-link" data-drawer-label="🔥 عروض وخصومات">🔥 العروض</a>
        <a href="#/orders" class="nav-link" data-drawer-label="🧾 طلباتي">طلباتي</a>
+       <a href="#/favorites" class="nav-link" title="المفضلة" aria-label="المفضلة" data-drawer-label="❤️ المفضلة">❤️</a>
        <a href="#/support" class="nav-link" title="خدمة العملاء" data-drawer-label="🎧 خدمة العملاء">🎧</a>
        <a href="#/account" class="nav-link">👤 ${esc(u.name.split(' ')[0] || 'حسابي')}${u.username ? ` <span class="uname">@${esc(u.username)}</span>` : ''}</a>`
     : u === null ? `<a href="#/offers" class="nav-link" data-drawer-label="🔥 عروض وخصومات">🔥 العروض</a>
@@ -197,7 +198,16 @@ function drawResults() {
 
   // شريط العروض: بيظهر في الرئيسية لما مفيش بحث
   const deals = wantItems ? [] : dealsList(visible);
+  const favs = wantItems || ui.category !== 'all' ? [] : favoriteRestaurants();
   box.innerHTML = `
+    ${favs.length ? `
+      <div class="list-head"><h2>❤️ مطاعمك المفضلة</h2><a href="#/favorites" class="link">عرض الكل ←</a></div>
+      <section class="fav-strip">${favs.slice(0, 12).map((r) => `
+        <a class="fav-chip ${r.isOpen === false ? 'closed' : ''}" href="#/restaurant/${r.id}">
+          <span class="fav-logo" style="background:${esc(r.color)}">${restaurantLogo(r, 56)}</span>
+          <b>${esc(r.name)}</b>
+          <small class="muted">${r.isOpen === false ? 'مغلق' : `🕒 ${r.time[0]}-${r.time[1]} د`}</small>
+        </a>`).join('')}</section>` : ''}
     ${deals.length ? `
       <div class="list-head"><h2>🔥 عروض وخصومات</h2><a href="#/offers" class="link">عرض الكل ←</a></div>
       <section class="deals-strip">${deals.slice(0, 12).map(itemCard).join('')}</section>` : ''}
@@ -384,11 +394,96 @@ function openItemSheet(r, it, onDone) {
   sh.querySelector('[data-close]').focus({ preventScroll: true });
 }
 
+// ---------- المفضلة ----------
+
+const MAX_FAVORITES = 50;
+const favorites = () => state.user?.favorites || [];
+const isFavorite = (id) => favorites().includes(id);
+
+function favBtn(id, big = false) {
+  const on = isFavorite(id);
+  return `<button class="fav-btn ${big ? 'big' : ''} ${on ? 'on' : ''}" data-fav="${esc(id)}" type="button"
+    aria-pressed="${on}" aria-label="${on ? 'شيل من المفضلة' : 'ضيف للمفضلة'}" title="${on ? 'شيل من المفضلة' : 'ضيف للمفضلة'}">${on ? '❤️' : '🤍'}</button>`;
+}
+
+// كل القلوب اللي في الصفحة بتتحدث مع بعض
+function paintFavs(id) {
+  const on = isFavorite(id);
+  app.querySelectorAll(`[data-fav="${CSS.escape(id)}"]`).forEach((b) => {
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+    b.ariaLabel = b.title = on ? 'شيل من المفضلة' : 'ضيف للمفضلة';
+    b.textContent = on ? '❤️' : '🤍';
+  });
+}
+
+// الرئيسية بنحدث النتايج بس (عشان البحث والسكرول ميتغيروش)، وصفحة المفضلة كلها
+function redrawFavorites() {
+  if (page === '') drawResults();
+  if (page === 'favorites') renderFavorites();
+}
+
+async function toggleFavorite(id) {
+  if (!state.user) {
+    toast('سجّل دخولك الأول عشان تحفظ مطاعمك المفضلة ❤️');
+    location.hash = '#/login/favorites';
+    return;
+  }
+  const on = !isFavorite(id);
+  if (on && favorites().length >= MAX_FAVORITES) return toast(`أقصى عدد ${MAX_FAVORITES} مطعم في المفضلة`);
+  const before = favorites();
+  // بنغيّر على طول ومنستناش السيرفر، ولو فشل نرجّعه
+  state.user = { ...state.user, favorites: on ? [...before, id] : before.filter((x) => x !== id) };
+  paintFavs(id);
+  toast(on ? 'اتضاف للمفضلة ❤️' : 'اتشال من المفضلة');
+  redrawFavorites();
+  try {
+    await backend.setFavorite(state.user.uid, id, on);
+  } catch (err) {
+    state.user = { ...state.user, favorites: before };
+    paintFavs(id);
+    redrawFavorites();
+    toast(errorMessage(err));
+  }
+}
+
+// القلب جوه كارت المطعم (اللي هو لينك)، فمنخليش الدوسة تفتح المطعم
+app.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-fav]');
+  if (!b) return;
+  e.preventDefault();
+  e.stopPropagation();
+  toggleFavorite(b.dataset.fav);
+});
+
+// المطاعم المفضلة اللي لسه ظاهرة للعملاء، بنفس ترتيب الإضافة (الأحدث الأول)
+const favoriteRestaurants = () => favorites().slice().reverse()
+  .map((id) => state.restaurants.find((r) => r.id === id))
+  .filter((r) => r && !r.blocked && r.menu.some((sec) => sec.items.length));
+
+function renderFavorites() {
+  if (state.user === undefined || !state.restaurants || !state.settings) { app.innerHTML = loader(); return; }
+  if (!state.user) { location.hash = '#/login/favorites'; return; }
+  const list = favoriteRestaurants();
+  list.sort((a, b) => (b.isOpen !== false) - (a.isOpen !== false));
+  app.innerHTML = `
+    <a href="#/" class="back">→ رجوع للرئيسية</a>
+    <h1 class="page-title">❤️ المفضلة</h1>
+    ${list.length ? `<section class="grid">${list.map(restaurantCard).join('')}</section>`
+      : `<div class="panel empty-state">
+          <div class="big">🤍</div>
+          <p>لسه مضفتش مطاعم للمفضلة.</p>
+          <p class="muted">دوس على القلب 🤍 اللي على أي مطعم، وهتلاقيه هنا على طول المرة الجاية.</p>
+          <a href="#/" class="btn primary">تصفح المطاعم</a>
+        </div>`}`;
+}
+
 function restaurantCard(r) {
   const closed = r.isOpen === false;
   return `
     <a class="card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
       <div class="card-cover" style="background:${esc(r.color)}">${restaurantLogo(r, 140)}
+        ${favBtn(r.id)}
         ${closed ? '<span class="closed-tag">مغلق الآن</span>' : hasOffers(r) ? `<span class="promo">🏷️ ${promoText(r)}</span>` : ''}
       </div>
       <div class="card-body">
@@ -416,7 +511,7 @@ function renderRestaurant(id) {
     <section class="rest-header" style="background:${esc(r.color)}">
       <div class="rest-emoji">${restaurantLogo(r, 110)}</div>
       <div>
-        <h1>${esc(r.name)}</h1>
+        <h1>${esc(r.name)} ${favBtn(r.id, true)}</h1>
         <p>${esc((r.tags || []).join(' • '))}</p>
         <p class="meta">${ratingOf(r).avg ? `⭐ ${ratingOf(r).avg.toLocaleString('ar-EG')} (${ratingOf(r).count.toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
         ${hasOffers(r) ? `<span class="promo static">🏷️ ${promoText(r)}</span>` : ''}
@@ -1208,6 +1303,7 @@ function router() {
     case '': renderHome(); break;
     case 'restaurant': renderRestaurant(id); break;
     case 'offers': renderOffers(); break;
+    case 'favorites': renderFavorites(); break;
     case 'join': app.innerHTML = `<a href="#/" class="back">→ رجوع للرئيسية</a>${joinCards()}`; break;
     case 'cart': renderCart(); break;
     case 'checkout': renderCheckout(); break;
@@ -1234,7 +1330,7 @@ Cart.subscribe(updateHeader);
 
 // الصفحات اللي بتعتمد على بيانات المطاعم والإعدادات (والباقي زي الدخول والحساب الجديد
 // منعيدش رسمها، عشان اللي العميل بيكتبه في الفورم ميتمسحش لما البيانات توصل)
-const DATA_PAGES = ['', 'restaurant', 'cart', 'offers'];
+const DATA_PAGES = ['', 'restaurant', 'cart', 'offers', 'favorites'];
 // أو أي صفحة لسه بتعرض "جاري التحميل" ومستنية البيانات (زي الدفع وخدمة العملاء)
 const needsData = () => DATA_PAGES.includes(page) || Boolean(app.querySelector(':scope > .loader'));
 

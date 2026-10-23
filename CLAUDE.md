@@ -7,7 +7,7 @@
 ## فين إيه (public/)
 | الملف | فيه |
 |---|---|
-| `index.html` + `js/app.js` | تطبيق العميل (hash routing): `router`, `renderHome/drawResults`, `renderRestaurant/drawMenu`, `openItemSheet` (الحجم والإضافات), `renderCart/couponBox`, `renderCheckout`, `renderOrder/drawOrder/reorder`, `renderOffers`, `renderAccount`, `renderSupportPage` |
+| `index.html` + `js/app.js` | تطبيق العميل (hash routing): `router`, `renderHome/drawResults`, `renderRestaurant/drawMenu`, `openItemSheet` (الحجم والإضافات), `renderCart/couponBox`, `renderCheckout`, `renderOrder/drawOrder/reorder`, `renderOffers`, `renderFavorites/toggleFavorite`, `renderAccount`, `renderSupportPage` |
 | `restaurant.html` + `js/restaurant-dashboard.js` | لوحة المطعم: الطلبات، `menu-editor.js` (المنيو + محرر الاختيارات)، `offers-editor.js` (الخصومات) |
 | `delivery.html` + `js/delivery.js` | المندوب: المتاح (حد الأوردرات `maxOrders`)، الحالي، حسابي |
 | `admin.html` + `js/admin.js` | الأدمن والموظف: `drawOverview/Requests/Support/Finance/Restaurants/Zones/Drivers/Users/Orders` + `admin-coupons.js` |

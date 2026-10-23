@@ -171,6 +171,15 @@ export function createBackend() {
       commit();
     },
 
+    async setFavorite(uid, restaurantId, on) {
+      const u = db().users[uid];
+      const list = (u.favorites || []).filter((x) => x !== restaurantId);
+      if (on) list.push(restaurantId);
+      if (list.length > 50) throw new Error('permission-denied');
+      u.favorites = list;
+      commit();
+    },
+
     // بالإيميل أو اسم المستخدم (@ahmed) أو رقم الموبايل
     async findUser(identifier) {
       const id = String(identifier || '').trim();

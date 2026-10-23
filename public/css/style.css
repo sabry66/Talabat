@@ -900,3 +900,31 @@ body.sheet-open { overflow: hidden; }
   .container.wide { max-width: 1560px; }
 }
 .track { overflow: hidden; } /* حركة الموتوسيكل متطلعش برّه الشاشة */
+
+/* ---------- المفضلة ---------- */
+.fav-btn {
+  position: absolute; top: 8px; inset-inline-end: 8px; z-index: 2;
+  width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(255, 255, 255, .92); box-shadow: var(--shadow);
+  font-size: 1.15rem; line-height: 1; display: grid; place-items: center;
+  transition: transform .15s;
+}
+.fav-btn:active { transform: scale(.85); }
+.fav-btn.on { animation: fav-pop .3s ease; }
+@keyframes fav-pop { 50% { transform: scale(1.25); } }
+.fav-btn.big { position: static; display: inline-grid; vertical-align: middle; width: 42px; height: 42px; margin-inline-start: 6px; font-size: 1.2rem; }
+.fav-strip {
+  display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 10px; margin-bottom: 8px;
+  scroll-snap-type: x mandatory; scrollbar-width: none;
+}
+.fav-strip::-webkit-scrollbar { display: none; }
+.fav-chip {
+  flex: 0 0 104px; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 6px;
+  text-align: center; color: inherit; text-decoration: none;
+}
+.fav-chip b { font-size: .85rem; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fav-chip small { font-size: .72rem; }
+.fav-chip.closed { opacity: .6; }
+.fav-logo { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 1.8rem; overflow: hidden; }
+.fav-logo .logo-img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; box-shadow: none; }
