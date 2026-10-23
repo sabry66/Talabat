@@ -30,6 +30,10 @@ const o = await mk();
 await o.goto(B + 'restaurant.html'); await login(o, 'owner@demo.com'); await o.waitForSelector(`[data-id="${orderId}"][data-status="preparing"]`);
 await o.click(`[data-id="${orderId}"][data-status="preparing"]`); await o.waitForSelector(`[data-pack^="${orderId}:"]`);
 ok(await o.$eval(`[data-id="${orderId}"][data-status="ready"]`, e => e.disabled), 'ready is locked until items are ticked');
+{ const card = (await o.textContent(`.order-card:has([data-id="${orderId}"])`)).replace(/[٠-٩]/g, x => '٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/\s+/g, ' ');
+  const ord0 = (await db(o)).orders[orderId];
+  ok(new RegExp(`تمن الأكل\\s*${ord0.totals.subtotal}`).test(card) && card.includes(`هتقبض ${ord0.totals.subtotal}`) && card.includes(`${ord0.totals.total} ج.م شامل التوصيل`),
+    `restaurant card: food ${ord0.totals.subtotal} (not ${ord0.totals.total}), cash from rider, customer total marked "شامل التوصيل"`); }
 await o.click(`[data-pack="${orderId}:0"]`); await o.waitForTimeout(150);
 ok(await o.$eval(`[data-id="${orderId}"][data-status="ready"]`, e => e.disabled), 'still locked with one item left');
 await o.click(`[data-pack="${orderId}:1"]`); await o.waitForTimeout(150);

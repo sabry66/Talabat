@@ -1,7 +1,7 @@
 // أدوات مشتركة بين صفحات التطبيق ولوحة المطعم ولوحة الأدمن
 import { ORDER_STATUSES, PAYMENT_LABELS, LEGAL_VERSION } from './data.js';
 import { thumb } from './upload.js';
-import { paidTotal, missingItems, missingValue } from './finance.js';
+import { missingItems, missingValue, orderSplit } from './finance.js';
 
 export const fmt = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ج.م`;
 
@@ -446,6 +446,20 @@ export function renderDashNav(user, backend, onAccount) {
 // اختيارات الصنف (الحجم والإضافات) تحت اسمه
 export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '');
 
+// فلوس الطلب من ناحية المطعم: تمن الأكل بس (التوصيل مش بتاعه)، وصافيه بعد العمولة، وهيقبضها من مين
+function restaurantMoney(o) {
+  const s = orderSplit(o);
+  const food = o.totals.subtotal - s.missing;
+  return `
+    <footer class="rest-money">
+      <div><span>تمن الأكل${s.missing ? ' (بعد الناقص)' : ''}</span><strong>${fmt(food)}</strong></div>
+      ${s.commission ? `<div class="small"><span>عمولة أريفو</span><span>− ${fmt(s.commission)}</span></div>
+      <div><span>صافي ليك</span><strong>${fmt(s.restaurant)}</strong></div>` : ''}
+      <div class="small muted">${s.payRestaurant ? `💵 هتقبض ${fmt(s.payRestaurant)} كاش من المندوب وقت الاستلام` : '🏦 فلوسك هتتحاسب عليها مع أريفو'}
+        • العميل بيدفع ${fmt(o.totals.total)} شامل التوصيل (${paymentLabel(o.payment)})</div>
+    </footer>`;
+}
+
 // checklist: Set بأرقام الأصناف اللي المطعم علّم عليها (للطلبات اللي بتتجهز) — "جاهز" بيتقفل لحد ما يعلّم على الكل
 export function orderCard(o, actions = [], { showRestaurant = false, checklist = null } = {}) {
   const map = mapLink(o.location);
@@ -475,10 +489,7 @@ export function orderCard(o, actions = [], { showRestaurant = false, checklist =
       </div>
       ${o.driverUid ? `<div class="driver-tag small">🛵 المندوب: ${esc(o.driverName)}${o.driverUsername ? ` <span class="uname">@${esc(o.driverUsername)}</span>` : ''} • <a href="tel:${esc(o.driverPhone)}" dir="ltr">${esc(o.driverPhone)}</a></div>`
         : ['preparing', 'ready'].includes(o.status) ? '<div class="driver-tag waiting small">⏳ مستني مندوب ياخده</div>' : ''}
-      <footer>
-        <strong>${fmt(paidTotal(o))}</strong>
-        <span class="small muted">${paymentLabel(o.payment)}</span>
-      </footer>
+      ${restaurantMoney(o)}
       ${actions.length ? `<div class="order-actions">
         ${actions.map((a) => `<button class="btn small ${a.cls || ''}" data-id="${o.id}" data-status="${a.status}" type="button"
           ${a.status === 'ready' && !allPacked ? 'disabled title="علّم على كل الأصناف الأول"' : ''}>${a.status === 'ready' && !allPacked ? `📦 علّم على الأصناف (${checklist.size}/${o.lines.length})` : a.label}</button>`).join('')}
