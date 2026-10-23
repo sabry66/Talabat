@@ -136,6 +136,13 @@ function renderHome() {
       </div>
     </section>
 
+    <section class="trust-strip" aria-label="ليه أريفو">
+      <span>✅ مفيش رسوم مخفية</span>
+      <span>🧾 راجع طلبك قبل ما تدفع</span>
+      <span>💸 الاسترجاع بنفس طريقة الدفع</span>
+      <span>🎧 موظف حقيقي بيرد عليك</span>
+    </section>
+
     <section class="cats">
       ${CATEGORIES.map((c) => `
         <button class="cat ${ui.category === c.id ? 'active' : ''}" data-cat="${c.id}" type="button">
@@ -697,6 +704,7 @@ function renderCart() {
         ${zoneSelect()}
         ${perOrder ? couponBox(r, t) : ''}
         ${summary(t, currentZone(), Cart.usableCoupons(r, state.settings).map((c) => c.code))}
+        ${REFUND_NOTE}
         ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا، مش هتقدر تطلب دلوقتي.</p>' : ''}
         ${belowMin ? `<p class="warn">الحد الأدنى للطلب ${fmt(r.minOrder)} — ضيف ${fmt(r.minOrder - t.subtotal)} كمان</p>` : ''}
         <a href="#/checkout" class="btn primary block ${blocked ? 'disabled' : ''}" ${blocked ? 'aria-disabled="true"' : ''}>إتمام الطلب</a>
@@ -806,8 +814,12 @@ function summary(t, zone, codes = []) {
       ${t.service ? `<div><span>رسوم الخدمة</span><span>${fmt(t.service)}</span></div>` : ''}
       ${t.discount ? `<div class="discount"><span>الخصم${codes.length ? ` (<span dir="ltr">${codes.map(esc).join(' + ')}</span>)` : ''}</span><span>− ${fmt(t.discount)}</span></div>` : ''}
       <div class="grand"><span>الإجمالي</span><span>${fmt(t.total)}</span></div>
+      ${zone === null ? '' : '<p class="no-hidden">✅ ده الإجمالي النهائي اللي هتدفعه. مفيش رسوم مخفية ولا حاجة هتتزود عند الباب.</p>'}
     </div>`;
 }
+
+// سياسة الاسترجاع باختصار (التفاصيل في الشروط)
+const REFUND_NOTE = '<p class="refund-note muted small">💸 لو حصلت مشكلة واتفقنا على استرجاع، الفلوس بترجعلك <b>بنفس طريقة الدفع</b> مش رصيد. <a href="terms.html#t6" target="_blank" rel="noopener">سياسة الاسترجاع</a></p>';
 
 // ---------- إتمام الطلب ----------
 
@@ -1096,6 +1108,7 @@ function drawOrder(o) {
         <h3>تفاصيل الطلب</h3>
         ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}${lineOptions(l)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
         ${summary(o.totals, undefined, o.promos || (o.promo ? [o.promo] : []))}
+        ${REFUND_NOTE}
         ${missingDeduction(o) ? `<div class="summary"><div class="discount"><span>ناقص (اتخصم)</span><span>− ${fmt(missingDeduction(o))}</span></div><div class="total"><span>دفعت</span><span>${fmt(paidTotal(o))}</span></div></div>` : ''}
       </section>
       <section class="panel">

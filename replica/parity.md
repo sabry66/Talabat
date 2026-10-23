@@ -50,5 +50,6 @@ Not shippable yet: 1 must-have features are not done.
 - Dark mode
 - Human support reply promise
 - Check order before paying + rider-confirmed refund
+- No hidden fees promise + refund to the same payment method
 - Restaurant packing checklist before ready
 - No hidden service fee

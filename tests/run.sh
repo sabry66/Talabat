@@ -31,7 +31,7 @@ trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
 
 if [[ "$MODE" == default || "$MODE" == demo || "$MODE" == full ]]; then
-  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
+  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
     run "$t" node "$HERE/e2e/$t.mjs"
   done
 fi

@@ -975,3 +975,11 @@ p.pay-note { background: var(--brand-soft); border-radius: 10px; padding: 8px 12
 .pay-admin-row.on { opacity: 1; border-color: var(--brand); }
 .pay-admin-row .check { min-height: 40px; display: flex; align-items: center; gap: 8px; margin: 0; }
 .pay-admin-row label { margin: 0; }
+
+/* ---------- مفيش رسوم مخفية + الاسترجاع ---------- */
+.trust-strip { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 14px 0 4px; padding-bottom: 2px; }
+.trust-strip::-webkit-scrollbar { display: none; }
+.trust-strip span { flex: 0 0 auto; background: var(--brand-soft); color: var(--brand); font-weight: 700; font-size: .82rem; padding: 7px 12px; border-radius: 999px; white-space: nowrap; }
+.summary .no-hidden { margin: 8px 0 0; font-size: .82rem; color: #1b7a3e; background: #e9f7ee; border-radius: 10px; padding: 8px 10px; }
+.refund-note { margin: 8px 0 0; }
+.refund-note a { font-weight: 700; }
