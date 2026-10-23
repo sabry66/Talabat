@@ -15,7 +15,7 @@ Favourite restaurants,discovery,should,yes,no,
 Only show restaurants that deliver to my area,discovery,should,yes,no,zones are platform-wide; restaurants not tied to zones
 Groceries and other shops,discovery,could,yes,partial,grocery category exists; no dedicated store flow
 Menu with sections photos and prices,menu,must,yes,yes,
-Item options and add-ons (size extras sauces),menu,must,yes,no,very common in restaurants; affects price
+Item options and add-ons (size extras sauces),menu,must,yes,yes,required or optional groups - multi-select with max - extra price per choice
 Note per item,menu,should,yes,partial,one note per order only
 Mark items unavailable,menu,must,yes,yes,
 Discounts on items,offers,should,yes,yes,
@@ -35,7 +35,7 @@ Rider location live on a map,tracking,should,yes,no,
 Call the rider,tracking,should,yes,yes,
 Accurate ETA that updates,tracking,should,yes,partial,fixed time range per restaurant
 Order history,after order,must,yes,yes,
-Reorder a past order in one tap,after order,should,yes,no,
+Reorder a past order in one tap,after order,should,yes,yes,on the order page (keeps options)
 Rate and review an order,after order,should,yes,no,
 Contact support about a specific order,after order,must,yes,yes,human staff + WhatsApp
 Report a problem with photo,after order,should,yes,no,

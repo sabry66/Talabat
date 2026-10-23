@@ -1,0 +1,52 @@
+// اختيارات وإضافات الصنف (الحجم، الإضافات، الصوصات...)
+// item.options = [{ id, name, required, multi, max, choices: [{ id, name, price, available }] }]
+// السطر في السلة ليه مفتاح: "itemId" لو مفيش اختيارات، أو "itemId|g1:c1,c2|g2:c3"
+// (من غير ui.js عشان cart.js وغيره يستوردوه من غير مشاكل)
+
+export const newOptId = (p) => p + Date.now().toString(36).slice(-4) + Math.random().toString(36).slice(2, 5);
+
+export const hasOptions = (it) => (it?.options || []).some((g) => (g.choices || []).length);
+
+// sel = { groupId: [choiceId, ...] }
+export function lineKey(itemId, sel = {}) {
+  const parts = Object.keys(sel).filter((g) => sel[g]?.length).sort()
+    .map((g) => `${g}:${[...sel[g]].sort().join(',')}`);
+  return [itemId, ...parts].join('|');
+}
+
+export function parseKey(key) {
+  const [itemId, ...parts] = String(key).split('|');
+  const sel = {};
+  parts.forEach((p) => { const [g, cs] = p.split(':'); if (g && cs) sel[g] = cs.split(','); });
+  return { itemId, sel };
+}
+
+// بيتأكد إن الاختيارات صحيحة لسه (المطعم ممكن يكون غيّرها) ويحسب الزيادة في السعر
+export function resolveOptions(item, sel = {}) {
+  let extra = 0;
+  const labels = [];
+  for (const g of item.options || []) {
+    const picked = (sel[g.id] || []).map((id) => (g.choices || []).find((c) => c.id === id));
+    if (picked.some((c) => !c || c.available === false)) return { ok: false, error: `"${g.name}" اتغيرت، اختار تاني` };
+    if (g.required && !picked.length) return { ok: false, error: `اختار ${g.name}` };
+    if (!g.multi && picked.length > 1) return { ok: false, error: `اختار حاجة واحدة بس من ${g.name}` };
+    if (g.multi && Number(g.max) > 0 && picked.length > Number(g.max)) return { ok: false, error: `أقصى حاجة ${g.max} من ${g.name}` };
+    if (picked.length) {
+      extra += picked.reduce((s, c) => s + (Number(c.price) || 0), 0);
+      labels.push(`${g.name}: ${picked.map((c) => c.name).join('، ')}`);
+    }
+  }
+  // اختيارات لمجموعات مبقتش موجودة
+  if (Object.keys(sel).some((gid) => sel[gid]?.length && !(item.options || []).some((g) => g.id === gid))) {
+    return { ok: false, error: 'الاختيارات اتغيرت، اختار تاني' };
+  }
+  return { ok: true, extra: Math.round(extra * 100) / 100, labels };
+}
+
+// أقل سعر ممكن للصنف بالإضافات الإجبارية (عشان نكتب "من X")
+export function minExtra(item) {
+  return (item.options || []).filter((g) => g.required).reduce((s, g) => {
+    const prices = (g.choices || []).filter((c) => c.available !== false).map((c) => Number(c.price) || 0);
+    return s + (prices.length ? Math.min(...prices) : 0);
+  }, 0);
+}

@@ -6,7 +6,7 @@ import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
   esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, shortId, timeAgo, mapLink,
-  renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, paymentLabel,
+  renderAuthForm, lineOptions, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, paymentLabel,
 } from './ui.js';
 
 const root = document.getElementById('app');
@@ -168,7 +168,7 @@ function tripCard(o, actions) {
           </div>
         </div>
       </div>
-      <ul class="order-lines small">${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}</li>`).join('')}</ul>
+      <ul class="order-lines small">${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}${lineOptions(l)}</li>`).join('')}</ul>
       ${o.notes ? `<p class="note small">📝 ${esc(o.notes)}</p>` : ''}
       <div class="money">
         <div><span>تحصّل من العميل</span><b>${s.cash ? fmt(s.cash) : 'مدفوع (' + paymentLabel(o.payment) + ')'}</b></div>

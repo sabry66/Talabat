@@ -16,7 +16,7 @@ FAILED=0
 run() { # اسم الاختبار، الأمر
   echo; echo "▶ $1"
   local log="$HERE/out/$1.log"
-  if "${@:2}" >"$log" 2>&1 && ! grep -qE "STUCK|STOPPED|ALLOWED ❌|❌ OLD|overflow=[1-9]|pageerror|^❌" "$log" \
+  if "${@:2}" >"$log" 2>&1 && ! grep -qE "STUCK|STOPPED|ALLOWED ❌|❌ OLD|overflow=[1-9]|pageerror|^❌|^✘|^FAILED" "$log" \
      && ! grep -qE "errors?:? \[[^]]" "$log"; then
     echo "  ✅ نجح"
   else
@@ -31,7 +31,7 @@ trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
 
 if [[ "$MODE" == default || "$MODE" == demo || "$MODE" == full ]]; then
-  for t in demo-responsive-roles demo-mobile-tabs demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
+  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
     run "$t" node "$HERE/e2e/$t.mjs"
   done
 fi

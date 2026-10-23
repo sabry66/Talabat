@@ -20,7 +20,14 @@ export const SEED_RESTAURANTS = [
     tags: ['برجر', 'وجبات سريعة'], promo: 'خصم 20% على أول طلب',
     menu: [
       { section: 'الأكثر طلبًا', items: [
-        { id: 'bh1', name: 'كلاسيك برجر', desc: 'لحم بقري 150 جم، جبنة شيدر، خس، طماطم وصوص خاص', price: 120, emoji: '🍔' },
+        { id: 'bh1', name: 'كلاسيك برجر', desc: 'لحم بقري 150 جم، جبنة شيدر، خس، طماطم وصوص خاص', price: 120, emoji: '🍔',
+          options: [
+            { id: 'gsize', name: 'الحجم', required: true, multi: false, choices: [
+              { id: 'single', name: 'سينجل', price: 0 }, { id: 'double', name: 'دبل', price: 45 }] },
+            { id: 'gext', name: 'إضافات', required: false, multi: true, max: 3, choices: [
+              { id: 'cheese', name: 'جبنة زيادة', price: 15 }, { id: 'bacon', name: 'بيف بيكون', price: 25 },
+              { id: 'jal', name: 'هالبينو', price: 10 }, { id: 'egg', name: 'بيضة', price: 10 }] },
+          ] },
         { id: 'bh2', name: 'دبل تشيز برجر', desc: 'قطعتين لحم، جبنة مضاعفة، بصل مكرمل', price: 175, emoji: '🍔' },
       ]},
       { section: 'برجر فراخ', items: [
@@ -41,7 +48,9 @@ export const SEED_RESTAURANTS = [
     tags: ['بيتزا', 'إيطالي'], promo: 'توصيل مجاني فوق 250 ج',
     menu: [
       { section: 'بيتزا', items: [
-        { id: 'pr1', name: 'مارجريتا', desc: 'صوص طماطم، موتزاريلا، ريحان', price: 130, emoji: '🍕' },
+        { id: 'pr1', name: 'مارجريتا', desc: 'صوص طماطم، موتزاريلا، ريحان', price: 130, emoji: '🍕',
+          options: [{ id: 'gsize', name: 'الحجم', required: true, multi: false, choices: [
+            { id: 's', name: 'صغيرة', price: 0 }, { id: 'm', name: 'وسط', price: 40 }, { id: 'l', name: 'كبيرة', price: 80 }] }] },
         { id: 'pr2', name: 'بيبروني', desc: 'بيبروني بقري، موتزاريلا', price: 160, emoji: '🍕' },
         { id: 'pr3', name: 'خضروات', desc: 'فلفل، زيتون، مشروم، بصل', price: 140, emoji: '🫑' },
         { id: 'pr4', name: 'سي فود', desc: 'جمبري، كاليماري، تونة', price: 210, emoji: '🦐' },

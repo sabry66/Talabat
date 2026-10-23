@@ -303,7 +303,7 @@ function drawTicket(body, t) {
         <p>📞 <a href="tel:${esc(t.phone)}" dir="ltr">${esc(t.phone)}</a></p>
         ${order ? `<h3>الطلب #${shortId(order.id)}</h3>
           <p class="small">${esc(order.restaurantName)} • ${fmt(order.totals.total)} • ${statusBadge(order.status)}</p>
-          <p class="small">${order.lines.map((l) => `${l.qty}× ${esc(l.name)}`).join('، ')}</p>
+          <p class="small">${order.lines.map((l) => `${l.qty}× ${esc(l.name)}${l.options?.length ? ` (${l.options.map(esc).join(' • ')})` : ''}`).join('، ')}</p>
           ${order.driverName ? `<p class="small">🛵 ${who(order.driverName, order.driverUsername)}</p>` : ''}` : ''}
       </section>
     </div>`;

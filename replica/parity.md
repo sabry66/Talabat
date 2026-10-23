@@ -1,30 +1,28 @@
-## Parity: 72.4 / 100
+## Parity: 75.9 / 100
 
-features 72.4  (62 counted, must-haves 28 of 30 done)
+features 75.9  (62 counted, must-haves 29 of 30 done)
 
-Not shippable yet: 2 must-have features are not done.
+Not shippable yet: 1 must-have features are not done.
 
 ## By area, weakest first
 - growth                         0.0  (2 features)
 - tracking                      50.0  (5 features)
 - checkout                      53.8  (7 features)
-- after order                   58.8  (7 features)
-- menu                          63.6  (4 features)
 - account                       64.3  (6 features)
+- after order                   70.6  (7 features)
 - discovery                     73.8  (9 features)
 - platform                      76.9  (5 features)
+- menu                          90.9  (4 features)
 - partners                      91.3  (9 features)
 - offers                       100.0  (3 features)
 - cart                         100.0  (1 features)
 - admin                        100.0  (4 features)
 
 ## Missing, in build order
-- [must] menu: Item options and add-ons (size extras sauces), no  (very common in restaurants; affects price)
 - [must] tracking: Push notifications when the app is closed, no  (only in-app updates today)
 - [should] account: Several saved addresses (home work...), no  (Arrivo keeps one address + map pin)
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] after order: Rate and review an order, no
-- [should] after order: Reorder a past order in one tap, no
 - [should] after order: Report a problem with photo, no
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] checkout: Schedule an order for later, no

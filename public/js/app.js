@@ -8,10 +8,11 @@ import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, renderAcceptTerms, needsTerms, usernameField, renderBlocked, homeFor,
-  changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS,
+  changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS, lineOptions,
 } from './ui.js';
 import { renderSupport } from './support.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
+import { hasOptions, resolveOptions, lineKey } from './options.js';
 import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
@@ -213,8 +214,7 @@ function drawResults() {
   box.querySelector('#showAllItems')?.addEventListener('click', () => { ui.showAllItems = true; drawResults(); });
   box.querySelectorAll('[data-quick-add]').forEach((b) => b.addEventListener('click', (e) => {
     e.preventDefault();
-    const [rid, itemId] = b.dataset.quickAdd.split(':');
-    if (addToCart(findRestaurant(rid), itemId)) drawResults();
+    quickAdd(b.dataset.quickAdd, drawResults);
   }));
 }
 
@@ -263,21 +263,124 @@ function renderOffers() {
       : '<p class="empty">مفيش خصومات على أصناف دلوقتي. ارجع تاني قريب 😉</p>'}`;
   app.querySelectorAll('[data-quick-add]').forEach((b) => b.addEventListener('click', (e) => {
     e.preventDefault();
-    const [rid, itemId] = b.dataset.quickAdd.split(':');
-    if (addToCart(findRestaurant(rid), itemId)) renderOffers();
+    quickAdd(b.dataset.quickAdd, renderOffers);
   }));
   updateCartBar();
 }
 
-// إضافة صنف للسلة (مع سؤال لو السلة فيها أصناف من مطعم تاني)
-function addToCart(r, itemId) {
-  if (!Cart.add(r.id, itemId)) {
+// إضافة صنف للسلة (مع سؤال لو السلة فيها أصناف من مطعم تاني). key = الصنف + اختياراته
+function addToCart(r, key, count = 1) {
+  if (!Cart.add(r.id, key, false, count)) {
     const other = cartRestaurant();
     if (!confirm(`السلة فيها أصناف من "${other?.name || 'مطعم تاني'}". تحب تفضّيها وتبدأ طلب جديد من "${r.name}"؟`)) return false;
-    Cart.add(r.id, itemId, true);
+    Cart.add(r.id, key, true, count);
   }
   toast('تمت الإضافة للسلة ✅');
   return true;
+}
+
+// زرار "إضافة" من كارت صنف: لو الصنف ليه اختيارات بنفتح شاشة الاختيار
+function quickAdd(ref, redraw) {
+  const [rid, itemId] = ref.split(':');
+  const r = findRestaurant(rid);
+  const it = r?.menu.flatMap((sec) => sec.items).find((x) => x.id === itemId);
+  if (!it) return;
+  if (hasOptions(it)) openItemSheet(r, it, redraw);
+  else if (addToCart(r, itemId)) redraw();
+}
+
+// شاشة اختيار الحجم والإضافات (من تحت على الموبايل)
+function openItemSheet(r, it, onDone) {
+  if (r.isOpen === false || r.blocked) { toast('المطعم مغلق دلوقتي'); return; }
+  const groups = (it.options || []).filter((g) => (g.choices || []).length);
+  const sel = {};
+  let qty = 1;
+  // الاختيار الإجباري الواحد: نختار أول اختيار متاح عشان العميل يكمّل بسرعة
+  groups.forEach((g) => {
+    const first = g.choices.find((c) => c.available !== false);
+    if (g.required && !g.multi && first) sel[g.id] = [first.id];
+  });
+  const back = document.createElement('div');
+  back.className = 'sheet-backdrop';
+  const sh = document.createElement('div');
+  sh.className = 'sheet';
+  sh.setAttribute('role', 'dialog');
+  sh.setAttribute('aria-modal', 'true');
+  sh.setAttribute('aria-label', it.name);
+  document.body.append(back, sh);
+  document.body.classList.add('sheet-open');
+  const close = () => {
+    back.remove(); sh.remove();
+    document.body.classList.remove('sheet-open');
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('hashchange', close);
+    opener?.focus?.({ preventScroll: true });
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('hashchange', close);
+  back.addEventListener('click', close);
+
+  const pickedExtra = () => groups.reduce((s, g) => s + (sel[g.id] || [])
+    .reduce((a, id) => a + (Number(g.choices.find((c) => c.id === id)?.price) || 0), 0), 0);
+
+  const opener = document.activeElement;
+  const draw = (focusValue) => {
+    const res = resolveOptions(it, sel);
+    const unit = priceOf(it) + pickedExtra();
+    const scroll = sh.querySelector('.sheet-body')?.scrollTop || 0; // منرجعش لفوق مع كل اختيار
+    sh.innerHTML = `
+      <div class="sheet-head">
+        <div class="item-img">${itemImage(it, 90)}</div>
+        <div class="grow"><h3>${esc(it.name)}</h3><p class="muted small">${esc(it.desc)}</p>${priceHtml(it)}</div>
+        <button class="drawer-close" type="button" data-close aria-label="قفل">✕</button>
+      </div>
+      <div class="sheet-body">
+        ${groups.map((g) => `
+          <fieldset class="opt-group">
+            <legend>${esc(g.name)} <small class="${g.required ? 'req' : ''}">${g.required ? 'إجباري' : 'اختياري'}${g.multi && Number(g.max) > 0 ? ` • لحد ${g.max}` : g.multi ? ' • اختار اللي تحبه' : ''}</small></legend>
+            ${g.choices.map((c) => `
+              <label class="opt-choice ${c.available === false ? 'off' : ''}">
+                <input type="${g.multi ? 'checkbox' : 'radio'}" name="g-${esc(g.id)}" value="${esc(c.id)}" data-g="${esc(g.id)}"
+                  ${(sel[g.id] || []).includes(c.id) ? 'checked' : ''} ${c.available === false ? 'disabled' : ''}>
+                <span class="grow">${esc(c.name)}${c.available === false ? ' <small class="muted">(خلص)</small>' : ''}</span>
+                <b>${Number(c.price) ? `+ ${fmt(c.price)}` : ''}</b>
+              </label>`).join('')}
+          </fieldset>`).join('')}
+      </div>
+      <div class="sheet-foot">
+        <div class="qty">
+          <button type="button" data-q="-1" aria-label="نقص" ${qty <= 1 ? 'disabled' : ''}>−</button><span aria-live="polite">${qty}</span><button type="button" data-q="1" aria-label="زود">+</button>
+        </div>
+        <button class="btn primary grow" type="button" data-confirm ${res.ok ? '' : 'disabled'}>${res.ok ? `أضف للسلة • ${fmt(unit * qty)}` : esc(res.error)}</button>
+      </div>`;
+    sh.querySelector('.sheet-body').scrollTop = scroll;
+    if (focusValue) sh.querySelector(`input[value="${CSS.escape(focusValue)}"]`)?.focus({ preventScroll: true });
+    sh.querySelector('[data-close]').addEventListener('click', close);
+    sh.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => { qty = Math.max(1, qty + Number(b.dataset.q)); draw(); }));
+    sh.querySelectorAll('input[data-g]').forEach((inp) => inp.addEventListener('click', (e) => {
+      const g = groups.find((x) => x.id === inp.dataset.g);
+      const cur = sel[g.id] || [];
+      if (g.multi) {
+        if (inp.checked && Number(g.max) > 0 && cur.length >= Number(g.max)) {
+          e.preventDefault();
+          toast(`أقصى حاجة ${g.max} من ${g.name}`);
+          return;
+        }
+        sel[g.id] = inp.checked ? [...cur, inp.value] : cur.filter((id) => id !== inp.value);
+      } else {
+        // اختيار اختياري واحد: دوسة تانية على نفس الاختيار بتشيله
+        sel[g.id] = !g.required && cur.includes(inp.value) ? [] : [inp.value];
+      }
+      draw(inp.value);
+    }));
+    sh.querySelector('[data-confirm]').addEventListener('click', () => {
+      if (!resolveOptions(it, sel).ok) return;
+      if (addToCart(r, lineKey(it.id, sel), qty)) { close(); onDone?.(); }
+    });
+  };
+  draw();
+  sh.querySelector('[data-close]').focus({ preventScroll: true });
 }
 
 function restaurantCard(r) {
@@ -381,10 +484,12 @@ function drawMenu(r) {
               <h3>${esc(it.name)}</h3>
               <p class="muted">${esc(it.desc)}</p>
               ${priceHtml(it)}${activeOffer(it)?.until ? ` <span class="muted small">(${untilLabel(activeOffer(it).until)})</span>` : ''}
+              ${hasOptions(it) ? '<div class="muted small">🧩 فيه اختيارات وإضافات</div>' : ''}
             </div>
             <div class="item-side">
               <div class="item-img">${itemImage(it)}</div>
               ${!isAvailable(it) ? '<span class="muted small">غير متاح</span>'
+                : hasOptions(it) ? `<button class="add-btn" data-opt="${it.id}" type="button" ${can ? '' : 'disabled'}>${qty ? `✓ ${qty} • + إضافة` : '+ إضافة'}</button>`
                 : qty ? `<div class="qty">
                      <button data-dec="${it.id}" type="button" aria-label="نقص">−</button>
                      <span>${qty}</span>
@@ -403,8 +508,11 @@ function drawMenu(r) {
     if (addToCart(r, b.dataset.add || b.dataset.inc)) drawMenu(r);
   }));
   list.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
-    Cart.setQty(b.dataset.dec, Cart.qty(b.dataset.dec) - 1);
+    Cart.setQty(b.dataset.dec, Cart.lineQty(b.dataset.dec) - 1);
     drawMenu(r);
+  }));
+  list.querySelectorAll('[data-opt]').forEach((b) => b.addEventListener('click', () => {
+    openItemSheet(r, r.menu.flatMap((sec) => sec.items).find((x) => x.id === b.dataset.opt), () => drawMenu(r));
   }));
 }
 
@@ -415,7 +523,7 @@ function miniCart() {
   const t = cartTotals(r);
   return `
     <h3>سلتك من ${esc(r.name)}</h3>
-    ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
+    ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}${lineOptions(l)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
     <div class="mini-line total"><span>المجموع الفرعي</span><span>${fmt(t.subtotal)}</span></div>
     <a href="#/cart" class="btn primary block">اذهب للسلة (${Cart.count()})</a>`;
 }
@@ -456,13 +564,13 @@ function renderCart() {
           <div class="cart-line">
             <div class="item-img sm">${itemImage(l.item, 52)}</div>
             <div class="grow">
-              <strong>${esc(l.item.name)}</strong>
+              <strong>${esc(l.item.name)}</strong>${lineOptions(l)}
               <div class="muted">${fmt(l.item.price)}${l.item.fullPrice > l.item.price ? ` <s class="old-price">${fmt(l.item.fullPrice)}</s>` : ''}</div>
             </div>
             <div class="qty">
-              <button data-dec="${l.item.id}" type="button" aria-label="نقص">−</button>
+              <button data-dec="${esc(l.key)}" type="button" aria-label="نقص">−</button>
               <span>${l.qty}</span>
-              <button data-inc="${l.item.id}" type="button" aria-label="زود">+</button>
+              <button data-inc="${esc(l.key)}" type="button" aria-label="زود">+</button>
             </div>
             <strong class="line-total">${fmt(l.item.price * l.qty)}</strong>
           </div>`).join('')}
@@ -480,11 +588,11 @@ function renderCart() {
     </div>`;
 
   app.querySelectorAll('[data-inc]').forEach((b) => b.addEventListener('click', () => {
-    Cart.setQty(b.dataset.inc, Cart.qty(b.dataset.inc) + 1);
+    Cart.setQty(b.dataset.inc, Cart.lineQty(b.dataset.inc) + 1);
     renderCart();
   }));
   app.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
-    Cart.setQty(b.dataset.dec, Cart.qty(b.dataset.dec) - 1);
+    Cart.setQty(b.dataset.dec, Cart.lineQty(b.dataset.dec) - 1);
     renderCart();
   }));
   document.getElementById('clearCart').addEventListener('click', () => {
@@ -628,7 +736,7 @@ function renderCheckout() {
 
       <section class="panel">
         <h3>ملخص الطلب — ${esc(r.name)}</h3>
-        ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
+        ${lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.item.name)}${lineOptions(l)}</span><span>${fmt(l.item.price * l.qty)}</span></div>`).join('')}
         <div id="checkoutSummary">${summary(t, currentZone(), Cart.usableCoupons(r, state.settings).map((c) => c.code))}</div>
         <button class="btn primary block" type="submit" id="placeBtn">تأكيد الطلب • ${fmt(t.total)}</button>
       </section>
@@ -687,7 +795,11 @@ function renderCheckout() {
       driverUid: null,
       driverName: null,
       driverPhone: null,
-      lines: Cart.lines(rest).map((l) => ({ id: l.item.id, name: l.item.name, price: l.item.price, qty: l.qty, ...(l.item.fullPrice > l.item.price ? { fullPrice: l.item.fullPrice } : {}) })),
+      lines: Cart.lines(rest).map((l) => ({
+        id: l.item.id, key: l.key, name: l.item.name, price: l.item.price, qty: l.qty,
+        ...(l.options.length ? { options: l.options } : {}),
+        ...(l.item.fullPrice > l.item.price ? { fullPrice: l.item.fullPrice } : {}),
+      })),
       totals,
       promos: usedCoupons.map((c) => c.code),
       coupons: usedCoupons.map((c) => ({ code: c.code, label: couponLabel(c), amount: couponDiscount(c, totals.subtotal, totals.delivery) })),
@@ -764,7 +876,7 @@ function drawOrder(o) {
     <div class="two-col">
       <section class="panel">
         <h3>تفاصيل الطلب</h3>
-        ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
+        ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}${lineOptions(l)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
         ${summary(o.totals, undefined, o.promos || (o.promo ? [o.promo] : []))}
       </section>
       <section class="panel">
@@ -800,11 +912,10 @@ function reorder(o) {
   if (Cart.count() && Cart.restaurantId !== o.restaurantId && !confirm('السلة الحالية فيها أصناف من مطعم تاني. تحب تستبدلها؟')) return;
   Cart.clear();
   const available = new Set(r.menu.flatMap((s) => s.items).filter(isAvailable).map((i) => i.id));
-  o.lines.filter((l) => available.has(l.id)).forEach((l) => {
-    Cart.add(o.restaurantId, l.id);
-    Cart.setQty(l.id, l.qty);
-  });
-  if (!Cart.count()) return toast('الأصناف دي مش متاحة دلوقتي');
+  o.lines.filter((l) => available.has(l.id)).forEach((l) => Cart.add(o.restaurantId, l.key || l.id, true, l.qty));
+  // سطر اختياراته اتغيرت أو خلصت مبيظهرش في السلة
+  if (!Cart.lines(r).length) { Cart.clear(); return toast('الأصناف دي مش متاحة دلوقتي'); }
+  if (Cart.lines(r).length < o.lines.length) toast('بعض الأصناف أو الاختيارات مبقتش متاحة، راجع السلة');
   location.hash = '#/cart';
 }
 

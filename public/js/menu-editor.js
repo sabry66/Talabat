@@ -3,6 +3,7 @@ import { CATEGORIES } from './data.js';
 import { esc, toast, restaurantLogo, itemImage } from './ui.js';
 import { uploadImage, uploadsEnabled } from './upload.js';
 import { locationPicker } from './map.js';
+import { newOptId } from './options.js';
 
 const newItemId = () => 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
@@ -23,6 +24,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
   draft.logo ||= '';
   let picker = null;
   let savedLoc = JSON.stringify(restaurant.location || null); // عشان نقول لصاحب المطعم المكان اتحفظ ولا لأ
+  const openOpts = new Set(); // الأصناف اللي فاتح محرر اختياراتها ("si:ii")
 
   // يقرا كل الحقول من الصفحة ويحطها في draft قبل أي إعادة رسم
   function sync() {
@@ -44,7 +46,58 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         draft[f] = v;
       }
     });
+    // الاختيارات والإضافات: data-k = "si:ii:gi" أو "si:ii:gi:ci"
+    el.querySelectorAll('[data-o]').forEach((inp) => {
+      const [si, ii, gi, ci] = inp.dataset.k.split(':').map(Number);
+      const g = draft.menu[si].items[ii].options[gi];
+      const c = ci !== undefined && !Number.isNaN(ci) ? g.choices[ci] : null;
+      const v = inp.type === 'checkbox' ? inp.checked : inp.value;
+      ({
+        gname: () => { g.name = v.trim(); }, greq: () => { g.required = v; }, gmulti: () => { g.multi = v; },
+        gmax: () => { g.max = Math.max(0, Math.floor(Number(v) || 0)); },
+        cname: () => { c.name = v.trim(); }, cprice: () => { c.price = Math.max(0, Number(v) || 0); },
+        cavail: () => { c.available = v; },
+      })[inp.dataset.o]();
+    });
   }
+
+  // قوالب جاهزة عشان صاحب المطعم يبدأ بسرعة
+  const OPT_TEMPLATES = {
+    size: () => ({ name: 'الحجم', required: true, multi: false, choices: ['صغير', 'وسط', 'كبير'].map((n, i) => ({ id: newOptId('c'), name: n, price: i * 15, available: true })) }),
+    extras: () => ({ name: 'إضافات', required: false, multi: true, max: 0, choices: [{ id: newOptId('c'), name: 'جبنة زيادة', price: 10, available: true }] }),
+    blank: () => ({ name: '', required: false, multi: false, choices: [{ id: newOptId('c'), name: '', price: 0, available: true }] }),
+  };
+
+  const optEditor = (it, si, ii) => `
+    <div class="opt-editor">
+      ${(it.options || []).map((g, gi) => {
+        const k = `${si}:${ii}:${gi}`;
+        return `
+        <div class="opt-group-edit">
+          <div class="opt-g-row">
+            <input data-o="gname" data-k="${k}" value="${esc(g.name)}" placeholder="اسم المجموعة (مثلًا الحجم)" aria-label="اسم المجموعة">
+            <label class="check"><input type="checkbox" data-o="greq" data-k="${k}" ${g.required ? 'checked' : ''}> إجباري</label>
+            <label class="check"><input type="checkbox" data-o="gmulti" data-k="${k}" data-redraw ${g.multi ? 'checked' : ''}> أكتر من اختيار</label>
+            ${g.multi ? `<label class="check">لحد <input class="mini-in" dir="ltr" type="number" min="0" data-o="gmax" data-k="${k}" value="${g.max || 0}" aria-label="أقصى عدد"> <small class="muted">(0 = مفتوح)</small></label>` : ''}
+            <button type="button" class="icon-btn danger" data-del-g="${k}" aria-label="حذف المجموعة">🗑️</button>
+          </div>
+          ${(g.choices || []).map((c, ci) => `
+            <div class="opt-c-row">
+              <input data-o="cname" data-k="${k}:${ci}" value="${esc(c.name)}" placeholder="الاختيار (مثلًا كبير)" aria-label="اسم الاختيار">
+              <label class="check">+ <input class="mini-in" dir="ltr" type="number" min="0" step="any" data-o="cprice" data-k="${k}:${ci}" value="${c.price ?? 0}" aria-label="زيادة السعر"> ج.م</label>
+              <label class="check"><input type="checkbox" data-o="cavail" data-k="${k}:${ci}" ${c.available !== false ? 'checked' : ''}> متاح</label>
+              <button type="button" class="icon-btn danger" data-del-c="${k}:${ci}" aria-label="حذف الاختيار">✕</button>
+            </div>`).join('')}
+          <button type="button" class="link" data-add-c="${k}">+ اختيار</button>
+        </div>`;
+      }).join('')}
+      <div class="row-actions">
+        <button type="button" class="btn small" data-add-g="${si}:${ii}:size">+ الحجم (صغير/وسط/كبير)</button>
+        <button type="button" class="btn small" data-add-g="${si}:${ii}:extras">+ إضافات</button>
+        <button type="button" class="btn small" data-add-g="${si}:${ii}:blank">+ مجموعة فاضية</button>
+      </div>
+      <p class="muted small">الرقم جنب كل اختيار بيتزود على سعر الصنف. لو الحجم بيغيّر السعر: خلّي سعر الصنف = سعر الأصغر، وحط الفرق جنب الأكبر. "إجباري" يعني العميل لازم يختار.</p>
+    </div>`;
 
   const canUpload = uploadsEnabled();
 
@@ -63,7 +116,9 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       <input class="price-in" type="number" min="1" step="any" data-f="price" data-sec="${si}" data-item="${ii}" value="${it.price ?? ''}" placeholder="السعر" required aria-label="السعر">
       <label class="check"><input type="checkbox" data-f="available" data-sec="${si}" data-item="${ii}" ${it.available !== false ? 'checked' : ''}> متاح</label>
       ${it.image ? `<button type="button" class="icon-btn" data-del-photo="${si}:${ii}" title="شيل الصورة" aria-label="شيل الصورة">🖼️✕</button>` : ''}
+      <button type="button" class="btn small" data-toggle-opt="${si}:${ii}" aria-expanded="${openOpts.has(`${si}:${ii}`)}">🧩 الاختيارات${(it.options || []).length ? ` (${it.options.length})` : ''}</button>
       <button type="button" class="btn small danger-outline" data-del-item="${si}:${ii}" aria-label="حذف الصنف">🗑️ حذف</button>
+      ${openOpts.has(`${si}:${ii}`) ? optEditor(it, si, ii) : ''}
     </div>`;
 
   function draw() {
@@ -169,12 +224,35 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       const [si, ii] = b.dataset.delItem.split(':').map(Number);
       const it = draft.menu[si].items[ii];
       if (it.name && !confirm(`حذف "${it.name}" من المنيو؟ (هيتحذف نهائي لما تدوس حفظ)`)) return;
-      redraw(() => draft.menu[si].items.splice(ii, 1))();
+      redraw(() => { draft.menu[si].items.splice(ii, 1); openOpts.clear(); })();
     }));
+    const itemAt = (k) => { const [si, ii] = k.split(':').map(Number); return draft.menu[si].items[ii]; };
+    el.querySelectorAll('[data-toggle-opt]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const k = b.dataset.toggleOpt;
+      if (openOpts.has(k)) openOpts.delete(k); else openOpts.add(k);
+    })));
+    el.querySelectorAll('[data-add-g]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const [si, ii, tpl] = b.dataset.addG.split(':');
+      const it = itemAt(`${si}:${ii}`);
+      (it.options ||= []).push({ id: newOptId('g'), ...OPT_TEMPLATES[tpl]() });
+    })));
+    el.querySelectorAll('[data-del-g]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const [si, ii, gi] = b.dataset.delG.split(':').map(Number);
+      draft.menu[si].items[ii].options.splice(gi, 1);
+    })));
+    el.querySelectorAll('[data-add-c]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const [si, ii, gi] = b.dataset.addC.split(':').map(Number);
+      draft.menu[si].items[ii].options[gi].choices.push({ id: newOptId('c'), name: '', price: 0, available: true });
+    })));
+    el.querySelectorAll('[data-del-c]').forEach((b) => b.addEventListener('click', redraw(() => {
+      const [si, ii, gi, ci] = b.dataset.delC.split(':').map(Number);
+      draft.menu[si].items[ii].options[gi].choices.splice(ci, 1);
+    })));
+    el.querySelectorAll('[data-o][data-redraw]').forEach((inp) => inp.addEventListener('change', redraw(() => {})));
     el.querySelectorAll('[data-del-sec]').forEach((b) => b.addEventListener('click', () => {
       const sec = draft.menu[+b.dataset.delSec];
       if (sec.items.length && !confirm(`حذف قسم "${sec.section}" بكل أصنافه؟`)) return;
-      redraw(() => draft.menu.splice(+b.dataset.delSec, 1))();
+      redraw(() => { draft.menu.splice(+b.dataset.delSec, 1); openOpts.clear(); })();
     }));
     if (onCancel) el.querySelector('#cancelEdit').addEventListener('click', onCancel);
 
@@ -183,8 +261,19 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       e.preventDefault();
       sync();
       const errEl = el.querySelector('#editorError');
+      // مجموعات الاختيارات: شيل الفاضية، ولازم يبقى فيها اختيار واحد على الأقل
+      let dropped = 0;
+      draft.menu.forEach((sec) => sec.items.forEach((it) => {
+        if (!it.options) return;
+        it.options.forEach((g) => { const n = (g.choices || []).length; g.choices = (g.choices || []).filter((c) => c.name); dropped += n - g.choices.length; });
+        const n = it.options.length;
+        it.options = it.options.filter((g) => g.name && g.choices.length);
+        dropped += n - it.options.length;
+        if (!it.options.length) delete it.options;
+      }));
+      if (dropped) toast(`اتشال ${dropped} اختيار/مجموعة من غير اسم`);
       if (!form.checkValidity()) {
-        errEl.textContent = 'كمّل البيانات الناقصة: اسم المطعم وعنوانه، واسم وسعر كل صنف.';
+        errEl.textContent = 'كمّل البيانات الناقصة: اسم المطعم وعنوانه، واسم وسعر كل صنف، واسم كل مجموعة اختيارات وكل اختيار.';
         errEl.hidden = false;
         form.reportValidity();
         return;

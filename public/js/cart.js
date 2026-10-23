@@ -3,6 +3,7 @@ import { isAvailable } from './ui.js';
 import { orderTotals } from './finance.js';
 import { priceOf } from './offers.js';
 import { couponProblem } from './coupons.js';
+import { parseKey, resolveOptions } from './options.js';
 
 const KEY = 'talabaty_cart_v2';
 const ZONE_KEY = 'arrivo_zone'; // منطقة التوصيل اللي العميل اختارها آخر مرة
@@ -36,24 +37,26 @@ export const Cart = {
     try { localStorage.setItem(ZONE_KEY, id); } catch { /* التخزين غير متاح */ }
     listeners.forEach((fn) => fn());
   },
-  qty: (itemId) => cart.items[itemId] || 0,
+  // عدد الصنف في السلة (كل الاختيارات بتاعته مع بعض)
+  qty: (itemId) => Object.entries(cart.items).reduce((n, [k, q]) => n + (parseKey(k).itemId === itemId ? q : 0), 0),
+  lineQty: (key) => cart.items[key] || 0,
   count: () => Object.values(cart.items).reduce((a, b) => a + b, 0),
 
-  // يرجّع false لو السلة فيها أصناف من مطعم تاني (مطعم واحد لكل طلب)
-  add(restaurantId, itemId, force = false) {
+  // key = مفتاح السطر (الصنف + اختياراته). يرجّع false لو السلة فيها أصناف من مطعم تاني (مطعم واحد لكل طلب)
+  add(restaurantId, key, force = false, count = 1) {
     if (cart.restaurantId && cart.restaurantId !== restaurantId) {
       if (!force) return false;
       cart = empty();
     }
     cart.restaurantId = restaurantId;
-    cart.items[itemId] = (cart.items[itemId] || 0) + 1;
+    cart.items[key] = (cart.items[key] || 0) + count;
     save();
     return true;
   },
 
-  setQty(itemId, qty) {
-    if (qty <= 0) delete cart.items[itemId];
-    else cart.items[itemId] = qty;
+  setQty(key, qty) {
+    if (qty <= 0) delete cart.items[key];
+    else cart.items[key] = qty;
     save();
   },
 
@@ -81,10 +84,17 @@ export const Cart = {
   lines(restaurant) {
     if (!restaurant || restaurant.id !== cart.restaurantId) return [];
     const all = restaurant.menu.flatMap((s) => s.items);
-    return Object.entries(cart.items)
-      .map(([id, qty]) => ({ item: all.find((i) => i.id === id), qty }))
-      .filter((l) => l.item && isAvailable(l.item))
-      .map((l) => ({ ...l, item: { ...l.item, price: priceOf(l.item), fullPrice: Number(l.item.price) } }));
+    return Object.entries(cart.items).map(([key, qty]) => {
+      const { itemId, sel } = parseKey(key);
+      const item = all.find((i) => i.id === itemId);
+      if (!item || !isAvailable(item)) return null;
+      const opt = resolveOptions(item, sel);
+      if (!opt.ok) return null; // المطعم غيّر الاختيارات: السطر ده مبقاش صالح
+      return {
+        key, qty, options: opt.labels,
+        item: { ...item, price: priceOf(item) + opt.extra, fullPrice: Number(item.price) + opt.extra },
+      };
+    }).filter(Boolean);
   },
 
   // settings = إعدادات المنصة (المناطق والنسب)

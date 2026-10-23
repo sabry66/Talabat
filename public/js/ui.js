@@ -442,6 +442,9 @@ export function renderDashNav(user, backend, onAccount) {
 }
 
 // بطاقة طلب في لوحات التحكم، actions = [{ status, label, cls }]
+// اختيارات الصنف (الحجم والإضافات) تحت اسمه
+export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '');
+
 export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
   const map = mapLink(o.location);
   return `
@@ -452,7 +455,7 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
       </header>
       ${showRestaurant ? `<div class="small">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)}</div>` : ''}
       <ul class="order-lines">
-        ${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}</li>`).join('')}
+        ${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}${lineOptions(l)}</li>`).join('')}
       </ul>
       ${o.notes ? `<p class="note">📝 ${esc(o.notes)}</p>` : ''}
       <div class="small">
