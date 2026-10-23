@@ -49,6 +49,9 @@
 }
 
 * { box-sizing: border-box; }
+/* أي حاجة أعرض من الشاشة تتقص بدل ما الصفحة كلها تعرض (وإلا الموبايل بيصغّر الصفحة والقايمة الجانبية بتطلع برّه الشاشة).
+   الجداول جوه .table-wrap بتتسحب لوحدها. clip مش hidden عشان الشريط اللي فوق (sticky) يفضل شغال */
+html, body { overflow-x: clip; }
 body {
   margin: 0;
   font-family: 'Cairo', system-ui, sans-serif;

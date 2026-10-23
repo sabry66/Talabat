@@ -35,7 +35,7 @@ if [[ "$MODE" == default || "$MODE" == demo || "$MODE" == full ]]; then
   run unit-periods node "$HERE/e2e/unit-periods.mjs"
   run unit-push-messages node "$HERE/e2e/unit-push-messages.mjs"
   run preload-up-to-date node "$ROOT/scripts/preload.mjs" --check
-  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-driver-change demo-notes-busy demo-dark-mode demo-schedule demo-restaurant-zones demo-live-rider demo-phone-login demo-money-everywhere demo-order-tracking demo-finance-periods demo-midnight-reset demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
+  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-driver-change demo-notes-busy demo-dark-mode demo-schedule demo-restaurant-zones demo-live-rider demo-phone-login demo-money-everywhere demo-order-tracking demo-finance-periods demo-midnight-reset demo-no-overflow demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
     run "$t" node "$HERE/e2e/$t.mjs"
   done
 fi

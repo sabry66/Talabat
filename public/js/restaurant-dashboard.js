@@ -302,13 +302,13 @@ function drawOrders() {
     </div>
     <section class="panel">
       <h3>آخر الطلبات المنتهية</h3>
-      ${finished.length ? `<table class="table">
+      ${finished.length ? `<div class="table-wrap flat"><table class="table">
         <thead><tr><th>الطلب</th><th>العميل</th><th>تمن الأكل</th><th>الحالة</th><th>الوقت</th></tr></thead>
         <tbody>${finished.map((o) => `
           <tr><td>#${o.id.slice(-6).toUpperCase()}</td><td>${esc(o.customerName)}</td><td>${fmt(o.totals.subtotal - missingValue(o) * (o.missingDecision === 'confirmed' ? 1 : 0))}${o.missingDecision === 'confirmed' ? ` <span class="small warn-text" title="${missingItems(o).map((x) => `${x.qty}× ${esc(x.name)}`).join('، ')}">(ناقص اتخصم −${fmt(missingValue(o))})</span>` : o.missing ? ' <span class="small warn-text">⚠️ بلاغ ناقص</span>' : ''}</td>
           <td>${ORDER_STATUSES[o.status].icon} ${ORDER_STATUSES[o.status].label}</td>
           <td class="small">${new Date(o.createdAt).toLocaleString('ar-EG')}</td></tr>`).join('')}
-        </tbody></table>` : '<p class="muted small">لسه مفيش.</p>'}
+        </tbody></table></div>` : '<p class="muted small">لسه مفيش.</p>'}
     </section>`;
 
   body.querySelectorAll('[data-pack]').forEach((c) => c.addEventListener('change', () => {
