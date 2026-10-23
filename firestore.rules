@@ -397,7 +397,30 @@ service cloud.firestore {
       }
 
       function driverFields() {
-        return ['driverUid', 'driverName', 'driverPhone', 'driverUsername', 'claimedAt'];
+        return ['driverUid', 'driverName', 'driverPhone', 'driverUsername', 'claimedAt', 'driverLog'];
+      }
+
+      // سجل مندوبين الطلب: كل مرة مندوب ياخد أو يرجّع الأوردر بيتضاف سطر باسمه هو، ومحدش يقدر يمسح أو يعدّل اللي قبله
+      function driverLogged(action) {
+        let old = resource.data.get('driverLog', []);
+        let log = request.resource.data.get('driverLog', []);
+        return log is list && log.size() == old.size() + 1
+          // log[0:0] بيدي خطأ في القواعد، فالحالة الفاضية لوحدها
+          && (old.size() == 0 || log[0:old.size()] == old)
+          && log[old.size()].keys().hasOnly(['uid', 'name', 'phone', 'username', 'action', 'at'])
+          && log[old.size()].uid == request.auth.uid
+          && log[old.size()].action == action;
+      }
+
+      // سجل الحالات: سطر واحد جديد بالحالة الجديدة وباسم اللي عمل الحركة، واللي قبله زي ما هو
+      function historyLogged() {
+        let old = resource.data.get('statusHistory', []);
+        let h = request.resource.data.get('statusHistory', []);
+        return h is list && h.size() == old.size() + 1
+          && (old.size() == 0 || h[0:old.size()] == old)
+          && h[old.size()].keys().hasOnly(['status', 'at', 'by'])
+          && h[old.size()].status == request.resource.data.status
+          && h[old.size()].by.uid == request.auth.uid;
       }
 
       allow read: if signedIn() && (
@@ -441,6 +464,7 @@ service cloud.firestore {
         || (isActive()
             && resource.data.ownerUid == request.auth.uid
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
+            && historyLogged()
             && ((resource.data.status == 'placed' && request.resource.data.status in ['preparing', 'rejected'])
                 || (resource.data.status == 'preparing' && request.resource.data.status == 'ready')))
         // المندوب: ياخد أوردر محدش أخده (ولازم يتسجل في لستة أوردراته اللي ليها حد أقصى)
@@ -450,17 +474,20 @@ service cloud.firestore {
             && request.resource.data.driverUid == request.auth.uid
             && resource.data.customerUid != request.auth.uid
             && changedOnly(driverFields())
+            && driverLogged('claimed')
             && orderId in getAfter(/databases/$(database)/documents/driverLoads/$(request.auth.uid)).data.get('orders', []))
         // المندوب: يسيب الأوردر قبل ما يستلمه
         || (isDriver()
             && resource.data.driverUid == request.auth.uid
             && resource.data.status in ['preparing', 'ready']
             && request.resource.data.driverUid == null
-            && changedOnly(driverFields()))
+            && changedOnly(driverFields())
+            && driverLogged('released'))
         // المندوب: استلم من المطعم، وبعدين وصّل
         || (isDriver()
             && resource.data.driverUid == request.auth.uid
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
+            && historyLogged()
             && ((resource.data.status == 'ready' && request.resource.data.status == 'on_way')
                 || (resource.data.status == 'on_way' && request.resource.data.status == 'delivered'
                     // لو العميل بلّغ عن ناقص، لازم المندوب يرد الأول
@@ -491,7 +518,8 @@ service cloud.firestore {
             && resource.data.customerUid == request.auth.uid
             && resource.data.status == 'placed'
             && request.resource.data.status == 'cancelled'
-            && changedOnly(['status', 'statusHistory', 'updatedAt']));
+            && changedOnly(['status', 'statusHistory', 'updatedAt'])
+            && historyLogged());
     }
   }
 }

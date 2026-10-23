@@ -5,6 +5,7 @@ import { VEHICLES } from './join.js';
 import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { drawCoupons } from './admin-coupons.js';
+import { orderDetail, orderSearchText } from './order-detail.js';
 import { matches, normalize } from './search.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate, paidTotal, activeZones } from './finance.js';
 import {
@@ -28,6 +29,10 @@ let applications = [];
 let tab = 'overview';
 let editing = null; // id المطعم اللي بيتعدل، أو 'new'
 let orderFilter = 'active';
+let orderQuery = '';
+let openOrder = null; // id الطلب اللي مفتوح بالتفاصيل
+let ordersRedraw = null;
+const reviewsCache = {};
 let period = 'today';
 let unsubs = [];
 let settingsCreated = false;
@@ -112,6 +117,7 @@ function start() {
   const refresh = () => {
     if (waitingData) drawTab();
     else if (tab === 'users' && usersRedraw) usersRedraw();
+    else if (tab === 'orders' && ordersRedraw && !openOrder) ordersRedraw();
     else if (!isEditing()) drawTab();
   };
   unsubs.push(backend.watchOrders({}, (list) => {
@@ -152,7 +158,7 @@ function start() {
   }));
 }
 
-const STAFF_TABS = ['support', 'requests', 'account'];
+const STAFF_TABS = ['support', 'orders', 'requests', 'account'];
 const isStaff = () => user?.role === 'staff';
 
 // شكاوي مستنية رد من الإدارة
@@ -170,11 +176,17 @@ function drawTabs() {
     tab = b.dataset.tab;
     editing = null;
     openTicket = null;
+    openOrder = null;
     usersRedraw = null;
+    ordersRedraw = null;
     drawTabs();
     drawTab();
   }));
 }
+
+// من شكوى لطلبها، ومن الطلب لشكاويه
+function goToOrder(id) { tab = 'orders'; openOrder = id; openTicket = null; ordersRedraw = null; drawTabs(); drawTab(); window.scrollTo(0, 0); }
+function goToTicket(id) { tab = 'support'; openTicket = id; openOrder = null; drawTabs(); drawTab(); window.scrollTo(0, 0); }
 
 // صفحة "حسابي" جوه اللوحة
 function openAccount() {
@@ -302,6 +314,7 @@ function drawTicket(body, t) {
         <p>${who(t.name, t.username)} • ${ROLE_NAMES[t.role] || ''}</p>
         <p>📞 <a href="tel:${esc(t.phone)}" dir="ltr">${esc(t.phone)}</a></p>
         ${order ? `<h3>الطلب #${shortId(order.id)}</h3>
+          <button class="btn small" type="button" id="openTicketOrder">📦 كل تفاصيل الطلب (المطعم والمندوب والخطوات)</button>
           <p class="small">${esc(order.restaurantName)} • ${fmt(order.totals.total)} • ${statusBadge(order.status)}</p>
           <p class="small">${order.lines.map((l) => `${l.qty}× ${esc(l.name)}${l.options?.length ? ` (${l.options.map(esc).join(' • ')})` : ''}`).join('، ')}</p>
           ${order.driverName ? `<p class="small">🛵 ${who(order.driverName, order.driverUsername)}</p>` : ''}` : ''}
@@ -310,6 +323,7 @@ function drawTicket(body, t) {
   const box = body.querySelector('.messages');
   box.scrollTop = box.scrollHeight;
   body.querySelector('#backTickets').addEventListener('click', () => { openTicket = null; drawSupport(body); });
+  body.querySelector('#openTicketOrder')?.addEventListener('click', () => goToOrder(order.id));
   body.querySelector('#adminReply').addEventListener('submit', async (e) => {
     e.preventDefault();
     const ta = e.target.querySelector('textarea');
@@ -934,48 +948,77 @@ function drawUsers(body) {
 // ---------- الطلبات ----------
 
 function drawOrders(body) {
+  const o = openOrder && orders.find((x) => x.id === openOrder);
+  if (o) return drawOrderPage(body, o);
+  ordersRedraw = null;
   const filters = { active: 'الشغالة', today: 'النهارده', all: 'الكل' };
-  const list = orders.filter((o) =>
-    orderFilter === 'active' ? !FINAL_STATUSES.includes(o.status)
-      : orderFilter === 'today' ? isToday(o.createdAt) : true);
-
   body.innerHTML = `
     <div class="list-head">
-      <h2>${list.length} طلب</h2>
+      <h2 id="ordersCount"></h2>
       <div class="chips">
         ${Object.entries(filters).map(([k, l]) => `<button type="button" class="chip ${orderFilter === k ? 'active' : ''}" data-filter="${k}">${l}</button>`).join('')}
       </div>
     </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead><tr><th>الطلب</th><th>الوقت</th><th>المطعم</th><th>العميل</th><th>المنطقة</th><th>المندوب</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
-        <tbody>
-          ${list.map((o) => `
-            <tr>
-              <td>#${shortId(o.id)}</td>
-              <td class="small">${new Date(o.createdAt).toLocaleString('ar-EG')}</td>
-              <td>${esc(o.restaurantName)}</td>
-              <td class="small">${who(o.customerName, o.customerUsername)}<br><a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a></td>
-              <td class="small">${esc(o.zoneName || '')}</td>
-              <td class="small">${o.driverName ? who(o.driverName, o.driverUsername) : '<span class="muted">—</span>'}</td>
-              <td>${fmt(paidTotal(o))}${o.missing ? ' <span title="بلاغ ناقص">⚠️</span>' : ''}</td>
-              <td>
-                <select data-order="${o.id}" aria-label="حالة الطلب">
-                  ${Object.entries(ORDER_STATUSES).map(([k, s]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('')}
-                </select>
-              </td>
-            </tr>`).join('') || '<tr><td colspan="8" class="center muted">مفيش طلبات</td></tr>'}
-        </tbody>
-      </table>
-    </div>`;
-
+    <input class="search-in block-search" id="orderSearch" type="search" value="${esc(orderQuery)}" autocomplete="off"
+      placeholder="🔍 رقم الطلب (#AB12CD) أو موبايل/اسم العميل أو المندوب أو المطعم">
+    <div id="ordersTable"></div>`;
+  const draw = () => {
+    // البحث بيدوّر في كل الطلبات (مش بس الفلتر)، و+20 زي 0
+    const q = orderQuery.trim().replace(/^#/, '').replace(/^\+?20(?=1)/, '0');
+    const list = q ? orders.filter((x) => matches(q, orderSearchText(x)))
+      : orders.filter((x) => (orderFilter === 'active' ? !FINAL_STATUSES.includes(x.status)
+        : orderFilter === 'today' ? isToday(x.createdAt) : true));
+    body.querySelector('#ordersCount').textContent = `${list.length} طلب${q ? ' (نتيجة البحث)' : ''}`;
+    body.querySelector('#ordersTable').innerHTML = `
+      <div class="table-wrap">
+        <table class="table orders-table">
+          <thead><tr><th>الطلب</th><th>الوقت</th><th>المطعم</th><th>العميل</th><th>المنطقة</th><th>المندوب</th><th>الإجمالي</th><th>الحالة</th></tr></thead>
+          <tbody>
+            ${list.map((x) => `
+              <tr class="clickable" data-open-order="${x.id}">
+                <td><button class="link" type="button" data-open-order="${x.id}"><b>#${shortId(x.id)}</b></button></td>
+                <td class="small">${new Date(x.createdAt).toLocaleString('ar-EG')}</td>
+                <td>${esc(x.restaurantName)}</td>
+                <td class="small">${who(x.customerName, x.customerUsername)}<br><span dir="ltr">${esc(x.customerPhone)}</span></td>
+                <td class="small">${esc(x.zoneName || '')}</td>
+                <td class="small">${x.driverName ? who(x.driverName, x.driverUsername) : '<span class="muted">—</span>'}${(x.driverLog || []).some((d) => d.action === 'released') ? ' <span title="مندوب تاني كان أخده ورجّعه">🔄</span>' : ''}</td>
+                <td>${fmt(paidTotal(x))}${x.missing ? ' <span title="بلاغ ناقص">⚠️</span>' : ''}${tickets.some((t) => t.orderId === x.id) ? ' <span title="عليه شكوى">🎧</span>' : ''}</td>
+                <td>${statusBadge(x.status)}</td>
+              </tr>`).join('') || `<tr><td colspan="8" class="center muted">${q ? 'مفيش طلب مطابق للبحث' : 'مفيش طلبات'}</td></tr>`}
+          </tbody>
+        </table>
+      </div>`;
+    body.querySelectorAll('tr[data-open-order]').forEach((r) => r.addEventListener('click', () => goToOrder(r.dataset.openOrder)));
+  };
+  ordersRedraw = draw;
+  draw();
   body.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { orderFilter = b.dataset.filter; drawTab(); }));
-  body.querySelectorAll('[data-order]').forEach((s) => s.addEventListener('change', () => {
-    const o = orders.find((x) => x.id === s.dataset.order);
-    backend.setOrderStatus(s.dataset.order, s.value, { driverUid: o?.driverUid })
+  body.querySelector('#orderSearch').addEventListener('input', (e) => { orderQuery = e.target.value; draw(); });
+}
+
+// كل تفاصيل طلب واحد (والأدمن بس يقدر يغيّر الحالة)
+function drawOrderPage(body, o) {
+  const statusControl = isStaff() ? '' : `
+    <select data-order="${o.id}" aria-label="حالة الطلب">
+      ${Object.entries(ORDER_STATUSES).map(([k, s]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('')}
+    </select>`;
+  body.innerHTML = `
+    <button class="back link" id="backOrders" type="button">→ كل الطلبات</button>
+    ${orderDetail(o, { tickets: tickets.filter((t) => t.orderId === o.id), review: reviewsCache[o.id] || null, statusControl })}`;
+  body.querySelector('#backOrders').addEventListener('click', () => { openOrder = null; drawTab(); });
+  body.querySelectorAll('[data-open-ticket]').forEach((b) => b.addEventListener('click', () => goToTicket(b.dataset.openTicket)));
+  body.querySelector('[data-order]')?.addEventListener('change', (e) => {
+    backend.setOrderStatus(o.id, e.target.value, { driverUid: o.driverUid })
       .then(() => toast('تم تحديث الحالة'))
-      .catch((e) => toast(errorMessage(e)));
-  }));
+      .catch((err) => toast(errorMessage(err)));
+  });
+  if (o.status === 'delivered' && !(o.id in reviewsCache)) {
+    reviewsCache[o.id] = null;
+    backend.getReview(o.id).then((r) => {
+      reviewsCache[o.id] = r;
+      if (r && openOrder === o.id && tab === 'orders') drawTab();
+    }).catch(() => {});
+  }
 }
 
 backend.onAuth((u) => {

@@ -17,6 +17,8 @@ const session = {
 };
 const authError = (code) => Object.assign(new Error(code), { code });
 const DEMO_CODE = '123456';
+// سطر في سجل مندوبين الطلب: مين أخده ومين رجّعه
+const driverEntry = (d, action) => ({ uid: d.uid, name: d.name || '', phone: d.phone || '', username: d.username || null, action, at: Date.now() });
 let pendingPhone = null;
 
 function seed() {
@@ -494,6 +496,7 @@ export function createBackend() {
       if (max > 0 && load >= max) throw authError('driver-limit');
       Object.assign(o, {
         driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone, driverUsername: driver.username || null, claimedAt: Date.now(),
+        driverLog: [...(o.driverLog || []), driverEntry(driver, 'claimed')],
       });
       commit();
     },
@@ -543,8 +546,12 @@ export function createBackend() {
     // في Firebase بنظبط لستة أوردرات المندوب، هنا مش محتاجين
     async syncDriverLoad() {},
 
-    async releaseOrder(id) {
-      Object.assign(db().orders[id], { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null });
+    async releaseOrder(id, driverUid, driver = {}) {
+      const o = db().orders[id];
+      Object.assign(o, {
+        driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
+        driverLog: [...(o.driverLog || []), driverEntry({ ...driver, uid: driverUid }, 'released')],
+      });
       commit();
     },
 
@@ -552,7 +559,8 @@ export function createBackend() {
       const o = db().orders[id];
       if (status === 'delivered' && o.missing && !o.missingDecision) throw authError('permission-denied');
       o.status = status;
-      o.statusHistory = [...(o.statusHistory || []), { status, at: Date.now() }];
+      const u = db().users[session.get()];
+      o.statusHistory = [...(o.statusHistory || []), { status, at: Date.now(), by: { uid: u?.uid || null, name: u?.name || '', role: u?.role || '' } }];
       commit();
     },
   };

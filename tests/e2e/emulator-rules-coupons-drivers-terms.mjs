@@ -248,6 +248,15 @@ const second = mineIds[1];
 await fetch(docUrl(`orders/${second}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'ready' } } }) });
 await d.$eval('[data-tab="active"]', e => e.click()); await d.waitForSelector(`[data-id="${second}"][data-status="on_way"]`); await d.click(`[data-id="${second}"][data-status="on_way"]`);
 await d.waitForSelector(`[data-id="${second}"][data-status="delivered"]`);
+// ---- سجل الطلب: محدش يغيّر حالة أو يرجّع أوردر من غير ما يتسجل باسمه، ومحدش يمسح اللي قبله
+console.log(await api(d, `(F, db, me, arg) => ({
+  statusWithoutWho: () => F.updateDoc(F.doc(db, 'orders', arg.second), { status: 'delivered', statusHistory: F.arrayUnion({ status: 'delivered', at: 1 }), updatedAt: 1 }),
+  statusInSomeoneElsesName: () => F.updateDoc(F.doc(db, 'orders', arg.second), { status: 'delivered', statusHistory: F.arrayUnion({ status: 'delivered', at: 1, by: { uid: 'admin', name: 'x', role: 'admin' } }), updatedAt: 1 }),
+  rewriteHistory: () => F.updateDoc(F.doc(db, 'orders', arg.second), { status: 'delivered', statusHistory: [{ status: 'delivered', at: 1, by: { uid: me, name: 'x', role: 'driver' } }], updatedAt: 1 }),
+  releaseWithoutLog: () => F.updateDoc(F.doc(db, 'orders', arg.first), { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null }),
+  releaseLoggedAsOther: () => F.updateDoc(F.doc(db, 'orders', arg.first), { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null, driverLog: F.arrayUnion({ uid: 'other', name: 'x', phone: '', username: null, action: 'released', at: 1 }) }),
+  releaseAndWipeLog: () => F.updateDoc(F.doc(db, 'orders', arg.first), { driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null, driverLog: [{ uid: me, name: 'x', phone: '', username: null, action: 'released', at: 1 }] }),
+})`, { second, first: mineIds[0] }));
 // ---- المندوب مياخدش طلب هو اللي عامله
 const selfId = await d.evaluate(async () => {
   const { getApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');

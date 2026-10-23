@@ -18,7 +18,7 @@ const safeImage = (url) => typeof url === 'string' && (/^https:\/\/res\.cloudina
 const msgImage = (url) => (safeImage(url)
   ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="msg-img"><img src="${esc(url)}" alt="صورة مرفقة" loading="lazy"></a>` : '');
 
-export const ROLE_NAMES = { customer: 'عميل', restaurant: 'مطعم', driver: 'مندوب', admin: 'أدمن' };
+export const ROLE_NAMES = { customer: 'عميل', restaurant: 'مطعم', driver: 'مندوب', admin: 'أدمن', staff: 'خدمة عملاء' };
 
 // رسايل المحادثة
 // showStaff: في لوحة الإدارة بنعرض اسم الموظف اللي رد

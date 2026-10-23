@@ -327,7 +327,7 @@ function drawActive(body) {
   body.querySelectorAll('[data-release]').forEach((b) => b.addEventListener('click', async () => {
     if (!confirm('هترجّع الأوردر لباقي المندوبين؟')) return;
     try {
-      await backend.releaseOrder(b.dataset.release, user.uid);
+      await backend.releaseOrder(b.dataset.release, user.uid, user);
       toast('الأوردر رجع للمتاح');
     } catch (err) {
       toast(errorMessage(err));

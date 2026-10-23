@@ -63,6 +63,16 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
   // pushTokens/{token} = { uid, at }: الأجهزة اللي هيوصلها إشعار والتطبيق مقفول (Cloud Function بتبعت عليها)
   const pushTokens = collection(db, 'pushTokens');
   let pushToken = null;
+  // مين عامل الحركة دي (بيتسجل مع كل تغيير في حالة الطلب)
+  let me = null;
+  const actor = () => {
+    const uid = auth.currentUser?.uid || null;
+    return me && me.uid === uid ? me : { uid, name: '', role: '' };
+  };
+  // سطر في سجل مندوبين الطلب: مين أخده ومين رجّعه
+  const driverEntry = (d, action) => ({
+    uid: d.uid, name: d.name || '', phone: d.phone || '', username: d.username || null, action, at: Date.now(),
+  });
 
   // الدخول برقم الموبايل (كود SMS). الرقم لازم يكون اتربط بالحساب الأول من "حسابي"
   let phoneConfirm = null;
@@ -143,7 +153,10 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
           phone: '', address: '', role: 'customer', restaurantId: null,
         };
         unsubUser = onSnapshot(doc(users, user.uid), (snap) => {
-          if (snap.exists()) return cb({ ...base, ...snap.data(), uid: user.uid });
+          if (snap.exists()) {
+            me = { uid: user.uid, name: snap.data().name || '', role: snap.data().role || 'customer' };
+            return cb({ ...base, ...snap.data(), uid: user.uid });
+          }
           // حساب من غير مستند (مثلاً اتعمل من الكونسول): نعمله مستند عميل
           if (!signingUp) {
             setDoc(snap.ref, { email: base.email, name: base.name, phone: '', address: '', role: 'customer', restaurantId: null, createdAt: serverTimestamp() })
@@ -529,15 +542,18 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
         tx.update(ref, {
           driverUid: driver.uid, driverName: driver.name, driverPhone: driver.phone,
           driverUsername: driver.username || null, claimedAt: Date.now(),
+          driverLog: [...(o.driverLog || []), driverEntry(driver, 'claimed')],
         });
         tx.set(loadRef, { orders: [...load, id] });
       });
     },
 
-    async releaseOrder(id, driverUid) {
+    // driver: بيانات المندوب اللي بيرجّع الأوردر (بتتسجل في سجل مندوبين الطلب)
+    async releaseOrder(id, driverUid, driver = {}) {
       const batch = writeBatch(db);
       batch.update(doc(orders, id), {
         driverUid: null, driverName: null, driverPhone: null, driverUsername: null, claimedAt: null,
+        driverLog: arrayUnion(driverEntry({ ...driver, uid: driverUid }, 'released')),
       });
       await unload(batch, driverUid, id);
       return batch.commit();
@@ -548,7 +564,7 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
       const batch = writeBatch(db);
       batch.update(doc(orders, id), {
         status,
-        statusHistory: arrayUnion({ status, at: Date.now() }),
+        statusHistory: arrayUnion({ status, at: Date.now(), by: actor() }),
         updatedAt: serverTimestamp(),
       });
       if (FINAL.includes(status)) await unload(batch, driverUid, id);

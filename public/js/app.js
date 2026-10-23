@@ -1079,7 +1079,7 @@ function renderCheckout() {
       ...(scheduledFor ? { scheduledFor } : {}),
       ...(method.note ? { paymentNote: method.note.slice(0, 200) } : {}),
       status: 'placed',
-      statusHistory: [{ status: 'placed', at: Date.now() }],
+      statusHistory: [{ status: 'placed', at: Date.now(), by: { uid: u.uid, name: u.name || '', role: 'customer' } }],
     };
     btn.disabled = true;
     btn.textContent = 'جاري إرسال الطلب...';
