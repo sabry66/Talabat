@@ -23,7 +23,50 @@ let supportUnsub = null;
 let maxOrders = 0; // أقصى عدد أوردرات معاه في نفس الوقت (من إعدادات الأدمن)
 let syncTimer = null;
 
+// مشاركة مكان المندوب مع العميل وهو في الطريق (كل 15 ثانية بالكتير، عشان القراءات)
+const SHARE_EVERY = 15000;
+let geoWatch = null;
+let shareState = 'off'; // on | denied | off
+const lastSent = {};
+const goingNow = () => mine.filter((o) => o.status === 'on_way' && o.driverUid === user?.uid);
+
+function stopSharing() {
+  if (geoWatch !== null) navigator.geolocation?.clearWatch(geoWatch);
+  geoWatch = null;
+}
+
+function syncSharing() {
+  if (!goingNow().length || !navigator.geolocation) {
+    stopSharing();
+    shareState = 'off';
+    return;
+  }
+  if (geoWatch !== null) return;
+  shareState = 'on';
+  geoWatch = navigator.geolocation.watchPosition((p) => {
+    const ll = { lat: Number(p.coords.latitude.toFixed(5)), lng: Number(p.coords.longitude.toFixed(5)) };
+    const now = Date.now();
+    if (shareState !== 'on') { shareState = 'on'; if (tab === 'active') drawTab(); }
+    goingNow().forEach((o) => {
+      if (now - (lastSent[o.id] || 0) < SHARE_EVERY) return;
+      lastSent[o.id] = now;
+      backend.shareRiderLocation(o.id, ll).catch(console.error);
+    });
+  }, (err) => {
+    shareState = err.code === 1 ? 'denied' : 'off';
+    if (err.code === 1) stopSharing();
+    if (tab === 'active') drawTab();
+  }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 });
+}
+
+function shareNote() {
+  if (!goingNow().length) return '';
+  if (shareState === 'denied') return '<p class="share-live off">📍 العميل مش شايف مكانك لأن الموقع مقفول. افتح الـ GPS واسمح للموقع من إعدادات المتصفح.</p>';
+  return '<p class="share-live">📡 العميل شايف مكانك على الخريطة وإنت في الطريق (بيقف لوحده لما توصّل).</p>';
+}
+
 function stop() {
+  stopSharing();
   clearTimeout(syncTimer);
   unsubs.forEach((u) => u());
   unsubs = [];
@@ -71,6 +114,7 @@ function start() {
   }));
   unsubs.push(backend.watchOrders({ driverUid: user.uid }, (list) => {
     mine = list;
+    syncSharing();
     drawTabs();
     if (tab === 'active' || tab === 'history' || tab === 'available') drawTab();
     // نظبط لستة الأوردرات اللي معاه (لو الأدمن لغى أو غيّر أوردر كان معاه)
@@ -256,7 +300,7 @@ function drawActive(body) {
     }
     return '';
   };
-  body.innerHTML = `<div class="trips">${list.map((o) => tripCard(o, actions(o))).join('')}</div>`;
+  body.innerHTML = `${shareNote()}<div class="trips">${list.map((o) => tripCard(o, actions(o))).join('')}</div>`;
   body.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', async () => {
     if (b.dataset.status === 'delivered' && !confirm('اتأكدت إن العميل استلم الأوردر؟')) return;
     b.disabled = true;

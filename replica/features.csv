@@ -32,7 +32,7 @@ Schedule an order for later,checkout,should,yes,yes,today or tomorrow in 30-min 
 Tip the rider,checkout,could,yes,no,
 Live order status,tracking,must,yes,yes,realtime
 Push notifications when the app is closed,tracking,must,yes,partial,built (FCM + Cloud Function + SW); works while the app is open; closed-app push turns on after Blaze + VAPID key (SETUP.md)
-Rider location live on a map,tracking,should,yes,no,
+Rider location live on a map,tracking,should,yes,yes,shared only while on the way (every 15s); only that customer and the team can read it
 Call the rider,tracking,should,yes,yes,
 Accurate ETA that updates,tracking,should,yes,partial,fixed time range per restaurant
 Order history,after order,must,yes,yes,

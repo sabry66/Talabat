@@ -4,7 +4,7 @@ import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW } from './data.js';
 import { Cart, MAX_LINE_NOTE } from './cart.js';
 import { busyExtra, restTime } from './busy.js';
 import { slots, whenLabel, isScheduled } from './schedule.js';
-import { locationPicker } from './map.js';
+import { locationPicker, trackMap } from './map.js';
 import { activeZones, deliversTo, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
@@ -1137,11 +1137,42 @@ function renderOrder(id) {
   if (state.user === undefined) { app.innerHTML = loader(); return; }
   if (!state.user) { location.hash = '#/login'; return; }
   app.innerHTML = loader();
-  setCleanup(backend.watchOrder(id, (o) => {
+  const unsub = backend.watchOrder(id, (o) => {
     if (!o) return renderNotFound();
     orderAlerts(o);
     drawOrder(o);
-  }));
+    mountRiderMap(o);
+  });
+  setCleanup(() => { unsub(); stopRiderMap(); });
+}
+
+// خريطة المندوب وهو في الطريق: بتفضل نفس الخريطة بين التحديثات (منعيدش تحميلها كل مرة)
+let riderTrack = null;
+function mountRiderMap(o) {
+  const slot = document.getElementById('riderSlot');
+  if (!slot) return stopRiderMap();
+  if (riderTrack?.id === o.id) {
+    slot.replaceWith(riderTrack.el);
+    return;
+  }
+  stopRiderMap();
+  const el = document.createElement('div');
+  el.id = 'riderSlot';
+  slot.replaceWith(el);
+  const t = { id: o.id, el, map: null, last: null, unsub: null };
+  riderTrack = t;
+  t.unsub = backend.watchRiderLocation(o.id, (ll) => { t.last = ll; t.map?.setRider(ll); });
+  trackMap(el, { dest: o.location }).then((m) => {
+    if (riderTrack !== t) return m.destroy();
+    t.map = m;
+    m.setRider(t.last);
+  }).catch(() => { el.textContent = 'تعذر تحميل الخريطة'; });
+}
+function stopRiderMap() {
+  if (!riderTrack) return;
+  riderTrack.unsub?.();
+  riderTrack.map?.destroy();
+  riderTrack = null;
 }
 
 // ---------- تنبيهات الطلب (تغيير المندوب والحالة) ----------
@@ -1226,6 +1257,7 @@ function drawOrder(o) {
             </li>`).join('')}
         </ol>
         ${driverNote(o)}
+        ${o.status === 'on_way' && o.driverUid ? '<div id="riderSlot"></div>' : ''}
         ${ENDED.includes(o.status) ? '' : notifyButton().replace('🔔 فعّل الإشعارات', '🔔 عرّفني لما حالة الطلب تتغير')}
         ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
         ${missingPanel(o)}

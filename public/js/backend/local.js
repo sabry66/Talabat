@@ -431,6 +431,17 @@ export function createBackend() {
       return watch(() => db().orders[id] || null, cb);
     },
 
+    async shareRiderLocation(orderId, { lat, lng }) {
+      const o = db().orders[orderId];
+      if (!o || o.driverUid !== session.get() || !['ready', 'on_way'].includes(o.status)) throw authError('permission-denied');
+      db().riderLocations ||= {};
+      db().riderLocations[orderId] = { lat, lng, at: Date.now() };
+      commit();
+    },
+    watchRiderLocation(orderId, cb) {
+      return watch(() => db().riderLocations?.[orderId] || null, cb);
+    },
+
     // filter: { customerUid } أو { ownerUid } أو { driverUid } أو {} لكل الطلبات (للأدمن)
     watchOrders(filter, cb) {
       return watch(() => sortByNewest(Object.values(db().orders).filter((o) =>

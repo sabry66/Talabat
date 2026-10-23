@@ -197,3 +197,34 @@ export async function locationPicker(el, initial, onChange, { hint = '' } = {}) 
     },
   };
 }
+
+// خريطة متابعة المندوب: مكان التسليم ثابت، والمندوب بيتحرك عليها
+export async function trackMap(el, { dest }) {
+  const L = await loadLeaflet();
+  el.classList.add('track-map');
+  el.innerHTML = '<div class="picker-map"></div><div class="track-status muted small"></div>';
+  const map = L.map(el.querySelector('.picker-map'), { zoomControl: false, attributionControl: true })
+    .setView(dest ? [dest.lat, dest.lng] : [CAIRO.lat, CAIRO.lng], dest ? 15 : 11);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+  const icon = (html, cls) => L.divIcon({ html, className: `map-emoji ${cls}`, iconSize: [40, 40], iconAnchor: [20, 20] });
+  if (dest) L.marker([dest.lat, dest.lng], { icon: icon('🏠', 'dest'), keyboard: false }).addTo(map);
+  let rider = null;
+  let fitted = false;
+  const status = el.querySelector('.track-status');
+  return {
+    setRider(ll) {
+      if (!ll) { status.textContent = '⏳ مستنيين مكان المندوب...'; return; }
+      if (!rider) rider = L.marker([ll.lat, ll.lng], { icon: icon('🛵', 'rider'), keyboard: false }).addTo(map);
+      else rider.setLatLng([ll.lat, ll.lng]);
+      const secs = Math.max(0, Math.round((Date.now() - ll.at) / 1000));
+      status.textContent = `📡 مكان المندوب ${secs < 60 ? 'دلوقتي' : `من ${Math.round(secs / 60)} دقيقة`}`;
+      // أول مرة نوري الاتنين مع بعض، وبعدين نسيب العميل يحرّك الخريطة براحته
+      if (!fitted) {
+        fitted = true;
+        if (dest) map.fitBounds(L.latLngBounds([[ll.lat, ll.lng], [dest.lat, dest.lng]]).pad(0.3), { maxZoom: 16 });
+        else map.setView([ll.lat, ll.lng], 15);
+      }
+    },
+    destroy: () => map.remove(),
+  };
+}

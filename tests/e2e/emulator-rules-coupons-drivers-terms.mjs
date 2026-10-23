@@ -244,6 +244,20 @@ console.log(await api(d, `(F, db, me, id) => ({
 })`, selfId));
 await fetch(docUrl(`orders/${selfId}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'cancelled' } } }) });
 
+// ---- مكان المندوب لحظيًا: المندوب بتاع الطلب بس يكتب، وصاحب الطلب بس يقرا
+const loc = (extra = {}) => `{ lat: 30.05, lng: 31.3, at: F.serverTimestamp(), ...${JSON.stringify(extra)} }`;
+console.log(await api(d, `(F, db, me, arg) => ({
+  validRiderLocation: () => F.setDoc(F.doc(db, 'riderLocations', arg.mine), ${loc()}),
+  riderLocationExtraKey: () => F.setDoc(F.doc(db, 'riderLocations', arg.mine), ${loc({ speed: 9 })}),
+  riderLocationBadLat: () => F.setDoc(F.doc(db, 'riderLocations', arg.mine), ${loc({ lat: 500 })}),
+  riderLocationNotMyOrder: () => F.setDoc(F.doc(db, 'riderLocations', arg.other), ${loc()}),
+})`, { mine: second, other: selfId }));
+console.log(await api(c, `(F, db, me, arg) => ({
+  validCustomerReadsRider: () => F.getDoc(F.doc(db, 'riderLocations', arg.mine)),
+  customerFakesRider: () => F.setDoc(F.doc(db, 'riderLocations', arg.mine), ${loc()}),
+  customerReadsOtherRider: () => F.getDoc(F.doc(db, 'riderLocations', arg.other)),
+})`, { mine: second, other: selfId }));
+
 // ---- راجع طلبك قبل ما تدفع: محاولات تلاعب من العميل والمندوب
 console.log(await api(c, `(F, db, me, id) => ({
   missingTooMuch: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 99999 }], missingAmount: 99999, updatedAt: 1 }),

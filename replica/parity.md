@@ -1,15 +1,15 @@
-## Parity: 87.8 / 100
+## Parity: 89.1 / 100
 
-features 87.8  (62 counted, must-haves 29 of 30 done)
+features 89.1  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
 ## By area, weakest first
 - growth                         0.0  (2 features)
-- tracking                      62.5  (5 features)
 - checkout                      69.2  (7 features)
 - platform                      76.9  (5 features)
 - account                       78.6  (6 features)
+- tracking                      79.2  (5 features)
 - after order                   94.1  (7 features)
 - discovery                     97.6  (9 features)
 - menu                         100.0  (4 features)
@@ -23,7 +23,6 @@ Not shippable yet: 1 must-have features are not done.
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] platform: English language, no
-- [should] tracking: Rider location live on a map, no
 - [should] after order: Refunds handled through support, partial  (manual by admin; no refund record yet)
 - [should] platform: iPhone app in the App Store, partial  (installable web app on iPhone; not in App Store)
 - [should] tracking: Accurate ETA that updates, partial  (fixed time range per restaurant)

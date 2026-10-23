@@ -445,6 +445,13 @@ export function createBackend(config, { useEmulators, pushVapidKey = '' }) {
       return onSnapshot(doc(orders, id), (s) => cb(s.exists() ? toOrder(s) : null), logError(cb, null));
     },
 
+    // مكان المندوب لحظيًا وهو في الطريق: riderLocations/{orderId} = { lat, lng, at }
+    shareRiderLocation: (orderId, { lat, lng }) => setDoc(doc(db, 'riderLocations', orderId), { lat, lng, at: serverTimestamp() }),
+    watchRiderLocation(orderId, cb) {
+      return onSnapshot(doc(db, 'riderLocations', orderId), (s) => cb(s.exists()
+        ? { lat: s.data().lat, lng: s.data().lng, at: toMillis(s.data().at) } : null), () => cb(null));
+    },
+
     // filter: { customerUid } أو { ownerUid } أو { driverUid } أو {} لكل الطلبات (للأدمن)
     watchOrders(filter, cb) {
       const q = filter.customerUid ? query(orders, where('customerUid', '==', filter.customerUid))

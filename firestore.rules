@@ -137,6 +137,21 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
+    // riderLocations/{orderId} = { lat, lng, at }: مكان المندوب وهو رايح للعميل.
+    // المندوب بتاع الطلب بس اللي يكتب، والعميل صاحب الطلب والمندوب والفريق بس اللي يشوفوا
+    match /riderLocations/{orderId} {
+      function ord() { return get(/databases/$(database)/documents/orders/$(orderId)).data; }
+      allow read: if signedIn() && (isTeam() || ord().customerUid == request.auth.uid || ord().driverUid == request.auth.uid);
+      allow create, update: if isActive()
+        && ord().driverUid == request.auth.uid
+        && ord().status in ['ready', 'on_way']
+        && request.resource.data.keys().hasOnly(['lat', 'lng', 'at'])
+        && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
+        && request.resource.data.lng is number && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
+        && request.resource.data.at == request.time;
+      allow delete: if isAdmin() || (signedIn() && ord().driverUid == request.auth.uid);
+    }
+
     match /settings/{id} {
       allow read: if true;
       allow write: if isAdmin();
