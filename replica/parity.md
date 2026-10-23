@@ -1,6 +1,6 @@
-## Parity: 77.2 / 100
+## Parity: 79.3 / 100
 
-features 77.2  (62 counted, must-haves 29 of 30 done)
+features 79.3  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
@@ -9,11 +9,11 @@ Not shippable yet: 1 must-have features are not done.
 - tracking                      50.0  (5 features)
 - checkout                      53.8  (7 features)
 - account                       64.3  (6 features)
-- discovery                     73.8  (9 features)
 - platform                      76.9  (5 features)
-- after order                   82.4  (7 features)
+- discovery                     78.6  (9 features)
 - menu                          90.9  (4 features)
 - partners                      91.3  (9 features)
+- after order                   94.1  (7 features)
 - offers                       100.0  (3 features)
 - cart                         100.0  (1 features)
 - admin                        100.0  (4 features)
@@ -22,7 +22,6 @@ Not shippable yet: 1 must-have features are not done.
 - [must] tracking: Push notifications when the app is closed, no  (only in-app updates today)
 - [should] account: Several saved addresses (home work...), no  (Arrivo keeps one address + map pin)
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
-- [should] after order: Rate and review an order, no
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] checkout: Schedule an order for later, no
 - [should] discovery: Favourite restaurants, no
@@ -30,7 +29,6 @@ Not shippable yet: 1 must-have features are not done.
 - [should] platform: English language, no
 - [should] tracking: Rider location live on a map, no
 - [should] after order: Refunds handled through support, partial  (manual by admin; no refund record yet)
-- [should] discovery: Real customer ratings on restaurants, partial  (ratings are set by admin; no real reviews yet)
 - [should] menu: Note per item, partial  (one note per order only)
 - [should] partners: Busy mode / change prep time quickly, partial  (prep time editable in settings only)
 - [should] partners: Rider loud alerts and vibration, partial  (sound only while page is open)
@@ -52,4 +50,6 @@ Not shippable yet: 1 must-have features are not done.
 ## Yours, not in the original (not scored)
 - Dark mode
 - Human support reply promise
+- Check order before paying + rider-confirmed refund
+- Restaurant packing checklist before ready
 - No hidden service fee

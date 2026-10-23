@@ -154,7 +154,43 @@ service cloud.firestore {
         || (isActive()
             && resource.data.get('ownerUid', null) == request.auth.uid
             && !request.resource.data.diff(resource.data).affectedKeys()
-                 .hasAny(['ownerUid', 'ownerEmail', 'ownerUsername', 'rating', 'reviews', 'blocked']));
+                 .hasAny(['ownerUid', 'ownerEmail', 'ownerUsername', 'rating', 'reviews', 'blocked', 'ratingSum', 'ratingCount', 'lastReview']))
+        // العميل: بيزوّد مجموع وعدد التقييمات بتقييم واحد جديد عمله في نفس العملية (مرة واحدة لكل طلب)
+        || (isActive()
+            && changedOnly(['ratingSum', 'ratingCount', 'lastReview'])
+            && !exists(/databases/$(database)/documents/reviews/$(request.resource.data.lastReview))
+            // اسم التقييم = رقم الطلب، وصاحب الطلب هو اللي بيقيّم
+            && get(/databases/$(database)/documents/orders/$(request.resource.data.lastReview)).data.customerUid == request.auth.uid
+            && getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.lastReview)).data.restaurantId == restaurantId
+            && request.resource.data.ratingCount == resource.data.get('ratingCount', 0) + 1
+            && request.resource.data.ratingSum == resource.data.get('ratingSum', 0)
+                 + getAfter(/databases/$(database)/documents/reviews/$(request.resource.data.lastReview)).data.food);
+    }
+
+    // تقييم طلب: مستند واحد لكل طلب (اسمه رقم الطلب). العميل بيقيّم طلبه هو بس بعد ما يتوصّل، ومرة واحدة.
+    // أي حد يقدر يقراه (بيظهر في صفحة المطعم).
+    match /reviews/{orderId} {
+      function order() {
+        return get(/databases/$(database)/documents/orders/$(orderId)).data;
+      }
+      allow read: if true;
+      allow create: if isActive()
+        // من غير أي معرّفات للعميل أو المندوب (التقييم بيتقري للكل)
+        && request.resource.data.keys().hasOnly(['orderId', 'restaurantId', 'name', 'food', 'delivery', 'comment', 'createdAt'])
+        && request.resource.data.orderId == orderId
+        && order().customerUid == request.auth.uid
+        && order().get('ownerUid', null) != request.auth.uid
+        && order().status == 'delivered'
+        && request.resource.data.restaurantId == order().restaurantId
+        && request.resource.data.food is int && request.resource.data.food >= 1 && request.resource.data.food <= 5
+        && (request.resource.data.delivery == null
+            || (request.resource.data.delivery is int && request.resource.data.delivery >= 1 && request.resource.data.delivery <= 5))
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 500
+        && request.resource.data.name is string && request.resource.data.name.size() <= 30
+        && request.resource.data.createdAt == request.time;
+      // مفيش مسح خالص (عشان محدش يقيّم تاني ويزوّد العدّاد)، والأدمن يقدر يعدّل بس (مثلًا يخفي تعليق مسيء)
+      allow update: if isAdmin();
+      allow delete: if false;
     }
 
     // خدمة العملاء: كل واحد يشوف شكاويه بس ويضيف رسايل جديدة (ميعدلش القديمة)، والأدمن يرد ويقفل

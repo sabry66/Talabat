@@ -436,6 +436,34 @@ export function createBackend() {
       commit();
     },
 
+    async submitReview(o, user, { food, delivery, comment }) {
+      const d = db();
+      d.reviews ||= {};
+      const order = d.orders[o.id];
+      if (!order || order.customerUid !== user.uid || order.status !== 'delivered' || d.reviews[o.id]) throw authError('permission-denied');
+      d.reviews[o.id] = {
+        id: o.id, orderId: o.id, restaurantId: order.restaurantId,
+        name: String(user.name || '').split(' ')[0].slice(0, 30), food, delivery: delivery || null, comment: String(comment || '').slice(0, 500), createdAt: Date.now(),
+      };
+      const r = d.restaurants[order.restaurantId];
+      r.ratingSum = (r.ratingSum || 0) + food;
+      r.ratingCount = (r.ratingCount || 0) + 1;
+      r.lastReview = o.id;
+      commit();
+    },
+
+    async getReview(orderId) {
+      return clone(db().reviews?.[orderId] || null);
+    },
+
+    watchRestaurantReviews(restaurantId, cb) {
+      return watch(() => sortByNewest(Object.values(db().reviews || {}).filter((x) => x.restaurantId === restaurantId)), cb);
+    },
+
+    watchAllReviews(cb) {
+      return watch(() => sortByNewest(Object.values(db().reviews || {})), cb);
+    },
+
     async reportMissing(id, missing, missingAmount) {
       const o = db().orders[id];
       if (o.status !== 'on_way' || o.missing) throw authError('permission-denied');

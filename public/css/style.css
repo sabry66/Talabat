@@ -788,6 +788,28 @@ body.sheet-open { overflow: hidden; }
 .rest-money > div:not(.muted) { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .rest-money .muted { line-height: 1.6; }
 
+/* ---------- التقييمات ---------- */
+.stars { color: var(--accent); letter-spacing: 1px; }
+.rating-big { font-size: 1.6rem; font-weight: 800; color: var(--brand); }
+.rating-big small { font-size: .85rem; font-weight: 600; }
+.review-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.review-row:last-child { border-bottom: 0; }
+.review-row p { margin: 4px 0 0; }
+.review-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rate-form h3 { margin: 0 0 8px; }
+.rate-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; font-weight: 700; }
+.star-pick { display: inline-flex; direction: ltr; gap: 2px; }
+.star-pick button { border: 0; background: none; font-size: 1.8rem; line-height: 1; color: #d6d2e3; cursor: pointer; width: 40px; height: 40px; padding: 0; }
+.star-pick button.on { color: var(--accent); }
+.rate-form textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 10px; margin: 4px 0 10px; }
+.rating-summary { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.rating-summary .rating-big { text-align: center; min-width: 110px; }
+.rating-bars { flex: 1 1 200px; }
+.bar-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.bar-row .bar { flex: 1; height: 8px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+.bar-row .bar i { display: block; height: 100%; background: var(--accent); }
+.reviews-box { margin-top: 16px; }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 

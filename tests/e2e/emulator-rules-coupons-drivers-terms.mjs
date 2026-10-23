@@ -245,6 +245,32 @@ console.log(await api(d, `(F, db, me, id) => ({
   driverDecidesTwice: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'disputed', updatedAt: 2 }),
 })`, second));
 await d.waitForTimeout(800); await d.click(`[data-id="${second}"][data-status="delivered"]`); await d.waitForTimeout(1500);
+// ---- التقييمات: محاولات تلاعب
+const reviewTests = (who) => `(F, db, me, arg) => {
+  const rv = (id, extra = {}) => ({ orderId: id, restaurantId: 'burger-house', name: 'x', food: 4, delivery: null, comment: '', createdAt: F.serverTimestamp(), ...extra });
+  const write = async (id, review, sum, count = 1) => { const b = F.writeBatch(db); b.set(F.doc(db, 'reviews', id), review);
+    const r = (await F.getDoc(F.doc(db, 'restaurants', 'burger-house'))).data();
+    b.update(F.doc(db, 'restaurants', 'burger-house'), { ratingSum: (r.ratingSum || 0) + sum, ratingCount: (r.ratingCount || 0) + count, lastReview: id }); await b.commit(); };
+  return ${who === 'c' ? `{
+    reviewNotDelivered: () => write(arg.notDelivered, rv(arg.notDelivered), 4),
+    reviewInflatedSum: () => write(arg.done, rv(arg.done, { food: 1 }), 5),
+    reviewFood6: () => write(arg.done, rv(arg.done, { food: 6 }), 6),
+    reviewExtraKey: () => write(arg.done, rv(arg.done, { verified: true }), 4),
+    reviewWithCustomerId: () => write(arg.done, rv(arg.done, { customerUid: me }), 4),
+    reviewDoubleBumpSameBatch: async () => { const b = F.writeBatch(db); b.set(F.doc(db, 'reviews', arg.done), rv(arg.done));
+      b.update(F.doc(db, 'restaurants', 'burger-house'), { ratingSum: F.increment(4), ratingCount: F.increment(1), lastReview: arg.done });
+      b.update(F.doc(db, 'restaurants', 'burger-house'), { ratingSum: F.increment(4), ratingCount: F.increment(1), lastReview: arg.done }); await b.commit(); },
+    bumpRatingWithoutReview: async () => { const r = (await F.getDoc(F.doc(db, 'restaurants', 'burger-house'))).data(); await F.updateDoc(F.doc(db, 'restaurants', 'burger-house'), { ratingSum: (r.ratingSum || 0) + 5, ratingCount: (r.ratingCount || 0) + 1, lastReview: 'nope' }); },
+    validReview: () => write(arg.done, rv(arg.done), 4),
+    reviewTwice: () => write(arg.done, rv(arg.done, { food: 5 }), 5),
+    deleteMyReview: () => F.deleteDoc(F.doc(db, 'reviews', arg.done)),
+  }` : `{
+    reviewSomeoneElsesOrder: () => write(arg.done, rv(arg.done), 4),
+  }`};
+}`;
+const notDelivered = mineIds.find((x) => x !== second) || third;
+console.log(await api(d, reviewTests('d'), { done: second, notDelivered, drv: drvUid }));
+console.log(await api(c, reviewTests('c'), { done: second, notDelivered, drv: drvUid }));
 const after2 = (await (await fetch(docUrl('driverLoads/' + drvUid), { headers: H })).json()).fields.orders.arrayValue.values || [];
 console.log('load after delivering one:', after2.length);
 

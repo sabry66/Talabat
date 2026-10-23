@@ -6,8 +6,9 @@ import { renderOffersEditor } from './offers-editor.js';
 import { orderSplit, sum, missingItems, missingValue } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
+import { ratingOf, stars } from './ratings.js';
 import {
-  esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday,
+  esc, fmt, toast, errorMessage, beep, loader, demoBanner, isToday, timeAgo, shortId,
   renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderBlocked, renderAccountPanel, homeFor, orderCard, restaurantLogo,
 } from './ui.js';
 
@@ -143,6 +144,7 @@ function drawTabs() {
     <button type="button" data-tab="orders" class="${tab === 'orders' ? 'active' : ''}">📋 الطلبات ${pending ? `<span class="badge static">${pending}</span>` : ''}</button>
     <button type="button" data-tab="menu" class="${tab === 'menu' ? 'active' : ''}">🍽️ المنيو والإعدادات</button>
     <button type="button" data-tab="offers" class="${tab === 'offers' ? 'active' : ''}">🏷️ العروض والخصومات</button>
+    <button type="button" data-tab="reviews" class="${tab === 'reviews' ? 'active' : ''}">⭐ التقييمات</button>
     <button type="button" data-tab="support" class="${tab === 'support' ? 'active' : ''}">🎧 الدعم</button>`;
   el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
     if (tab === b.dataset.tab) return;
@@ -175,6 +177,12 @@ function drawTab() {
     supportUnsub = renderSupport(document.getElementById('tabBody'), { backend, user });
     return;
   }
+  if (tab === 'reviews') {
+    const body = document.getElementById('tabBody');
+    body.innerHTML = loader();
+    supportUnsub = backend.watchRestaurantReviews(restaurant.id, (list) => drawReviews(body, list));
+    return;
+  }
   if (tab === 'offers') {
     renderOffersEditor(document.getElementById('tabBody'), restaurant, {
       onSave: async (changes) => {
@@ -201,6 +209,29 @@ function drawTab() {
       }
     },
   });
+}
+
+// تقييمات العملاء لأكل المطعم
+function drawReviews(body, list) {
+  const { avg, count } = ratingOf({ ratingSum: list.reduce((a, x) => a + x.food, 0), ratingCount: list.length });
+  const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: list.filter((x) => x.food === n).length }));
+  body.innerHTML = list.length ? `
+    <section class="panel">
+      <div class="rating-summary">
+        <div class="rating-big">${avg.toLocaleString('ar-EG')}<small class="muted"> من 5</small><div class="stars">${stars(Math.round(avg))}</div>
+          <div class="muted small">${count.toLocaleString('ar-EG')} تقييم</div></div>
+        <div class="rating-bars">${dist.map((d) => `<div class="bar-row"><span>${d.n} ★</span><span class="bar"><i style="width:${count ? Math.round((d.c / count) * 100) : 0}%"></i></span><span class="muted small">${d.c}</span></div>`).join('')}</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h3>آراء العملاء</h3>
+      ${list.map((x) => `
+        <div class="review-row">
+          <div class="review-head"><span class="stars">${stars(x.food)}</span> <b>${esc(x.name || 'عميل')}</b>
+            <span class="muted small">${timeAgo(x.createdAt)} • طلب #${shortId(x.orderId)}</span></div>
+          ${x.comment ? `<p>${esc(x.comment)}</p>` : '<p class="muted small">من غير تعليق</p>'}
+        </div>`).join('')}
+    </section>` : '<div class="empty-state"><div class="big">⭐</div><h2>لسه مفيش تقييمات</h2><p class="muted">بعد ما الطلبات تتوصل، العملاء بيقيّموا الأكل والتقييمات بتظهر هنا وعلى صفحة مطعمك.</p></div>';
 }
 
 function drawOrders() {

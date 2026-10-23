@@ -49,6 +49,8 @@ export function createBackend(config, { useEmulators }) {
   const couponUse = (uid, code) => doc(db, 'couponUses', uid, 'codes', code);
   // driverLoads/{uid}: الأوردرات اللي مع المندوب دلوقتي، والقواعد بتمنعه يزود عن الحد اللي الأدمن حدده
   const driverLoads = collection(db, 'driverLoads');
+  const reviews = collection(db, 'reviews');
+  const toReview = (d) => ({ ...d.data(), id: d.id, createdAt: d.data().createdAt?.toMillis?.() ?? d.data().createdAt });
   const FINAL = ['delivered', 'cancelled', 'rejected'];
 
   // بيشيل الأوردر من لستة المندوب في نفس العملية (لو موجود فيها)
@@ -460,6 +462,34 @@ export function createBackend(config, { useEmulators }) {
       });
       if (FINAL.includes(status)) await unload(batch, driverUid, id);
       return batch.commit();
+    },
+
+    // ---------- التقييمات ----------
+    // التقييم ومجموع تقييمات المطعم بيتسجلوا مع بعض (القواعد بتمنع التكرار والتزوير)
+    async submitReview(o, user, { food, delivery, comment }) {
+      const batch = writeBatch(db);
+      batch.set(doc(reviews, o.id), {
+        orderId: o.id, restaurantId: o.restaurantId,
+        name: String(user.name || '').split(' ')[0].slice(0, 30), food, delivery: delivery || null,
+        comment: String(comment || '').slice(0, 500), createdAt: serverTimestamp(),
+      });
+      batch.update(doc(restaurants, o.restaurantId), { ratingSum: increment(food), ratingCount: increment(1), lastReview: o.id });
+      await batch.commit();
+    },
+
+    async getReview(orderId) {
+      const s = await getDoc(doc(reviews, orderId));
+      return s.exists() ? toReview(s) : null;
+    },
+
+    // تقييمات مطعم (الأحدث الأول)
+    watchRestaurantReviews(restaurantId, cb) {
+      return onSnapshot(query(reviews, where('restaurantId', '==', restaurantId)),
+        (s) => cb(s.docs.map(toReview).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
+    },
+
+    watchAllReviews(cb) {
+      return onSnapshot(reviews, (s) => cb(s.docs.map(toReview).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
     },
 
     // العميل بيبلّغ عن أصناف ناقصة وقت الاستلام. missing = [{ i, name, qty, amount }]

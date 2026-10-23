@@ -10,7 +10,7 @@ Search restaurants and dishes,discovery,must,yes,yes,Arabic letter normalisation
 Filters and sorting,discovery,should,yes,yes,open / offers / rating / price
 Open or closed status on each restaurant,discovery,must,yes,yes,
 Delivery fee and time shown before ordering,discovery,must,yes,yes,
-Real customer ratings on restaurants,discovery,should,yes,partial,ratings are set by admin; no real reviews yet
+Real customer ratings on restaurants,discovery,should,yes,yes,real averages from delivered orders only; sample ratings hidden
 Favourite restaurants,discovery,should,yes,no,
 Only show restaurants that deliver to my area,discovery,should,yes,no,zones are platform-wide; restaurants not tied to zones
 Groceries and other shops,discovery,could,yes,partial,grocery category exists; no dedicated store flow
@@ -36,7 +36,7 @@ Call the rider,tracking,should,yes,yes,
 Accurate ETA that updates,tracking,should,yes,partial,fixed time range per restaurant
 Order history,after order,must,yes,yes,
 Reorder a past order in one tap,after order,should,yes,yes,on the order page (keeps options)
-Rate and review an order,after order,should,yes,no,
+Rate and review an order,after order,should,yes,yes,food + delivery stars and comment; once per delivered order
 Contact support about a specific order,after order,must,yes,yes,human staff + WhatsApp
 Report a problem with photo,after order,should,yes,yes,ready reasons + photo + human reply promise
 Cancel before the restaurant accepts,after order,must,yes,yes,

@@ -6,13 +6,14 @@ import { locationPicker } from './map.js';
 import { activeZones, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
-  fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
+  fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel, timeAgo,
   loader, demoBanner, renderAuthForm, restaurantLogo, itemImage, renderCompleteProfile, renderAcceptTerms, needsTerms, usernameField, renderBlocked, homeFor,
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS, lineOptions,
 } from './ui.js';
 import { renderSupport } from './support.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
 import { hasOptions, resolveOptions, lineKey } from './options.js';
+import { ratingOf, ratingValue, ratingBadge, stars } from './ratings.js';
 import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
@@ -171,7 +172,7 @@ function drawResults() {
     (ui.category === 'all' || r.category === ui.category) &&
     (!ui.openOnly || r.isOpen !== false) &&
     (!ui.promoOnly || hasOffers(r)) &&
-    (!ui.topRated || (r.rating || 0) >= 4));
+    (!ui.topRated || ratingValue(r) >= 4));
 
   // الأصناف اللي بتطابق البحث (بتظهر بس لو فيه بحث أو فلتر سعر)
   const wantItems = q || ui.priceMin || ui.priceMax;
@@ -184,7 +185,7 @@ function drawResults() {
     && (!(ui.priceMin || ui.priceMax) || r.menu.some((sec) => sec.items.some((it) => isAvailable(it) && inPriceRange(priceOf(it), ui)))));
 
   const byOpen = (a, b) => (b.isOpen !== false) - (a.isOpen !== false);
-  if (ui.sort === 'rating') { list.sort((a, b) => (b.rating || 0) - (a.rating || 0)); items.sort((a, b) => (b.r.rating || 0) - (a.r.rating || 0)); }
+  if (ui.sort === 'rating') { list.sort((a, b) => ratingValue(b) - ratingValue(a)); items.sort((a, b) => ratingValue(b.r) - ratingValue(a.r)); }
   if (ui.sort === 'time') { list.sort((a, b) => a.time[0] - b.time[0]); items.sort((a, b) => a.r.time[0] - b.r.time[0]); }
   if (ui.sort === 'price_low') { list.sort((a, b) => minPrice(a) - minPrice(b)); items.sort((a, b) => priceOf(a.it) - priceOf(b.it)); }
   if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => priceOf(b.it) - priceOf(a.it)); }
@@ -393,7 +394,7 @@ function restaurantCard(r) {
       <div class="card-body">
         <div class="card-title">
           <h3>${esc(r.name)}</h3>
-          <span class="rating">${r.rating ? `⭐ ${r.rating}` : '🆕 جديد'}</span>
+          <span class="rating">${ratingBadge(r)}</span>
         </div>
         <p class="muted">${esc((r.tags || []).join(' • '))}</p>
         <p class="meta">🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()}</p>
@@ -417,7 +418,7 @@ function renderRestaurant(id) {
       <div>
         <h1>${esc(r.name)}</h1>
         <p>${esc((r.tags || []).join(' • '))}</p>
-        <p class="meta">${r.rating ? `⭐ ${r.rating} (${Number(r.reviews || 0).toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
+        <p class="meta">${ratingOf(r).avg ? `⭐ ${ratingOf(r).avg.toLocaleString('ar-EG')} (${ratingOf(r).count.toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
         ${hasOffers(r) ? `<span class="promo static">🏷️ ${promoText(r)}</span>` : ''}
       </div>
     </section>
@@ -439,8 +440,10 @@ function renderRestaurant(id) {
     <div class="menu-layout">
       <div class="menu" id="menuList"></div>
       <aside class="side-cart" id="sideCart"></aside>
-    </div>`;
+    </div>
+    <section class="panel reviews-box" id="reviewsBox" hidden></section>`;
 
+  setCleanup(backend.watchRestaurantReviews(r.id, (list) => drawReviews(r, list)));
   app.querySelectorAll('[data-scroll]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById(a.dataset.scroll)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -449,6 +452,23 @@ function renderRestaurant(id) {
   document.getElementById('menuSort').addEventListener('change', (e) => { menuUi.sort = e.target.value; drawMenu(r); });
   document.getElementById('menuAvailable').addEventListener('change', (e) => { menuUi.availableOnly = e.target.checked; drawMenu(r); });
   drawMenu(r);
+}
+
+// آراء العملاء (آخر 10 فيهم تعليق أو تقييم)
+function drawReviews(r, list) {
+  const box = document.getElementById('reviewsBox');
+  if (!box) return;
+  const { avg, count, real } = ratingOf(r);
+  box.hidden = !list.length;
+  if (!list.length) return;
+  box.innerHTML = `
+    <div class="list-head"><h2>⭐ آراء العملاء</h2>${real ? `<span class="rating-big">${avg.toLocaleString('ar-EG')} <small class="muted">من ${count.toLocaleString('ar-EG')} تقييم</small></span>` : ''}</div>
+    ${list.slice(0, 10).map((x) => `
+      <div class="review-row">
+        <div class="review-head"><span class="stars" aria-label="${x.food} من 5">${stars(x.food)}</span>
+          <b>${esc(x.name || 'عميل')}</b> <span class="muted small">${timeAgo(x.createdAt)}</span></div>
+        ${x.comment ? `<p>${esc(x.comment)}</p>` : ''}
+      </div>`).join('')}`;
 }
 
 // المنيو بعد البحث والفلترة (بيتحدث لوحده من غير ما خانة البحث تتمسح)
@@ -871,6 +891,7 @@ function drawOrder(o) {
         </ol>
         ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
         ${missingPanel(o)}
+        ${reviewPanel(o)}
         ${o.status === 'placed' ? '<p class="muted small center">مستنيين المطعم يأكد طلبك... الصفحة بتتحدث لوحدها.</p>' : ''}`}
     </section>
 
@@ -896,6 +917,7 @@ function drawOrder(o) {
 
   document.getElementById('reorder').addEventListener('click', () => reorder(o));
   bindMissing(o);
+  bindReview(o);
   const cancel = document.getElementById('cancelOrder');
   if (cancel) cancel.addEventListener('click', async () => {
     if (!confirm('متأكد إنك عايز تلغي الطلب؟')) return;
@@ -907,6 +929,65 @@ function drawOrder(o) {
       toast(errorMessage(err));
       cancel.disabled = false;
     }
+  });
+}
+
+// ---------- تقييم الطلب بعد التوصيل ----------
+const reviewState = { orderId: null, loaded: false, review: null, food: 0, delivery: 0, comment: '', sending: false };
+
+function reviewPanel(o) {
+  if (o.status !== 'delivered') return '';
+  if (reviewState.orderId !== o.id) {
+    Object.assign(reviewState, { orderId: o.id, loaded: false, review: null, food: 0, delivery: 0, comment: '', sending: false });
+    backend.getReview(o.id).then((rv) => {
+      if (reviewState.orderId !== o.id) return;
+      Object.assign(reviewState, { loaded: true, review: rv });
+      if (page === 'order') drawOrder(o);
+    }).catch(() => { reviewState.loaded = true; });
+    return '';
+  }
+  if (!reviewState.loaded) return '';
+  const rv = reviewState.review;
+  if (rv) {
+    return `<div class="review-box ok">⭐ شكرًا على تقييمك! الأكل: <span class="stars">${stars(rv.food)}</span>${rv.delivery ? ` • التوصيل: <span class="stars">${stars(rv.delivery)}</span>` : ''}${rv.comment ? `<p class="small">"${esc(rv.comment)}"</p>` : ''}</div>`;
+  }
+  const picker = (key, val) => `<div class="star-pick" role="radiogroup" aria-label="${key === 'food' ? 'تقييم الأكل' : 'تقييم التوصيل'}">
+    ${[1, 2, 3, 4, 5].map((n) => `<button type="button" role="radio" aria-checked="${val === n}" aria-label="${n} من 5" data-star="${key}:${n}" class="${n <= val ? 'on' : ''}">★</button>`).join('')}</div>`;
+  return `
+    <form class="review-box rate-form" id="rateForm">
+      <h3>⭐ قيّم طلبك</h3>
+      <label class="rate-row"><span>الأكل من ${esc(o.restaurantName)}</span>${picker('food', reviewState.food)}</label>
+      ${o.driverUid ? `<label class="rate-row"><span>التوصيل <small class="muted">(اختياري)</small></span>${picker('delivery', reviewState.delivery)}</label>` : ''}
+      <textarea id="rateComment" rows="2" maxlength="500" placeholder="رأيك يفرق مع غيرك ومع المطعم (اختياري)">${esc(reviewState.comment)}</textarea>
+      <p class="muted small">تقييمك وتعليقك واسمك الأول بس هيظهروا في صفحة المطعم.</p>
+      <button class="btn primary block" type="submit" ${reviewState.food && !reviewState.sending ? '' : 'disabled'}>ابعت التقييم</button>
+    </form>`;
+}
+
+function bindReview(o) {
+  const form = app.querySelector('#rateForm');
+  if (!form) return;
+  form.querySelector('#rateComment').addEventListener('input', (e) => { reviewState.comment = e.target.value; });
+  form.querySelectorAll('[data-star]').forEach((b) => b.addEventListener('click', () => {
+    const [key, n] = b.dataset.star.split(':');
+    reviewState[key] = Number(n);
+    reviewState.comment = form.querySelector('#rateComment').value;
+    drawOrder(o);
+  }));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!reviewState.food) return;
+    reviewState.sending = true;
+    reviewState.comment = form.querySelector('#rateComment').value.trim();
+    try {
+      await backend.submitReview(o, state.user, { food: reviewState.food, delivery: reviewState.delivery || null, comment: reviewState.comment });
+      reviewState.review = { food: reviewState.food, delivery: reviewState.delivery || null, comment: reviewState.comment };
+      toast('شكرًا على تقييمك ⭐');
+    } catch (err) {
+      toast(errorMessage(err));
+    }
+    reviewState.sending = false;
+    drawOrder(o);
   });
 }
 
