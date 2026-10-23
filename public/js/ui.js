@@ -446,7 +446,7 @@ export function renderDashNav(user, backend, onAccount) {
 // اختيارات الصنف (الحجم والإضافات) تحت اسمه
 export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '');
 
-// فلوس الطلب من ناحية المطعم: تمن الأكل بس (التوصيل مش بتاعه)، وصافيه بعد العمولة، وهيقبضها من مين
+// فلوس الطلب من ناحية المطعم: تمن الأكل بس (التوصيل وإجمالي العميل ملوش دعوة بيهم)، وصافيه بعد العمولة، وهيقبضها من مين
 function restaurantMoney(o) {
   const s = orderSplit(o);
   const food = o.totals.subtotal - s.missing;
@@ -455,8 +455,7 @@ function restaurantMoney(o) {
       <div><span>تمن الأكل${s.missing ? ' (بعد الناقص)' : ''}</span><strong>${fmt(food)}</strong></div>
       ${s.commission ? `<div class="small"><span>عمولة أريفو</span><span>− ${fmt(s.commission)}</span></div>
       <div><span>صافي ليك</span><strong>${fmt(s.restaurant)}</strong></div>` : ''}
-      <div class="small muted">${s.payRestaurant ? `💵 هتقبض ${fmt(s.payRestaurant)} كاش من المندوب وقت الاستلام` : '🏦 فلوسك هتتحاسب عليها مع أريفو'}
-        • العميل بيدفع ${fmt(o.totals.total)} شامل التوصيل (${paymentLabel(o.payment)})</div>
+      <div class="small muted">${s.payRestaurant ? `💵 هتقبض ${fmt(s.payRestaurant)} كاش من المندوب وقت الاستلام` : '🏦 فلوسك هتتحاسب عليها مع أريفو'}</div>
     </footer>`;
 }
 
