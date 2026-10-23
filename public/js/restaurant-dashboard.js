@@ -7,6 +7,7 @@ import { BUSY_OPTIONS, BUSY_FOR, busyExtra } from './busy.js';
 import { renderOffersEditor } from './offers-editor.js';
 import { orderSplit, sum, missingItems, missingValue, activeZones } from './finance.js';
 import { renderJoin } from './join.js';
+import { priceProblems } from './price-check.js';
 import { renderSupport } from './support.js';
 import { ratingOf, stars } from './ratings.js';
 import {
@@ -280,7 +281,7 @@ function drawOrders() {
     return `
       <section class="column">
         <h3>${title} <span class="count">${list.length}</span></h3>
-        ${list.map((o) => orderCard(o, NEXT_ACTIONS[status], { checklist: status === 'preparing' ? (packed[o.id] ||= new Set()) : null })).join('') || '<p class="muted small center">مفيش</p>'}
+        ${list.map((o) => orderCard(o, NEXT_ACTIONS[status], { checklist: status === 'preparing' ? (packed[o.id] ||= new Set()) : null, problems: priceProblems(o, restaurant) })).join('') || '<p class="muted small center">مفيش</p>'}
       </section>`;
   };
   const finished = orders.filter((o) => FINAL_STATUSES.includes(o.status)).slice(0, 20);
@@ -290,7 +291,7 @@ function drawOrders() {
     <div class="stats">
       <div class="stat"><span>طلبات النهارده</span><strong>${today.length}</strong></div>
       <div class="stat"><span>اتوصلت النهارده</span><strong>${delivered.length}</strong></div>
-      <div class="stat"><span>مبيعات النهارده</span><strong>${fmt(sum(delivered, (o) => o.totals.subtotal))}</strong></div>
+      <div class="stat"><span>مبيعات النهارده</span><strong>${fmt(sum(delivered, (o) => o.totals.subtotal - orderSplit(o).missing))}</strong></div>
       <div class="stat"><span>صافي ليك النهارده</span><strong>${fmt(sum(delivered, (o) => orderSplit(o).restaurant))}</strong></div>
     </div>
     <div class="board">

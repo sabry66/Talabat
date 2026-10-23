@@ -1102,3 +1102,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 [data-theme="dark"] .leaflet-tile-pane { filter: brightness(.8) contrast(1.1) saturate(.85); }
 [data-theme="dark"] :is(.leaflet-bar a, .leaflet-control-attribution) { background: var(--card); color: var(--muted); border-color: var(--line); }
 .dash-head .status { display: inline-block; }
+
+/* ---------- تنبيه أسعار مش مطابقة للمنيو ---------- */
+.price-alert { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); border-radius: 10px; padding: 8px 12px; margin: 6px 0; font-size: .88rem; }
+.price-alert ul { margin: 4px 0; padding-inline-start: 18px; }

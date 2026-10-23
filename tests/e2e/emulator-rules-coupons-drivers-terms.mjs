@@ -24,6 +24,8 @@ async function register(p, name, email, username) {
 }
 const H = { Authorization: 'Bearer owner', 'content-type': 'application/json' };
 const docUrl = (path) => `http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents/${path}`;
+// لو الطلب اترفض بنطبع الرسالة اللي ظهرت للعميل بدل ما نستنى وخلاص
+const orderPlaced = () => c.waitForSelector('.track', { timeout: 15000 }).catch(async (e) => { console.log('ORDER FAILED, toast:', await c.textContent('#toast').catch(() => '')); throw e; });
 const api = (p, fnSrc, arg) => p.evaluate(async ({ fnSrc, arg }) => {
   const { getApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
   const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
@@ -85,7 +87,7 @@ console.log('once50 ->', await apply('ONCE50'));
 console.log('3rd coupon field shown?', !!(await c.$('#promoInput')));
 console.log('summary:', (await c.textContent('.summary')).replace(/\s+/g, ' '));
 await c.screenshot({ path: `${SP}/coupons-cart.png`, fullPage: true });
-await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click('#placeBtn'); await c.waitForSelector('.track', { timeout: 15000 });
+await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click("#placeBtn"); await orderPlaced();
 console.log('order with 2 coupons placed ✔', (await c.textContent('.summary')).replace(/\s+/g, ' '));
 
 // once50 تاني لنفس العميل
@@ -93,17 +95,30 @@ await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-ad
 await c.goto(B + '#/cart'); await c.waitForSelector('#promoInput');
 console.log('once50 again ->', await apply('ONCE50'));
 console.log('free1 ->', await apply('FREE1'));
-await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click('#placeBtn'); await c.waitForSelector('.track', { timeout: 15000 });
+await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click("#placeBtn"); await orderPlaced();
 console.log('order with FREE1 placed ✔');
 
 // ---- محاولات تحايل مباشرة على Firestore
 const res = await api(c, `(F, db, me, arg) => {
-  const base = (st, promos, extra = {}) => ({ customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh1', name: 'x', price: 100, qty: 1 }],
-    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 200, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 200 }, promos, payment: 'cash', ...extra });
-  const order = async (promos, bump = [], uses = [], extra) => {
+  const base = (st, promos, totals, extra = {}) => ({ customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh1', name: 'x', price: 100, qty: 2 }],
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals, promos, payment: 'cash', ...extra });
+  // أرقام فاتورة سليمة بنفس معادلات التطبيق (عشان الاختبار يجرّب حاجة واحدة بس كل مرة)
+  const totalsFor = async (st, promos) => {
+    const sub = 200; const del = st.zones.maadi.fee; let disc = 0; let food = 0;
+    for (const code of promos) {
+      const c = (await F.getDoc(F.doc(db, 'coupons', code)).catch(() => null))?.data();
+      if (!c) continue;
+      const amt = c.type === 'delivery' ? del : c.type === 'fixed' ? Math.min(c.value, sub) : (c.maxDiscount > 0 ? Math.min(sub * c.value / 100, c.maxDiscount) : sub * c.value / 100);
+      disc += amt; if (c.type !== 'delivery') food += amt;
+    }
+    disc = Math.min(disc, sub + del); food = Math.min(food, sub);
+    return { subtotal: sub, delivery: del, service: 0, discount: disc, foodDiscount: food, total: sub + del - disc };
+  };
+  const order = async (promos, bump = [], uses = [], extra = {}) => {
     const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
     const ref = F.doc(F.collection(db, 'orders')); const b = F.writeBatch(db);
-    b.set(ref, base(st, promos, extra));
+    const totals = { ...(await totalsFor(st, promos)), ...(extra.totals || {}) };
+    b.set(ref, base(st, promos, totals, { ...extra, totals }));
     bump.forEach((code) => b.update(F.doc(db, 'coupons', code), { used: F.increment(1), lastOrder: ref.id }));
     uses.forEach((code) => b.set(F.doc(db, 'couponUses', me, 'codes', code), { orderId: ref.id, at: 1 }));
     await b.commit();
@@ -130,6 +145,12 @@ const res = await api(c, `(F, db, me, arg) => {
     scheduledTooSoon: () => order([], [], [], { scheduledFor: Date.now() + 5 * 60000 }),
     scheduledTooFar: () => order([], [], [], { scheduledFor: Date.now() + 5 * 86400000 }),
     scheduledNotNumber: () => order([], [], [], { scheduledFor: 'tomorrow' }),
+    totalLowerThanBill: () => order([], [], [], { totals: { total: 50 } }),
+    fakeDiscountNoCoupon: () => order([], [], [], { totals: { discount: 100, total: 200 + 40 - 100 } }),
+    biggerDiscountThanCoupon: () => order(['SAVE10'], ['SAVE10'], [], { totals: { discount: 150, foodDiscount: 150, total: 90 } }),
+    skipServiceFee: () => order([], [], [], { totals: { service: -20, total: 220 } }),
+    zeroFoodDiscountForBiggerRefund: () => order(['SAVE10'], ['SAVE10'], [], { totals: { foodDiscount: 0 } }),
+    negativeSubtotal: () => order([], [], [], { totals: { subtotal: -5, total: 35 } }),
     validControl: () => order(['SAVE10'], ['SAVE10']),
   };
 }`);
@@ -151,7 +172,7 @@ console.log(await api(a, `(F, db) => ({ validRestrictZones: () => F.updateDoc(F.
 const zoneOrder = (zone) => `async () => { const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
   await F.addDoc(F.collection(db, 'orders'), { customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh1', name: 'x', price: 100, qty: 1 }],
     restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: '${zone}',
-    totals: { subtotal: 200, delivery: st.zones['${zone}'].fee, service: 0, discount: 0, total: 200 }, promos: [], payment: 'cash' }); }`;
+    totals: { subtotal: 200, delivery: st.zones['${zone}'].fee, service: 0, discount: 0, total: 200 + st.zones['${zone}'].fee }, promos: [], payment: 'cash' }); }`;
 console.log(await api(c, `(F, db, me) => ({ outOfZoneOrder: ${zoneOrder('maadi')}, validInZoneOrder: ${zoneOrder('nasr_city')} })`));
 console.log(await api(a, `(F, db) => ({ validResetZones: () => F.updateDoc(F.doc(db, 'restaurants', 'burger-house'), { zones: null }) })`));
 
@@ -185,7 +206,7 @@ await fetch(docUrl(`users/${drvUid}?updateMask.fieldPaths=role`), { method: 'PAT
 // 3 طلبات جديدة من العميل، والأدمن يخليها "بتتجهز"
 for (let i = 0; i < 3; i++) {
   await c.goto(B + '#/restaurant/burger-house'); await c.waitForSelector('[data-add="bh2"]'); await c.click('[data-add="bh2"]'); await c.click('[data-inc="bh2"]');
-  await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click('#placeBtn'); await c.waitForSelector('.track', { timeout: 15000 });
+  await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'المعادي'); await c.click("#placeBtn"); await orderPlaced();
 }
 const ordersList = (await (await fetch(docUrl('orders?pageSize=50'), { headers: H })).json()).documents;
 const placed = ordersList.filter(o => o.fields.status.stringValue === 'placed').map(o => o.name.split('/').pop());
@@ -235,7 +256,7 @@ const selfId = await d.evaluate(async () => {
   const db = F.getFirestore(getApp()); const me = getAuth(getApp()).currentUser.uid;
   const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
   const ref = await F.addDoc(F.collection(db, 'orders'), { customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh2', name: 'x', price: 100, qty: 1 }],
-    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 100, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 100 }, promos: [], payment: 'cash' });
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 100, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 100 + st.zones.maadi.fee }, promos: [], payment: 'cash' });
   return ref.id;
 });
 await fetch(docUrl(`orders/${selfId}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'preparing' } } }) });

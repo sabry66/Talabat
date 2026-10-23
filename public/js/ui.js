@@ -560,11 +560,12 @@ function restaurantMoney(o) {
       ${s.commission ? `<div class="small"><span>عمولة أريفو</span><span>− ${fmt(s.commission)}</span></div>
       <div><span>صافي ليك</span><strong>${fmt(s.restaurant)}</strong></div>` : ''}
       <div class="small muted">${s.payRestaurant ? `💵 هتقبض ${fmt(s.payRestaurant)} كاش من المندوب وقت الاستلام` : '🏦 فلوسك هتتحاسب عليها مع أريفو'}</div>
+      ${s.restaurantDue < 0 ? `<div class="small warn-text">⚠️ قبضت تمن الأكل كله وقت الاستلام، وفيه ناقص اتخصم من العميل: عليك ترجّع <b>${fmt(-s.restaurantDue)}</b> لأريفو</div>` : ''}
     </footer>`;
 }
 
 // checklist: Set بأرقام الأصناف اللي المطعم علّم عليها (للطلبات اللي بتتجهز) — "جاهز" بيتقفل لحد ما يعلّم على الكل
-export function orderCard(o, actions = [], { showRestaurant = false, checklist = null } = {}) {
+export function orderCard(o, actions = [], { showRestaurant = false, checklist = null, problems = [] } = {}) {
   const map = mapLink(o.location);
   const allPacked = !checklist || o.lines.every((_, i) => checklist.has(i));
   return `
@@ -574,6 +575,9 @@ export function orderCard(o, actions = [], { showRestaurant = false, checklist =
         <span class="muted small">${timeAgo(o.createdAt)}</span>
       </header>
       ${scheduleTag(o)}
+      ${problems.length ? `<div class="price-alert"><b>⚠️ الأسعار في الطلب ده مش مطابقة للمنيو بتاعك</b>
+        <ul>${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+        <span class="small">متقبلوش، ودوس "رفض" وكلّم خدمة العملاء.</span></div>` : ''}
       ${showRestaurant ? `<div class="small">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)}</div>` : ''}
       ${checklist ? `
         <p class="small muted">✔️ علّم على كل صنف وإنت بتحطه في الشنطة:</p>

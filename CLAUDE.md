@@ -14,6 +14,7 @@
 | `js/backend/firebase.js` و`local.js` | نفس الواجهة بالظبط (Firebase أو الوضع التجريبي في localStorage). `index.js` بيختار (فيه top-level await) |
 | `js/ui.js` | مشترك: `renderAuthForm` (موافقة الشروط)، `renderAcceptTerms`، `orderCard`، `lineOptions`، `errorMessage`، `homeFor` |
 | `js/data.js` | ثوابت + بيانات تجريبية + `DEFAULT_SETTINGS` + `LEGAL_VERSION` + `PAYMENT_METHODS` (طرق الدفع؛ الأدمن بيفعّلها في `settings.payments`) |
+| `js/price-check.js` | المطعم بيقارن أسعار الطلب بالمنيو بتاعه (القواعد مبتقدرش تلف على الأصناف) |
 | `js/addresses.js` / `finance.js` / `coupons.js` / `offers.js` / `options.js` / `cart.js` | العناوين / الحسابات / الكوبونات / الخصومات / اختيارات الصنف (مفتاح السطر `itemId\|g:c`) / السلة |
 | `js/busy.js` / `schedule.js` | وضع الزحمة (`restTime`) / جدولة الطلب (`slots`، `whenLabel`، `scheduleTag`) |
 | `js/notify.js` | التنبيه العالي `alarm` + الاهتزاز + إشعارات المتصفح `notify` (والتطبيق مفتوح) |

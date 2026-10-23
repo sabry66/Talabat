@@ -340,28 +340,54 @@ service cloud.firestore {
         return get(/databases/$(database)/documents/settings/app).data;
       }
 
-      // كوبون واحد: شغال ومخلصش وشروطه متحققة، وعداده زاد 1 في نفس العملية (وسجل الاستخدام لو مرة لكل عميل)
-      function couponOk(code) {
+      // مفيش math.min في القواعد
+      function smaller(a, b) { return a < b ? a : b; }
+      function near(a, b) { return a - b < 0.02 && b - a < 0.02; }
+
+      // كوبون واحد بقراية واحدة: صالح؟ (شغال ومخلصش وشروطه متحققة، وعداده زاد 1 في نفس العملية، وسجل الاستخدام لو مرة لكل عميل)
+      // وقيمة خصمه كام (زي couponDiscount في finance.js). القواعد ليها حد لعدد القرايات، فمنقراش الكوبون مرتين
+      function couponCheck(code) {
         let path = /databases/$(database)/documents/coupons/$(code);
         let c = get(path).data;
         let after = getAfter(path).data;
-        return c.get('active', false) == true
-          && (c.get('expiresAt', null) == null || request.time.toMillis() <= c.expiresAt)
-          && request.resource.data.totals.subtotal >= c.get('minOrder', 0)
-          && after.get('used', 0) == c.get('used', 0) + 1
-          && (c.get('limit', 0) == 0 || after.get('used', 0) <= c.limit)
-          && (c.get('onePerCustomer', false) != true
-              || existsAfter(/databases/$(database)/documents/couponUses/$(request.auth.uid)/codes/$(code)));
+        let t = request.resource.data.totals;
+        let type = c.get('type', '');
+        let pct = t.subtotal * c.get('value', 0) / 100;
+        let amt = type == 'delivery' ? t.delivery
+          : type == 'fixed' ? smaller(c.get('value', 0), t.subtotal)
+          : (c.get('maxDiscount', 0) > 0 ? smaller(pct, c.maxDiscount) : pct);
+        return {
+          'ok': c.get('active', false) == true
+            && (c.get('expiresAt', null) == null || request.time.toMillis() <= c.expiresAt)
+            && t.subtotal >= c.get('minOrder', 0)
+            && after.get('used', 0) == c.get('used', 0) + 1
+            && (c.get('limit', 0) == 0 || after.get('used', 0) <= c.limit)
+            && (c.get('onePerCustomer', false) != true
+                || existsAfter(/databases/$(database)/documents/couponUses/$(request.auth.uid)/codes/$(code))),
+          'amt': amt,
+          'food': type == 'delivery' ? 0 : amt,
+        };
       }
 
-      // في حدود العدد اللي الأدمن سامح بيه (وأقصى حاجة 2)، ومن غير تكرار نفس الكود
-      function couponsOk(codes) {
-        return codes is list
-          && codes.size() <= settings().get('couponsPerOrder', 1)
+      // الكوبونات (في حدود العدد اللي الأدمن سامح بيه، وأقصى حاجة 2، من غير تكرار) + أرقام الفاتورة متسقة
+      function moneyOk(codes, t, rates) {
+        let none = { 'ok': true, 'amt': 0, 'food': 0 };
+        let r0 = codes.size() > 0 ? couponCheck(codes[0]) : none;
+        let r1 = codes.size() > 1 ? couponCheck(codes[1]) : none;
+        let sub = t.subtotal;
+        let del = t.delivery;
+        let svc = rates.get('serviceFee', { 'type': 'percent', 'value': 0 });
+        // "service" كلمة محجوزة في القواعد، فبنقراها بـ get
+        let fee = t.get('service', null);
+        return codes.size() <= settings().get('couponsPerOrder', 1)
           && codes.size() <= 2
           && codes.toSet().size() == codes.size()
-          && (codes.size() < 1 || couponOk(codes[0]))
-          && (codes.size() < 2 || couponOk(codes[1]));
+          && r0.ok && r1.ok
+          && sub is number && sub > 0
+          && fee is number && near(fee, svc.type == 'fixed' ? svc.value : sub * svc.value / 100)
+          && t.discount is number && near(t.discount, smaller(r0.amt + r1.amt, sub + del))
+          && near(t.get('foodDiscount', 0), smaller(r0.food + r1.food, sub))
+          && t.total is number && near(t.total, sub + del + fee - t.discount);
       }
 
       // طريقة الدفع لازم تكون من اللي الأدمن مفعّلها (الكاش والبطاقة مفعّلين لو لسه متظبطوش)
@@ -401,7 +427,8 @@ service cloud.firestore {
         && (restaurant().get('zones', null) == null
             || (restaurant().zones is list && request.resource.data.zoneId in restaurant().zones))
         && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee
-        && couponsOk(request.resource.data.get('promos', []))
+        && request.resource.data.get('promos', []) is list
+        && moneyOk(request.resource.data.get('promos', []), request.resource.data.totals, request.resource.data.rates)
         && paymentOk(request.resource.data.get('payment', ''))
         // طلب مجدول: بعد نص ساعة على الأقل وفي خلال 3 أيام
         && (!('scheduledFor' in request.resource.data)

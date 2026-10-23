@@ -355,7 +355,7 @@ function drawHistory(body) {
           const s = orderSplit(o);
           return `<tr><td><b>#${shortId(o.id)}</b></td><td class="small">${timeAgo(o.createdAt)}</td>
             <td>${esc(o.restaurantName)}</td><td>${esc(o.zoneName || '')}</td>
-            <td>${fmt(s.cash)}</td><td><b>${fmt(s.driver)}</b></td></tr>`;
+            <td>${s.cash ? fmt(s.cash) : `${o.payment === 'card' ? '💳' : '📱'} ${fmt(paidTotal(o))}`}</td><td><b>${fmt(s.driver)}</b></td></tr>`;
         }).join('')}</tbody></table></div>` : '<p class="muted small">لسه موصّلتش أوردرات.</p>'}
     </section>`;
 }

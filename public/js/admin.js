@@ -410,7 +410,7 @@ function drawFinance(body) {
   splits.forEach(({ o, s }) => {
     const r = byRestaurant[o.restaurantId] ??= { name: o.restaurantName, count: 0, sales: 0, commission: 0, net: 0, due: 0 };
     r.count++;
-    r.sales += o.totals.subtotal;
+    r.sales += o.totals.subtotal - s.missing; // الأكل اللي وصل فعلًا
     r.commission += s.commission;
     r.net += s.restaurant;
     r.due += s.restaurantDue;
@@ -438,7 +438,7 @@ function drawFinance(body) {
         <thead><tr><th>المطعم</th><th>الأوردرات</th><th>المبيعات</th><th>عمولة المنصة</th><th>صافي المطعم</th><th>${r.driverPaysRestaurant ? 'اتدفع للمطعم مع المندوب' : 'لسه للمطعم'}</th></tr></thead>
         <tbody>${Object.values(byRestaurant).sort((a, b) => b.count - a.count).map((x) => `
           <tr><td><b>${esc(x.name)}</b></td><td>${x.count}</td><td>${fmt(x.sales)}</td><td>${fmt(x.commission)}</td>
-          <td><b>${fmt(x.net)}</b></td><td>${r.driverPaysRestaurant ? '✅' : fmt(x.due)}</td></tr>`).join('')}
+          <td><b>${fmt(x.net)}</b></td><td>${x.due < 0 ? `<span class="warn-text">المطعم عليه ${fmt(-x.due)} (ناقص)</span>` : r.driverPaysRestaurant && !x.due ? '✅' : fmt(x.due)}</td></tr>`).join('')}
         </tbody></table></div>` : '<p class="muted small">مفيش أوردرات في الفترة دي.</p>'}
     </section>
 
@@ -472,6 +472,8 @@ function drawFinance(body) {
         <li>رسوم الخدمة على العميل: <b>${rateLabel(r.serviceFee)}</b> (بتروح للمنصة).</li>
         <li>الخصومات (أكواد الخصم) بتتخصم من ربح المنصة.</li>
         <li>${r.driverPaysRestaurant ? 'المندوب بيدفع للمطعم تمن الأكل وقت الاستلام، ويسلّم الباقي للمنصة.' : 'المندوب بيسلّم كل الكاش للمنصة، والمنصة بتحاسب المطاعم.'}</li>
+        <li>لو صنف وصل ناقص والمندوب أكد: العميل بيدفع أقل بتمنه (بعد نصيبه من الكوبون)، والمطعم بيتحمل تمنه كامل${r.driverPaysRestaurant ? '، ولو قبضه وقت الاستلام بيرجّعه للمنصة' : ''}.</li>
+        <li>ربح المنصة = اللي العميل دفعه − حق المطعم − حق المندوب.</li>
       </ul>
       <p class="muted small">كل أوردر بيتحسب بالنسب اللي كانت شغالة وقت ما اتطلب. غيّر النسب من "المناطق والنسب".</p>
     </section>`;
@@ -787,7 +789,7 @@ function drawDrivers(body) {
           <td><b>${who(d.name, d.username)}</b><br><span class="small muted" dir="ltr">${esc(d.email)}</span></td>
           <td><a href="tel:${esc(d.phone)}" dir="ltr">${esc(d.phone)}</a></td>
           <td>${s.active}</td><td>${s.today}</td><td>${fmt(s.earnToday)}</td><td>${s.total}</td>
-          <td><b>${fmt(s.owes)}</b></td>
+          <td><b>${s.owes >= 0 ? fmt(s.owes) : `<span class="muted">المنصة عليها ${fmt(-s.owes)}</span>`}</b></td>
           <td class="row-actions">${accountState(d)} <button class="btn small" data-remove="${d.uid}" type="button">شيله من المندوبين</button>${moderationButtons(d)}</td>
         </tr>`;
       }).join('')}</tbody></table></div>` : '<p class="muted">مفيش مندوبين لسه.</p>'}`;

@@ -112,13 +112,15 @@ export function orderSplit(o) {
   const paid = paidTotal(o);
   const platform = round(paid - restaurant - driver);
   const cash = o.payment === 'cash' ? paid : 0; // الكاش اللي المندوب بيحصّله من العميل
-  const payRestaurant = r.driverPaysRestaurant ? restaurant : 0; // اللي المندوب بيدفعه للمطعم وقت الاستلام
+  // المندوب بيدفع للمطعم وقت الاستلام، قبل ما حد يعرف إن فيه ناقص: يعني حق المطعم على الأكل كله
+  const atPickup = round(t.subtotal - Math.min(applyRate(r.commission, t.subtotal), t.subtotal));
+  const payRestaurant = r.driverPaysRestaurant ? atPickup : 0;
   return {
     restaurant, driver, platform, commission, cash, payRestaurant, missing,
     // الفلوس اللي مع المندوب ولازم يسلمها للمنصة (لو بالسالب يبقى المنصة عليها فلوس للمندوب)
     driverOwes: round(cash - payRestaurant - driver),
-    // الفلوس اللي المنصة لسه عليها للمطعم
-    restaurantDue: r.driverPaysRestaurant ? 0 : restaurant,
+    // اللي المنصة لسه عليها للمطعم. بالسالب = المطعم عليه يرجّع للمنصة (قبض تمن أكل وصل ناقص)
+    restaurantDue: r.driverPaysRestaurant ? round(restaurant - payRestaurant) : restaurant,
   };
 }
 

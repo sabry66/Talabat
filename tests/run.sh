@@ -31,9 +31,10 @@ trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
 
 if [[ "$MODE" == default || "$MODE" == demo || "$MODE" == full ]]; then
+  run unit-finance node "$HERE/e2e/unit-finance.mjs"
   run unit-push-messages node "$HERE/e2e/unit-push-messages.mjs"
   run preload-up-to-date node "$ROOT/scripts/preload.mjs" --check
-  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-driver-change demo-notes-busy demo-dark-mode demo-schedule demo-restaurant-zones demo-live-rider demo-phone-login demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
+  for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-driver-change demo-notes-busy demo-dark-mode demo-schedule demo-restaurant-zones demo-live-rider demo-phone-login demo-money-everywhere demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
     run "$t" node "$HERE/e2e/$t.mjs"
   done
 fi
@@ -41,7 +42,7 @@ if [[ "$MODE" == full ]]; then
   run demo-click-every-button-390 node "$HERE/e2e/demo-click-every-button.mjs" 390
 fi
 if [[ "$MODE" == default || "$MODE" == rules || "$MODE" == full ]]; then
-  for t in emulator-rules-coupons-drivers-terms emulator-admin-tabs-load emulator-slow-network-forms emulator-phone-login emulator-offline-cache; do
+  for t in emulator-rules-compile emulator-rules-coupons-drivers-terms emulator-admin-tabs-load emulator-slow-network-forms emulator-phone-login emulator-offline-cache; do
     run "$t" bash -c "cd '$ROOT' && npx --prefix '$HERE' firebase emulators:exec --only auth,firestore --project demo-talabaty 'node $HERE/e2e/$t.mjs'"
   done
 fi
