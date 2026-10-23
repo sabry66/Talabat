@@ -769,6 +769,21 @@ body.sheet-open { overflow: hidden; }
 .msg-img { display: block; margin-top: 6px; }
 .msg-img img { max-width: min(240px, 100%); max-height: 240px; border-radius: 10px; object-fit: cover; }
 
+/* ---------- راجع طلبك قبل ما تدفع / قايمة تجهيز المطعم ---------- */
+.review-box { background: var(--brand-soft); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+.review-box summary { cursor: pointer; list-style: none; }
+.review-box summary::-webkit-details-marker { display: none; }
+.review-box.ok { background: #e9f8ef; color: var(--ok); }
+.review-box.warn-box { background: #fff6e0; color: #6b4a00; }
+.review-box .order-actions { margin-top: 8px; }
+.miss-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); margin: 0; cursor: pointer; min-height: 40px; }
+.miss-row:last-of-type { border-bottom: 0; }
+.miss-row input[type=checkbox] { width: 20px !important; height: 20px; flex: none; padding: 0 !important; margin: 0; accent-color: var(--brand); }
+.miss-row select { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); width: auto; flex: none; }
+.miss-row b { white-space: nowrap; }
+.pack-list { background: var(--bg); border-radius: 10px; padding: 2px 8px; margin: 6px 0 8px; }
+.pack-list .miss-row:has(input:checked) span { color: var(--muted); text-decoration: line-through; }
+
 /* شريط السلة تحت (موبايل) */
 .mobile-cart-bar { display: none; }
 

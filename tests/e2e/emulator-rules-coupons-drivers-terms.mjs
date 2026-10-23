@@ -210,7 +210,41 @@ console.log('3rd claimed ->', await d.textContent('#toast'));
 const second = mineIds[1];
 await fetch(docUrl(`orders/${second}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'ready' } } }) });
 await d.$eval('[data-tab="active"]', e => e.click()); await d.waitForSelector(`[data-id="${second}"][data-status="on_way"]`); await d.click(`[data-id="${second}"][data-status="on_way"]`);
-await d.waitForSelector(`[data-id="${second}"][data-status="delivered"]`); await d.click(`[data-id="${second}"][data-status="delivered"]`); await d.waitForTimeout(1500);
+await d.waitForSelector(`[data-id="${second}"][data-status="delivered"]`);
+// ---- المندوب مياخدش طلب هو اللي عامله
+const selfId = await d.evaluate(async () => {
+  const { getApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const { getAuth } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+  const F = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const db = F.getFirestore(getApp()); const me = getAuth(getApp()).currentUser.uid;
+  const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
+  const ref = await F.addDoc(F.collection(db, 'orders'), { customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh2', name: 'x', price: 100, qty: 1 }],
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 100, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 100 }, promos: [] });
+  return ref.id;
+});
+await fetch(docUrl(`orders/${selfId}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'preparing' } } }) });
+console.log(await api(d, `(F, db, me, id) => ({
+  driverClaimsOwnOrder: async () => { const b = F.writeBatch(db); b.update(F.doc(db, 'orders', id), { driverUid: me, driverName: 'x', driverPhone: 'x', driverUsername: null, claimedAt: 1 }); b.set(F.doc(db, 'driverLoads', me), { orders: F.arrayUnion(id) }, { merge: true }); await b.commit(); },
+})`, selfId));
+await fetch(docUrl(`orders/${selfId}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'cancelled' } } }) });
+
+// ---- راجع طلبك قبل ما تدفع: محاولات تلاعب من العميل والمندوب
+console.log(await api(c, `(F, db, me, id) => ({
+  missingTooMuch: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 99999 }], missingAmount: 99999, updatedAt: 1 }),
+  missingPlusStatus: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 1 }], missingAmount: 1, status: 'delivered' }),
+  missingZero: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 0 }], missingAmount: 0 }),
+  customerConfirmsOwnClaim: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'confirmed' }),
+  validReportMissing: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 10 }], missingAmount: 10, updatedAt: 1 }),
+  reportMissingTwice: () => F.updateDoc(F.doc(db, 'orders', id), { missing: [{ i: 0, name: 'x', qty: 1, amount: 20 }], missingAmount: 20, updatedAt: 2 }),
+})`, second));
+console.log(await api(d, `(F, db, me, id) => ({
+  deliverBeforeAnswer: () => F.updateDoc(F.doc(db, 'orders', id), { status: 'delivered', statusHistory: F.arrayUnion({ status: 'delivered', at: 1 }), updatedAt: 1 }),
+  driverBadDecision: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'paid-me' }),
+  driverChangesAmount: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'confirmed', missingAmount: 1 }),
+  validDriverConfirms: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'confirmed', updatedAt: 1 }),
+  driverDecidesTwice: () => F.updateDoc(F.doc(db, 'orders', id), { missingDecision: 'disputed', updatedAt: 2 }),
+})`, second));
+await d.waitForTimeout(800); await d.click(`[data-id="${second}"][data-status="delivered"]`); await d.waitForTimeout(1500);
 const after2 = (await (await fetch(docUrl('driverLoads/' + drvUid), { headers: H })).json()).fields.orders.arrayValue.values || [];
 console.log('load after delivering one:', after2.length);
 

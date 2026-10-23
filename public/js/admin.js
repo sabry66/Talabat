@@ -6,7 +6,7 @@ import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { drawCoupons } from './admin-coupons.js';
 import { matches, normalize } from './search.js';
-import { orderSplit, sum, withDefaults, rateLabel, applyRate } from './finance.js';
+import { orderSplit, sum, withDefaults, rateLabel, applyRate, paidTotal } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
   renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderAccountPanel, homeFor, statusBadge, restaurantLogo,
@@ -233,7 +233,7 @@ function drawOverview(body) {
   body.innerHTML = `
     <div class="stats">
       <div class="stat"><span>طلبات النهارده</span><strong>${today.length}</strong></div>
-      <div class="stat"><span>مبيعات النهارده (اتوصلت)</span><strong>${fmt(sum(delivered, (o) => o.totals.total))}</strong></div>
+      <div class="stat"><span>مبيعات النهارده (اتوصلت)</span><strong>${fmt(sum(delivered, (o) => paidTotal(o)))}</strong></div>
       <div class="stat accent"><span>ربح المنصة النهارده</span><strong>${fmt(sum(delivered, (o) => orderSplit(o).platform))}</strong></div>
       <div class="stat"><span>طلبات شغالة دلوقتي</span><strong>${active.length}</strong></div>
       <div class="stat ${waitingDriver.length ? 'warn-stat' : ''}"><span>مستنية مندوب</span><strong>${waitingDriver.length}</strong></div>
@@ -426,7 +426,7 @@ function drawFinance(body) {
     <div class="list-head"><h2>الحسابات (الطلبات اللي اتوصلت بس)</h2>${periodChips()}</div>
     <div class="stats">
       <div class="stat"><span>عدد الأوردرات</span><strong>${list.length}</strong></div>
-      <div class="stat"><span>إجمالي اللي دفعه العملاء</span><strong>${fmt(total(({ o }) => o.totals.total))}</strong></div>
+      <div class="stat"><span>إجمالي اللي دفعه العملاء</span><strong>${fmt(total(({ o }) => paidTotal(o)))}</strong></div>
       <div class="stat accent"><span>💰 ربح المنصة</span><strong>${fmt(total(({ s }) => s.platform))}</strong></div>
       <div class="stat"><span>🏪 حق المطاعم</span><strong>${fmt(total(({ s }) => s.restaurant))}</strong></div>
       <div class="stat"><span>🛵 حق المندوبين</span><strong>${fmt(total(({ s }) => s.driver))}</strong></div>
@@ -460,7 +460,7 @@ function drawFinance(body) {
         <tbody>${splits.map(({ o, s }) => `
           <tr><td>#${shortId(o.id)}</td><td>${esc(o.restaurantName)}</td><td>${esc(o.zoneName || '')}</td><td>${who(o.driverName, o.driverUsername)}</td>
           <td>${fmt(o.totals.subtotal)}</td><td>${fmt(o.totals.delivery)}</td><td>${o.totals.discount ? fmt(o.totals.discount) : '—'}</td>
-          <td>${fmt(o.totals.total)}</td><td>${fmt(s.restaurant)}</td><td>${fmt(s.driver)}</td><td><b>${fmt(s.platform)}</b></td></tr>`).join('')}
+          <td>${fmt(paidTotal(o))}${o.missing ? ' <span title="بلاغ ناقص">⚠️</span>' : ''}</td><td>${fmt(s.restaurant)}</td><td>${fmt(s.driver)}</td><td><b>${fmt(s.platform)}</b></td></tr>`).join('')}
         </tbody></table></div>` : '<p class="muted small">مفيش.</p>'}
     </section>
 
@@ -929,7 +929,7 @@ function drawOrders(body) {
               <td class="small">${who(o.customerName, o.customerUsername)}<br><a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a></td>
               <td class="small">${esc(o.zoneName || '')}</td>
               <td class="small">${o.driverName ? who(o.driverName, o.driverUsername) : '<span class="muted">—</span>'}</td>
-              <td>${fmt(o.totals.total)}</td>
+              <td>${fmt(paidTotal(o))}${o.missing ? ' <span title="بلاغ ناقص">⚠️</span>' : ''}</td>
               <td>
                 <select data-order="${o.id}" aria-label="حالة الطلب">
                   ${Object.entries(ORDER_STATUSES).map(([k, s]) => `<option value="${k}" ${o.status === k ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('')}

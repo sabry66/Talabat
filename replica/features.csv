@@ -67,4 +67,6 @@ Dark stores / own grocery warehouses,network,could,yes,skip,needs warehouses and
 Paid Pro subscription,offers,could,yes,skip,deliberately not: users complain it is unclear
 Wallet credit instead of refunds,after order,could,yes,skip,deliberately not: users hate refunds as credit
 Human support reply promise,after order,should,no,yes,Arrivo addition (fix from reviews)
+Check order before paying + rider-confirmed refund,after order,should,no,yes,Arrivo addition (missing items 12% + refunds 17% of complaints)
+Restaurant packing checklist before ready,partners,should,no,yes,Arrivo addition
 No hidden service fee,checkout,should,no,yes,Arrivo addition (service fee 0 by default)

@@ -1,6 +1,7 @@
 // أدوات مشتركة بين صفحات التطبيق ولوحة المطعم ولوحة الأدمن
 import { ORDER_STATUSES, PAYMENT_LABELS, LEGAL_VERSION } from './data.js';
 import { thumb } from './upload.js';
+import { paidTotal, missingItems, missingValue } from './finance.js';
 
 export const fmt = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ج.م`;
 
@@ -445,8 +446,10 @@ export function renderDashNav(user, backend, onAccount) {
 // اختيارات الصنف (الحجم والإضافات) تحت اسمه
 export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '');
 
-export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
+// checklist: Set بأرقام الأصناف اللي المطعم علّم عليها (للطلبات اللي بتتجهز) — "جاهز" بيتقفل لحد ما يعلّم على الكل
+export function orderCard(o, actions = [], { showRestaurant = false, checklist = null } = {}) {
   const map = mapLink(o.location);
+  const allPacked = !checklist || o.lines.every((_, i) => checklist.has(i));
   return `
     <article class="order-card status-${o.status}">
       <header>
@@ -454,9 +457,17 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
         <span class="muted small">${timeAgo(o.createdAt)}</span>
       </header>
       ${showRestaurant ? `<div class="small">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)}</div>` : ''}
+      ${checklist ? `
+        <p class="small muted">✔️ علّم على كل صنف وإنت بتحطه في الشنطة:</p>
+        <div class="pack-list">
+          ${o.lines.map((l, i) => `<label class="miss-row"><input type="checkbox" data-pack="${o.id}:${i}" ${checklist.has(i) ? 'checked' : ''}>
+            <span class="grow"><b>${l.qty}×</b> ${esc(l.name)}${lineOptions(l)}</span></label>`).join('')}
+        </div>` : `
       <ul class="order-lines">
         ${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}${lineOptions(l)}</li>`).join('')}
-      </ul>
+      </ul>`}
+      ${o.missing ? `<p class="review-box warn-box small">⚠️ العميل بلّغ إن ناقص: ${missingItems(o).map((x) => `${x.qty}× ${esc(x.name)}`).join('، ')} —
+        ${o.missingDecision === 'confirmed' ? `المندوب أكد، واتخصم ${fmt(missingValue(o))}` : o.missingDecision === 'disputed' ? 'المندوب اعترض، خدمة العملاء بتراجع' : 'المندوب بيتأكد'}</p>` : ''}
       ${o.notes ? `<p class="note">📝 ${esc(o.notes)}</p>` : ''}
       <div class="small">
         👤 ${esc(o.customerName)}${o.customerUsername ? ` <span class="uname">@${esc(o.customerUsername)}</span>` : ''} • <a href="tel:${esc(o.customerPhone)}" dir="ltr">${esc(o.customerPhone)}</a><br>
@@ -465,11 +476,12 @@ export function orderCard(o, actions = [], { showRestaurant = false } = {}) {
       ${o.driverUid ? `<div class="driver-tag small">🛵 المندوب: ${esc(o.driverName)}${o.driverUsername ? ` <span class="uname">@${esc(o.driverUsername)}</span>` : ''} • <a href="tel:${esc(o.driverPhone)}" dir="ltr">${esc(o.driverPhone)}</a></div>`
         : ['preparing', 'ready'].includes(o.status) ? '<div class="driver-tag waiting small">⏳ مستني مندوب ياخده</div>' : ''}
       <footer>
-        <strong>${fmt(o.totals.total)}</strong>
+        <strong>${fmt(paidTotal(o))}</strong>
         <span class="small muted">${paymentLabel(o.payment)}</span>
       </footer>
       ${actions.length ? `<div class="order-actions">
-        ${actions.map((a) => `<button class="btn small ${a.cls || ''}" data-id="${o.id}" data-status="${a.status}" type="button">${a.label}</button>`).join('')}
+        ${actions.map((a) => `<button class="btn small ${a.cls || ''}" data-id="${o.id}" data-status="${a.status}" type="button"
+          ${a.status === 'ready' && !allPacked ? 'disabled title="علّم على كل الأصناف الأول"' : ''}>${a.status === 'ready' && !allPacked ? `📦 علّم على الأصناف (${checklist.size}/${o.lines.length})` : a.label}</button>`).join('')}
       </div>` : ''}
     </article>`;
 }

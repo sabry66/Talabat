@@ -3,7 +3,7 @@ import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { renderOffersEditor } from './offers-editor.js';
-import { orderSplit, sum } from './finance.js';
+import { orderSplit, sum, paidTotal, missingItems, missingValue } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
@@ -20,6 +20,7 @@ let tab = 'orders';
 let unsubs = [];
 let knownNew = null;
 let supportUnsub = null;
+const packed = {}; // orderId → Set بأرقام الأصناف اللي اتجهزت (قايمة المراجعة قبل "جاهز")
 
 const NEXT_ACTIONS = {
   placed: [
@@ -212,7 +213,7 @@ function drawOrders() {
     return `
       <section class="column">
         <h3>${title} <span class="count">${list.length}</span></h3>
-        ${list.map((o) => orderCard(o, NEXT_ACTIONS[status])).join('') || '<p class="muted small center">مفيش</p>'}
+        ${list.map((o) => orderCard(o, NEXT_ACTIONS[status], { checklist: status === 'preparing' ? (packed[o.id] ||= new Set()) : null })).join('') || '<p class="muted small center">مفيش</p>'}
       </section>`;
   };
   const finished = orders.filter((o) => FINAL_STATUSES.includes(o.status)).slice(0, 20);
@@ -236,12 +237,18 @@ function drawOrders() {
       ${finished.length ? `<table class="table">
         <thead><tr><th>الطلب</th><th>العميل</th><th>الإجمالي</th><th>الحالة</th><th>الوقت</th></tr></thead>
         <tbody>${finished.map((o) => `
-          <tr><td>#${o.id.slice(-6).toUpperCase()}</td><td>${esc(o.customerName)}</td><td>${fmt(o.totals.total)}</td>
+          <tr><td>#${o.id.slice(-6).toUpperCase()}</td><td>${esc(o.customerName)}</td><td>${fmt(paidTotal(o))}${o.missingDecision === 'confirmed' ? ` <span class="small warn-text" title="${missingItems(o).map((x) => `${x.qty}× ${esc(x.name)}`).join('، ')}">(ناقص اتخصم −${fmt(missingValue(o))})</span>` : o.missing ? ' <span class="small warn-text">⚠️ بلاغ ناقص</span>' : ''}</td>
           <td>${ORDER_STATUSES[o.status].icon} ${ORDER_STATUSES[o.status].label}</td>
           <td class="small">${new Date(o.createdAt).toLocaleString('ar-EG')}</td></tr>`).join('')}
         </tbody></table>` : '<p class="muted small">لسه مفيش.</p>'}
     </section>`;
 
+  body.querySelectorAll('[data-pack]').forEach((c) => c.addEventListener('change', () => {
+    const [id, i] = c.dataset.pack.split(':');
+    const set = (packed[id] ||= new Set());
+    if (c.checked) set.add(Number(i)); else set.delete(Number(i));
+    drawOrders();
+  }));
   body.querySelectorAll('[data-status]').forEach((b) => b.addEventListener('click', async () => {
     if (b.dataset.status === 'rejected' && !confirm('متأكد إنك عايز ترفض الطلب ده؟')) return;
     b.disabled = true;

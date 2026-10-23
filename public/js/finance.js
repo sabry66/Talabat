@@ -39,21 +39,64 @@ export function orderTotals(subtotal, { zone, rates, coupons = [] }) {
     coupons.reduce((s, c) => s + couponDiscount(c, subtotal, delivery), 0),
     subtotal + delivery,
   ));
-  return { subtotal: round(subtotal), delivery, service, discount, total: round(subtotal + delivery + service - discount) };
+  // الجزء من الخصم اللي على الأكل نفسه (مش التوصيل) — بنحتاجه لو صنف وصل ناقص
+  const foodDiscount = round(Math.min(
+    coupons.filter((c) => c.type !== 'delivery').reduce((s, c) => s + couponDiscount(c, subtotal, delivery), 0),
+    subtotal,
+  ));
+  return { subtotal: round(subtotal), delivery, service, discount, foodDiscount, total: round(subtotal + delivery + service - discount) };
 }
 
-// تقسيم فلوس طلب واحد. الخصم ورسوم الخدمة بيتحملهم/بيروحوا للمنصة.
+// ---------- أصناف وصلت ناقصة ----------
+// العميل بيبعت أرقام الأصناف والعدد بس؛ الاسم والسعر بناخدهم من الطلب نفسه (مش من اللي اتبعت)
+export function missingItems(o) {
+  if (!Array.isArray(o?.missing)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const x of o.missing) {
+    const i = Number(x?.i);
+    const l = o.lines?.[i];
+    if (!Number.isInteger(i) || !l || seen.has(i)) continue;
+    seen.add(i);
+    const qty = Math.min(Math.max(1, Math.floor(Number(x.qty) || 1)), Number(l.qty) || 1);
+    out.push({ i, name: l.name, qty, amount: round(l.price * qty) });
+  }
+  return out;
+}
+
+// قيمة الأكل الناقص (بيتحملها المطعم)
+export const missingValue = (o) => round(Math.min(missingItems(o).reduce((s, x) => s + x.amount, 0), o.totals.subtotal));
+
+// اللي بيترجع للعميل: قيمة الناقص بعد نصيبها من خصم الكوبون (عشان مياخدش الخصم مرتين، والفلوس متبقاش بالسالب)
+export function missingRefund(o) {
+  const t = o.totals;
+  const food = Math.min(t.foodDiscount ?? t.discount ?? 0, t.subtotal);
+  const ratio = t.subtotal ? 1 - food / t.subtotal : 1;
+  return round(Math.min(missingValue(o) * ratio, t.total));
+}
+
+// بيتخصم بس لو المندوب أكد قدام العميل
+export const missingDeduction = (o) => (o.missingDecision === 'confirmed' ? missingRefund(o) : 0);
+
+// اللي العميل دفعه فعلًا (بعد خصم الناقص)
+export const paidTotal = (o) => round(Math.max(0, o.totals.total - missingDeduction(o)));
+
+// تقسيم فلوس طلب واحد. الخصم ورسوم الخدمة بيتحملهم/بيروحوا للمنصة، والناقص بيتحمله المطعم.
 export function orderSplit(o) {
   const t = o.totals;
   const r = { ...DEFAULT_SETTINGS.rates, ...(o.rates || {}) };
-  const commission = Math.min(applyRate(r.commission, t.subtotal), t.subtotal);
-  const restaurant = round(t.subtotal - commission);
+  const confirmed = o.missingDecision === 'confirmed';
+  const missing = confirmed ? missingValue(o) : 0; // قيمة الأكل اللي موصلش (على المطعم)
+  const food = round(t.subtotal - missing); // الأكل اللي اتسلّم فعلًا
+  const commission = Math.min(applyRate(r.commission, food), food);
+  const restaurant = round(food - commission);
   const driver = applyRate(r.driverShare, t.delivery);
-  const platform = round(t.total - restaurant - driver);
-  const cash = o.payment === 'cash' ? t.total : 0; // الكاش اللي المندوب بيحصّله من العميل
+  const paid = paidTotal(o);
+  const platform = round(paid - restaurant - driver);
+  const cash = o.payment === 'cash' ? paid : 0; // الكاش اللي المندوب بيحصّله من العميل
   const payRestaurant = r.driverPaysRestaurant ? restaurant : 0; // اللي المندوب بيدفعه للمطعم وقت الاستلام
   return {
-    restaurant, driver, platform, commission, cash, payRestaurant,
+    restaurant, driver, platform, commission, cash, payRestaurant, missing,
     // الفلوس اللي مع المندوب ولازم يسلمها للمنصة (لو بالسالب يبقى المنصة عليها فلوس للمندوب)
     driverOwes: round(cash - payRestaurant - driver),
     // الفلوس اللي المنصة لسه عليها للمطعم

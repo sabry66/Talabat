@@ -337,6 +337,7 @@ service cloud.firestore {
             && resource.data.driverUid == null
             && resource.data.status in ['preparing', 'ready']
             && request.resource.data.driverUid == request.auth.uid
+            && resource.data.customerUid != request.auth.uid
             && changedOnly(driverFields())
             && orderId in getAfter(/databases/$(database)/documents/driverLoads/$(request.auth.uid)).data.get('orders', []))
         // المندوب: يسيب الأوردر قبل ما يستلمه
@@ -350,7 +351,30 @@ service cloud.firestore {
             && resource.data.driverUid == request.auth.uid
             && changedOnly(['status', 'statusHistory', 'updatedAt'])
             && ((resource.data.status == 'ready' && request.resource.data.status == 'on_way')
-                || (resource.data.status == 'on_way' && request.resource.data.status == 'delivered')))
+                || (resource.data.status == 'on_way' && request.resource.data.status == 'delivered'
+                    // لو العميل بلّغ عن ناقص، لازم المندوب يرد الأول
+                    && (resource.data.get('missing', null) == null || resource.data.get('missingDecision', null) != null))))
+        // العميل: وهو بيستلم (المندوب واقف معاه) يبلّغ مرة واحدة بس عن أصناف ناقصة
+        || (isActive()
+            && resource.data.customerUid == request.auth.uid
+            && resource.data.status == 'on_way'
+            && resource.data.get('missing', null) == null
+            && changedOnly(['missing', 'missingAmount', 'updatedAt'])
+            && request.resource.data.missing is list
+            && request.resource.data.missing.size() > 0
+            && request.resource.data.missing.size() <= resource.data.lines.size()
+            && request.resource.data.missingAmount is number
+            && request.resource.data.missingAmount > 0
+            && request.resource.data.missingAmount <= resource.data.totals.subtotal)
+        // المندوب: يأكد الناقص (يتخصم) أو يعترض (يروح لخدمة العملاء) — مرة واحدة وقبل التسليم
+        || (isDriver()
+            && resource.data.driverUid == request.auth.uid
+            && resource.data.status == 'on_way'
+            && resource.data.customerUid != request.auth.uid
+            && resource.data.get('missing', null) != null
+            && resource.data.get('missingDecision', null) == null
+            && changedOnly(['missingDecision', 'updatedAt'])
+            && request.resource.data.missingDecision in ['confirmed', 'disputed'])
         // العميل: يلغي قبل ما المطعم يقبل
         || (signedIn()
             && resource.data.customerUid == request.auth.uid

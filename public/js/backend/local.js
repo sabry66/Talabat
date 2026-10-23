@@ -436,6 +436,20 @@ export function createBackend() {
       commit();
     },
 
+    async reportMissing(id, missing, missingAmount) {
+      const o = db().orders[id];
+      if (o.status !== 'on_way' || o.missing) throw authError('permission-denied');
+      Object.assign(o, { missing, missingAmount });
+      commit();
+    },
+
+    async decideMissing(id, decision) {
+      const o = db().orders[id];
+      if (o.status !== 'on_way' || !o.missing || o.missingDecision) throw authError('permission-denied');
+      o.missingDecision = decision;
+      commit();
+    },
+
     // في Firebase بنظبط لستة أوردرات المندوب، هنا مش محتاجين
     async syncDriverLoad() {},
 
@@ -446,6 +460,7 @@ export function createBackend() {
 
     async setOrderStatus(id, status) {
       const o = db().orders[id];
+      if (status === 'delivered' && o.missing && !o.missingDecision) throw authError('permission-denied');
       o.status = status;
       o.statusHistory = [...(o.statusHistory || []), { status, at: Date.now() }];
       commit();

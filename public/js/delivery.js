@@ -1,7 +1,7 @@
 // صفحة المندوب: الأوردرات المتاحة، استلامها من المطعم وتوصيلها، وحساب أرباحه
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
-import { orderSplit, sum } from './finance.js';
+import { orderSplit, sum, missingItems, missingRefund } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
@@ -62,7 +62,7 @@ function start() {
   root.innerHTML = `${demoBanner(isDemo)}<div class="tabs" id="tabs"></div><div id="tabBody">${loader()}</div>`;
   drawTabs();
   unsubs.push(backend.watchAvailableOrders((list) => {
-    available = list;
+    available = list.filter((o) => o.customerUid !== user.uid); // مينفعش يوصّل طلبه هو
     alertNew();
     drawTabs();
     if (tab === 'available') drawTab();
@@ -170,6 +170,7 @@ function tripCard(o, actions) {
       </div>
       <ul class="order-lines small">${o.lines.map((l) => `<li><b>${l.qty}×</b> ${esc(l.name)}${lineOptions(l)}</li>`).join('')}</ul>
       ${o.notes ? `<p class="note small">📝 ${esc(o.notes)}</p>` : ''}
+      ${claimed && o.missing ? missingBox(o) : ''}
       <div class="money">
         <div><span>تحصّل من العميل</span><b>${s.cash ? fmt(s.cash) : 'مدفوع (' + paymentLabel(o.payment) + ')'}</b></div>
         ${s.payRestaurant ? `<div><span>تدفع للمطعم</span><b>${fmt(s.payRestaurant)}</b></div>` : ''}
@@ -177,6 +178,23 @@ function tripCard(o, actions) {
       </div>
       <div class="order-actions">${actions}</div>
     </article>`;
+}
+
+// العميل بلّغ إن فيه أصناف ناقصة وقت الاستلام
+function missingBox(o) {
+  const list = missingItems(o).map((x) => `<li><b>${x.qty}×</b> ${esc(x.name)} — ${fmt(x.amount)}</li>`).join('');
+  if (o.missingDecision === 'confirmed') return `<div class="review-box ok small">✅ أكدت الناقص — اترجع للعميل ${fmt(missingRefund(o))}</div>`;
+  if (o.missingDecision === 'disputed') return '<div class="review-box warn-box small">⚠️ اعترضت — خدمة العملاء هتراجع</div>';
+  return `
+    <div class="review-box warn-box">
+      <b>⚠️ العميل بيقول إن فيه ناقص:</b>
+      <ul class="order-lines small">${list}</ul>
+      <p class="small">لو فعلًا ناقص: حصّل <b>${fmt(o.totals.total - missingRefund(o))}</b> بدل ${fmt(o.totals.total)}، والخصم بيتحسب على المطعم مش عليك.</p>
+      <div class="order-actions">
+        <button class="btn small primary" data-missing="confirmed" data-id="${o.id}" type="button">✅ فعلًا ناقص</button>
+        <button class="btn small danger-outline" data-missing="disputed" data-id="${o.id}" type="button">❌ الطلب كامل</button>
+      </div>
+    </div>`;
 }
 
 function drawAvailable(body) {
@@ -224,7 +242,10 @@ function drawActive(body) {
       return `<button class="btn primary" data-status="on_way" data-id="${o.id}" type="button">📦 استلمت الأوردر من المطعم</button>
         <button class="btn small danger-outline" data-release="${o.id}" type="button">مش هقدر آخده</button>`;
     }
-    if (o.status === 'on_way') return `<button class="btn primary" data-status="delivered" data-id="${o.id}" type="button">✅ تم التوصيل للعميل</button>`;
+    if (o.status === 'on_way') {
+      const pending = o.missing && !o.missingDecision;
+      return `<button class="btn primary" data-status="delivered" data-id="${o.id}" type="button" ${pending ? 'disabled' : ''}>${pending ? '⏳ رد على بلاغ الناقص الأول' : '✅ تم التوصيل للعميل'}</button>`;
+    }
     return '';
   };
   body.innerHTML = `<div class="trips">${list.map((o) => tripCard(o, actions(o))).join('')}</div>`;
@@ -234,6 +255,18 @@ function drawActive(body) {
     try {
       await backend.setOrderStatus(b.dataset.id, b.dataset.status, { driverUid: user.uid });
       toast(b.dataset.status === 'delivered' ? 'تمام! اتسجل التوصيل 🎉' : 'في الطريق للعميل 🛵');
+    } catch (err) {
+      toast(errorMessage(err));
+      b.disabled = false;
+    }
+  }));
+  body.querySelectorAll('[data-missing]').forEach((b) => b.addEventListener('click', async () => {
+    const yes = b.dataset.missing === 'confirmed';
+    if (!confirm(yes ? 'اتأكدت إن الأصناف دي ناقصة فعلًا؟ هتتخصم من الحساب.' : 'متأكد إن الطلب كامل؟ خدمة العملاء هتراجع الموضوع.')) return;
+    b.disabled = true;
+    try {
+      await backend.decideMissing(b.dataset.id, b.dataset.missing);
+      toast(yes ? 'تمام، اتخصم الناقص ✅' : 'اتسجل اعتراضك');
     } catch (err) {
       toast(errorMessage(err));
       b.disabled = false;

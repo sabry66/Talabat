@@ -462,6 +462,12 @@ export function createBackend(config, { useEmulators }) {
       return batch.commit();
     },
 
+    // العميل بيبلّغ عن أصناف ناقصة وقت الاستلام. missing = [{ i, name, qty, amount }]
+    reportMissing: (id, missing, missingAmount) => updateDoc(doc(orders, id), { missing, missingAmount, updatedAt: serverTimestamp() }),
+
+    // المندوب: 'confirmed' (اتخصم) أو 'disputed' (يروح لخدمة العملاء)
+    decideMissing: (id, decision) => updateDoc(doc(orders, id), { missingDecision: decision, updatedAt: serverTimestamp() }),
+
     // بيصلّح لستة المندوب: يشيل الأوردرات اللي خلصت أو اتلغت أو راحت لمندوب تاني (مثلًا الأدمن غيّرها)،
     // ويضيف أوردرات معاه مش متسجلة (من قبل الميزة دي). كل تغيير في عملية لوحده عشان القواعد بتتأكد منه.
     async syncDriverLoad(uid, activeIds) {

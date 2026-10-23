@@ -3,7 +3,7 @@ import { backend, isDemo } from './backend/index.js';
 import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
 import { Cart } from './cart.js';
 import { locationPicker } from './map.js';
-import { activeZones } from './finance.js';
+import { activeZones, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel,
@@ -870,6 +870,7 @@ function drawOrder(o) {
             </li>`).join('')}
         </ol>
         ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
+        ${missingPanel(o)}
         ${o.status === 'placed' ? '<p class="muted small center">مستنيين المطعم يأكد طلبك... الصفحة بتتحدث لوحدها.</p>' : ''}`}
     </section>
 
@@ -878,6 +879,7 @@ function drawOrder(o) {
         <h3>تفاصيل الطلب</h3>
         ${o.lines.map((l) => `<div class="mini-line"><span>${l.qty}× ${esc(l.name)}${lineOptions(l)}</span><span>${fmt(l.price * l.qty)}</span></div>`).join('')}
         ${summary(o.totals, undefined, o.promos || (o.promo ? [o.promo] : []))}
+        ${missingDeduction(o) ? `<div class="summary"><div class="discount"><span>ناقص (اتخصم)</span><span>− ${fmt(missingDeduction(o))}</span></div><div class="total"><span>دفعت</span><span>${fmt(paidTotal(o))}</span></div></div>` : ''}
       </section>
       <section class="panel">
         <h3>التوصيل</h3>
@@ -893,6 +895,7 @@ function drawOrder(o) {
     </div>`;
 
   document.getElementById('reorder').addEventListener('click', () => reorder(o));
+  bindMissing(o);
   const cancel = document.getElementById('cancelOrder');
   if (cancel) cancel.addEventListener('click', async () => {
     if (!confirm('متأكد إنك عايز تلغي الطلب؟')) return;
@@ -903,6 +906,74 @@ function drawOrder(o) {
     } catch (err) {
       toast(errorMessage(err));
       cancel.disabled = false;
+    }
+  });
+}
+
+// ---------- راجع طلبك قبل ما تدفع ----------
+// اللي العميل علّم عليه إنه ناقص (بيفضل لو الصفحة اتعاد رسمها)
+const missingDraft = { orderId: null, picks: {} };
+
+function missingPanel(o) {
+  const m = missingDeduction(o);
+  if (o.missing) {
+    const list = missingItems(o).map((x) => `${x.qty}× ${esc(x.name)}`).join('، ');
+    if (o.missingDecision === 'confirmed') {
+      return `<div class="review-box ok">✅ اتخصم <b>${fmt(m)}</b> تمن الناقص (${list}). هتدفع <b>${fmt(paidTotal(o))}</b> بدل ${fmt(o.totals.total)}.</div>`;
+    }
+    if (o.missingDecision === 'disputed') {
+      return `<div class="review-box warn-box">⚠️ المندوب قال إن الطلب كامل. خدمة العملاء هتراجع الموضوع وترد عليك في الشكوى.</div>`;
+    }
+    return `<div class="review-box">⏳ بلّغت إن ناقص: ${list}. المندوب بيتأكد دلوقتي، ولو أكد هتدفع <b>${fmt(o.totals.total - missingRefund(o))}</b> بدل ${fmt(o.totals.total)}.</div>`;
+  }
+  if (o.status !== 'on_way') return '';
+  if (missingDraft.orderId !== o.id) Object.assign(missingDraft, { orderId: o.id, picks: {} });
+  const picks = missingDraft.picks;
+  return `
+    <details class="review-box" ${Object.keys(picks).length ? 'open' : ''}>
+      <summary>🧾 <b>راجع طلبك قبل ما تدفع</b> — لو حاجة ناقصة مش هتدفع تمنها</summary>
+      <p class="muted small">لما المندوب يوصل، اتأكد من الأصناف. علّم على الناقص والمندوب هيأكد قدامك.</p>
+      ${o.lines.map((l, i) => `
+        <label class="miss-row">
+          <input type="checkbox" data-miss="${i}" ${picks[i] ? 'checked' : ''}>
+          <span class="grow">${l.qty}× ${esc(l.name)}${lineOptions(l)}</span>
+          ${l.qty > 1 && picks[i] ? `<select data-miss-qty="${i}" aria-label="العدد الناقص">${Array.from({ length: l.qty }, (_, k) => `<option value="${k + 1}" ${picks[i] === k + 1 ? 'selected' : ''}>ناقص ${k + 1}</option>`).join('')}</select>` : ''}
+          <b>${fmt(l.price * (picks[i] || l.qty))}</b>
+        </label>`).join('')}
+      <button class="btn block danger-outline" id="reportMissing" type="button" ${Object.keys(picks).length ? '' : 'disabled'}>بلّغ إن دول ناقصين</button>
+    </details>`;
+}
+
+function bindMissing(o) {
+  const picks = missingDraft.picks;
+  app.querySelectorAll('[data-miss]').forEach((c) => c.addEventListener('change', () => {
+    if (c.checked) picks[c.dataset.miss] = 1; else delete picks[c.dataset.miss];
+    drawOrder(o);
+  }));
+  app.querySelectorAll('[data-miss-qty]').forEach((s) => s.addEventListener('change', () => {
+    picks[s.dataset.missQty] = Number(s.value);
+    drawOrder(o);
+  }));
+  app.querySelector('#reportMissing')?.addEventListener('click', async (e) => {
+    // بنبعت أرقام الأصناف والعدد بس، والحساب كله من الطلب نفسه
+    const missing = Object.entries(picks).map(([i, qty]) => ({ i: Number(i), qty: Number(qty) }));
+    const preview = { ...o, missing };
+    const items = missingItems(preview);
+    const amount = items.reduce((a, x) => a + x.amount, 0);
+    if (!items.length || !confirm(`هتبلّغ إن ناقص: ${items.map((x) => `${x.qty}× ${x.name}`).join('، ')}\nهيترجعلك ${fmt(missingRefund(preview))}. المندوب هيأكد قدامك. تكمّل؟`)) return;
+    e.target.disabled = true;
+    try {
+      await backend.reportMissing(o.id, missing, amount);
+      // شكوى مربوطة بالطلب عشان خدمة العملاء والمطعم يعرفوا
+      backend.createTicket(state.user, {
+        topic: 'order', subject: 'صنف ناقص', orderId: o.id,
+        text: `الطلب وصل ناقص: ${items.map((x) => `${x.qty}× ${x.name}`).join('، ')} (${amount} ج.م).`,
+      }).catch(console.error);
+      missingDraft.picks = {};
+      toast('وصل البلاغ ✅ المندوب هيأكد دلوقتي');
+    } catch (err) {
+      toast(errorMessage(err));
+      e.target.disabled = false;
     }
   });
 }
@@ -947,7 +1018,7 @@ function renderOrders() {
               <div class="muted small">#${shortId(o.id)} • ${new Date(o.createdAt).toLocaleDateString('ar-EG')} • ${o.lines.reduce((a, l) => a + l.qty, 0)} صنف</div>
             </div>
             ${statusBadge(o.status)}
-            <strong>${fmt(o.totals.total)}</strong>
+            <strong>${fmt(paidTotal(o))}</strong>
           </a>`).join('')}
       </div>`;
   }));
