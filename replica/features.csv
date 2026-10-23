@@ -12,7 +12,7 @@ Open or closed status on each restaurant,discovery,must,yes,yes,
 Delivery fee and time shown before ordering,discovery,must,yes,yes,
 Real customer ratings on restaurants,discovery,should,yes,yes,real averages from delivered orders only; sample ratings hidden
 Favourite restaurants,discovery,should,yes,yes,heart on cards and restaurant page + home strip + favorites page
-Only show restaurants that deliver to my area,discovery,should,yes,no,zones are platform-wide; restaurants not tied to zones
+Only show restaurants that deliver to my area,discovery,should,yes,yes,restaurant picks its zones; home zone picker moves the rest to the end; rules enforce it
 Groceries and other shops,discovery,could,yes,partial,grocery category exists; no dedicated store flow
 Menu with sections photos and prices,menu,must,yes,yes,
 Item options and add-ons (size extras sauces),menu,must,yes,yes,required or optional groups - multi-select with max - extra price per choice

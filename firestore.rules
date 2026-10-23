@@ -382,6 +382,9 @@ service cloud.firestore {
         && request.resource.data.rates == settings().rates
         && request.resource.data.zoneId in settings().zones
         && settings().zones[request.resource.data.zoneId].get('active', true) == true
+        // المطعم بيوصّل للمنطقة دي (من غير لستة = كل المناطق)
+        && (restaurant().get('zones', null) == null
+            || (restaurant().zones is list && request.resource.data.zoneId in restaurant().zones))
         && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee
         && couponsOk(request.resource.data.get('promos', []))
         && paymentOk(request.resource.data.get('payment', ''))

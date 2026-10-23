@@ -8,10 +8,11 @@ import { newOptId } from './options.js';
 const newItemId = () => 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
 const EDITABLE = ['name', 'emoji', 'color', 'logo', 'category', 'tags', 'time', 'minOrder', 'promo',
-  'address', 'phone', 'location', 'isOpen', 'menu'];
+  'address', 'phone', 'location', 'isOpen', 'menu', 'zones'];
 
 // showOpenToggle: false في لوحة المطعم لأن الفتح والقفل ليه زرار لوحده فوق
-export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel = 'حفظ التعديلات', showOpenToggle = true }) {
+// zones: دالة بترجع مناطق التوصيل المتاحة (عشان المطعم يختار بيوصّل لأنهي منها)
+export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel = 'حفظ التعديلات', showOpenToggle = true, zones = () => [] }) {
   // في لوحة المطعم: الفتح والقفل ليهم زرار، والعرض ليه تبويب "العروض"
   const fields = showOpenToggle ? EDITABLE : EDITABLE.filter((k) => k !== 'isOpen' && k !== 'promo');
   const draft = JSON.parse(JSON.stringify(Object.fromEntries(fields.map((k) => [k, restaurant[k] ?? null]))));
@@ -22,9 +23,26 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
   draft.address ||= '';
   draft.phone ||= '';
   draft.logo ||= '';
+  if (!Array.isArray(draft.zones)) draft.zones = null; // null = بيوصّل لكل المناطق
   let picker = null;
   let savedLoc = JSON.stringify(restaurant.location || null); // عشان نقول لصاحب المطعم المكان اتحفظ ولا لأ
   const openOpts = new Set(); // الأصناف اللي فاتح محرر اختياراتها ("si:ii")
+
+  // المطعم بيوصّل لأنهي مناطق (العميل في منطقة تانية مش هيقدر يطلب منه)
+  function zoneField() {
+    const list = zones();
+    if (!list.length) return '';
+    const allOn = !draft.zones;
+    return `
+      <fieldset class="zone-pick">
+        <legend>🛵 بتوصّل لأنهي مناطق؟</legend>
+        <label class="check"><input type="checkbox" data-zall ${allOn ? 'checked' : ''}> كل المناطق (وأي منطقة جديدة تتضاف)</label>
+        <div class="chips zone-chips" ${allOn ? 'hidden' : ''}>
+          ${list.map((z) => `<label class="chip check-chip"><input type="checkbox" data-rzone="${esc(z.id)}" ${allOn || draft.zones.includes(z.id) ? 'checked' : ''}> ${esc(z.name)}</label>`).join('')}
+        </div>
+        <p class="muted small">العملاء في المناطق اللي مش متعلّم عليها هيشوفوا المطعم بس مش هيقدروا يطلبوا منه.</p>
+      </fieldset>`;
+  }
 
   // يقرا كل الحقول من الصفحة ويحطها في draft قبل أي إعادة رسم
   function sync() {
@@ -46,6 +64,9 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         draft[f] = v;
       }
     });
+    // مناطق التوصيل
+    const all = el.querySelector('[data-zall]');
+    if (all) draft.zones = all.checked ? null : [...el.querySelectorAll('[data-rzone]:checked')].map((x) => x.dataset.rzone);
     // الاختيارات والإضافات: data-k = "si:ii:gi" أو "si:ii:gi:ci"
     el.querySelectorAll('[data-o]').forEach((inp) => {
       const [si, ii, gi, ci] = inp.dataset.k.split(':').map(Number);
@@ -159,6 +180,7 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
           <p class="muted small">📍 مكان المطعم على الخريطة (عشان المندوب يوصله):</p>
           <div class="map-box small-map" id="restMap"><span class="muted small">جاري تحميل الخريطة...</span></div>
 
+          ${zoneField()}
           ${showOpenToggle ? `<label class="check"><input type="checkbox" data-f="isOpen" ${draft.isOpen !== false ? 'checked' : ''}> المطعم مفتوح ويستقبل طلبات</label>` : ''}
         </section>
 
@@ -217,6 +239,9 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
       delete draft.menu[si].items[ii].image;
     })));
     el.querySelector('#addSec').addEventListener('click', redraw(() => draft.menu.push({ section: 'قسم جديد', items: [] })));
+    el.querySelector('[data-zall]')?.addEventListener('change', (e) => {
+      el.querySelector('.zone-chips').hidden = e.target.checked;
+    });
     el.querySelectorAll('[data-add-item]').forEach((b) => b.addEventListener('click', redraw(() =>
       draft.menu[+b.dataset.addItem].items.push({ id: newItemId(), name: '', desc: '', price: '', emoji: '🍽️', available: true }))));
     el.querySelectorAll('[data-del-item]').forEach((b) => b.addEventListener('click', () => {
@@ -276,6 +301,12 @@ export function renderMenuEditor(el, restaurant, { onSave, onCancel, saveLabel =
         errEl.textContent = 'كمّل البيانات الناقصة: اسم المطعم وعنوانه، واسم وسعر كل صنف، واسم كل مجموعة اختيارات وكل اختيار.';
         errEl.hidden = false;
         form.reportValidity();
+        return;
+      }
+      if (Array.isArray(draft.zones) && !draft.zones.length) {
+        errEl.textContent = 'اختار منطقة توصيل واحدة على الأقل، أو علّم على "كل المناطق".';
+        errEl.hidden = false;
+        el.querySelector('[data-zall]')?.scrollIntoView({ block: 'center' });
         return;
       }
       errEl.hidden = true;

@@ -146,6 +146,15 @@ console.log('SAVE10 used count:', ok);
 const ad = await api(a, `(F, db) => ({ adminList: async () => { const n = (await F.getDocs(F.collection(db, 'coupons'))).size; throw Object.assign(new Error(), { code: 'OK list=' + n }); } })`);
 console.log(ad);
 
+// ---- المطعم بيوصّل لمناطق معينة بس
+console.log(await api(a, `(F, db) => ({ validRestrictZones: () => F.updateDoc(F.doc(db, 'restaurants', 'burger-house'), { zones: ['nasr_city'] }) })`));
+const zoneOrder = (zone) => `async () => { const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
+  await F.addDoc(F.collection(db, 'orders'), { customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh1', name: 'x', price: 100, qty: 1 }],
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: '${zone}',
+    totals: { subtotal: 200, delivery: st.zones['${zone}'].fee, service: 0, discount: 0, total: 200 }, promos: [], payment: 'cash' }); }`;
+console.log(await api(c, `(F, db, me) => ({ outOfZoneOrder: ${zoneOrder('maadi')}, validInZoneOrder: ${zoneOrder('nasr_city')} })`));
+console.log(await api(a, `(F, db) => ({ validResetZones: () => F.updateDoc(F.doc(db, 'restaurants', 'burger-house'), { zones: null }) })`));
+
 // ---- صور الشكاوى: Cloudinary بس
 console.log(await api(c, `(F, db, me) => {
   const t = (image, extra = {}) => F.addDoc(F.collection(db, 'tickets'), { uid: me, name: 'x', topic: 'order', subject: 'صنف ناقص', status: 'open', lastBy: 'user', createdAt: 1, updatedAt: 1,

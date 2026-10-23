@@ -409,6 +409,8 @@ export function createBackend() {
       const id = newId();
       // زي قواعد Firestore: طريقة الدفع لازم تكون مفعّلة
       if (!paymentSettings(db().settings)[order.payment]?.on) throw authError('permission-denied');
+      const rz = db().restaurants[order.restaurantId]?.zones;
+      if (Array.isArray(rz) && !rz.includes(order.zoneId)) throw authError('permission-denied');
       if (order.scheduledFor != null && !(order.scheduledFor >= Date.now() + 30 * 60 * 1000 && order.scheduledFor <= Date.now() + 3 * 86400000)) throw authError('permission-denied');
       for (const c of usedCoupons) {
         const cur = db().coupons[c.code];

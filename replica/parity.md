@@ -1,6 +1,6 @@
-## Parity: 86.4 / 100
+## Parity: 87.8 / 100
 
-features 86.4  (62 counted, must-haves 29 of 30 done)
+features 87.8  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
@@ -10,8 +10,8 @@ Not shippable yet: 1 must-have features are not done.
 - checkout                      69.2  (7 features)
 - platform                      76.9  (5 features)
 - account                       78.6  (6 features)
-- discovery                     88.1  (9 features)
 - after order                   94.1  (7 features)
+- discovery                     97.6  (9 features)
 - menu                         100.0  (4 features)
 - offers                       100.0  (3 features)
 - cart                         100.0  (1 features)
@@ -22,7 +22,6 @@ Not shippable yet: 1 must-have features are not done.
 - [must] tracking: Push notifications when the app is closed, partial  (built (FCM + Cloud Function + SW); works while the app is open; closed-app push turns on after Blaze + VAPID key (SETUP.md))
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
-- [should] discovery: Only show restaurants that deliver to my area, no  (zones are platform-wide; restaurants not tied to zones)
 - [should] platform: English language, no
 - [should] tracking: Rider location live on a map, no
 - [should] after order: Refunds handled through support, partial  (manual by admin; no refund record yet)

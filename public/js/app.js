@@ -5,7 +5,7 @@ import { Cart, MAX_LINE_NOTE } from './cart.js';
 import { busyExtra, restTime } from './busy.js';
 import { slots, whenLabel, isScheduled } from './schedule.js';
 import { locationPicker } from './map.js';
-import { activeZones, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
+import { activeZones, deliversTo, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel, timeAgo,
@@ -38,10 +38,15 @@ let refreshCheckout = null;
 const findRestaurant = (id) => (state.restaurants || []).find((r) => r.id === id);
 const cartRestaurant = () => findRestaurant(Cart.restaurantId);
 const cartTotals = (r) => Cart.totals(r, state.settings);
+// منطقة التوصيل المختارة (لو المطعم اللي في السلة بيوصّلها)
 const currentZone = () => {
   const z = state.settings?.zones[Cart.zoneId];
+  if (!deliversTo(cartRestaurant(), Cart.zoneId)) return null;
   return z && z.active !== false ? { id: Cart.zoneId, ...z } : null;
 };
+const zoneName = (id) => state.settings?.zones[id]?.name || '';
+// المطاعم اللي مش بتوصّل لمنطقة العميل
+const outOfZone = (r) => Boolean(Cart.zoneId && state.settings?.zones[Cart.zoneId] && !deliversTo(r, Cart.zoneId));
 const minZoneFee = () => {
   const fees = activeZones(state.settings).map((z) => z.fee);
   return fees.length ? Math.min(...fees) : null;
@@ -50,9 +55,14 @@ const deliveryMeta = () => (minZoneFee() !== null ? ` • 🛵 التوصيل م
 
 // اختيار منطقة التوصيل (سعر التوصيل بيتحدد منها)
 function zoneSelect() {
-  const zones = activeZones(state.settings);
-  if (!zones.length) return '<p class="warn">التوصيل مش متاح لسه، مفيش مناطق توصيل متضافة.</p>';
-  return `
+  const r = cartRestaurant();
+  const all = activeZones(state.settings);
+  const zones = all.filter((z) => deliversTo(r, z.id));
+  if (!all.length) return '<p class="warn">التوصيل مش متاح لسه، مفيش مناطق توصيل متضافة.</p>';
+  if (!zones.length) return '<p class="warn">المطعم ده مش بيوصّل لأي منطقة دلوقتي.</p>';
+  const off = Cart.zoneId && state.settings.zones[Cart.zoneId] && !deliversTo(r, Cart.zoneId)
+    ? `<p class="warn">🚫 ${esc(r.name)} مش بيوصّل لـ ${esc(zoneName(Cart.zoneId))}. اختار منطقة تانية من اللي بيوصّلها.</p>` : '';
+  return `${off}
     <label>📍 منطقة التوصيل
       <select id="zoneSelect" required>
         <option value="">اختار منطقتك</option>
@@ -119,6 +129,13 @@ function renderHome() {
         <input id="search" type="search" placeholder="دوّر على مطعم أو أكلة... (مثال: شاورما، بيتزا، كشري)" value="${esc(ui.query)}" autocomplete="off" enterkeyhint="search">
         <button class="btn filter-btn ${ui.showFilters ? 'active' : ''}" id="toggleFilters" type="button">⚙️ فلترة${activeFilters ? ` <span class="badge static">${activeFilters}</span>` : ''}</button>
       </div>
+      ${activeZones(state.settings).length ? `
+        <label class="home-zone">📍 بتطلب لفين؟
+          <select id="homeZone" aria-label="منطقة التوصيل">
+            <option value="">كل المناطق</option>
+            ${activeZones(state.settings).map((z) => `<option value="${z.id}" ${Cart.zoneId === z.id ? 'selected' : ''}>${esc(z.name)}</option>`).join('')}
+          </select>
+        </label>` : ''}
     </section>
 
     <section class="panel filters" id="filters" ${ui.showFilters ? '' : 'hidden'}>
@@ -158,6 +175,7 @@ function renderHome() {
 
   drawResults();
 
+  document.getElementById('homeZone')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); drawResults(); });
   const search = document.getElementById('search');
   search.addEventListener('input', () => { ui.query = search.value; ui.showAllItems = false; drawResults(); });
   document.getElementById('toggleFilters').addEventListener('click', () => { ui.showFilters = !ui.showFilters; renderHome(); });
@@ -203,6 +221,9 @@ function drawResults() {
   if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => priceOf(b.it) - priceOf(a.it)); }
   list.sort(byOpen);
   items.sort((a, b) => byOpen(a.r, b.r));
+  // المطاعم اللي مش بتوصّل لمنطقتك في الآخر
+  list.sort((a, b) => outOfZone(a) - outOfZone(b));
+  items.sort((a, b) => outOfZone(a.r) - outOfZone(b.r));
 
   const ITEMS_PREVIEW = 12;
   const shownItems = ui.showAllItems ? items : items.slice(0, ITEMS_PREVIEW);
@@ -492,10 +513,10 @@ function renderFavorites() {
 function restaurantCard(r) {
   const closed = r.isOpen === false;
   return `
-    <a class="card ${closed ? 'closed' : ''}" href="#/restaurant/${r.id}">
+    <a class="card ${closed || outOfZone(r) ? 'closed' : ''}" href="#/restaurant/${r.id}">
       <div class="card-cover" style="background:${esc(r.color)}">${restaurantLogo(r, 140)}
         ${favBtn(r.id)}
-        ${closed ? '<span class="closed-tag">مغلق الآن</span>' : hasOffers(r) ? `<span class="promo">🏷️ ${promoText(r)}</span>` : ''}
+        ${closed ? '<span class="closed-tag">مغلق الآن</span>' : outOfZone(r) ? `<span class="closed-tag">🚫 مش بيوصّل لـ ${esc(zoneName(Cart.zoneId))}</span>` : hasOffers(r) ? `<span class="promo">🏷️ ${promoText(r)}</span>` : ''}
       </div>
       <div class="card-body">
         <div class="card-title">
@@ -528,6 +549,7 @@ function renderRestaurant(id) {
         ${hasOffers(r) ? `<span class="promo static">🏷️ ${promoText(r)}</span>` : ''}
       </div>
     </section>
+    ${outOfZone(r) ? `<p class="warn">🚫 ${esc(r.name)} مش بيوصّل لـ ${esc(zoneName(Cart.zoneId))}. تقدر تتفرج على المنيو، أو تغيّر منطقتك من الرئيسية.</p>` : ''}
     ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>'
       : busyExtra(r) ? `<p class="busy-note">🐢 المطعم عليه زحمة دلوقتي، فالطلب ممكن ياخد ${restTime(r)[0]}-${restTime(r)[1]} دقيقة. بنقولك الوقت الحقيقي من الأول.</p>` : ''}
 

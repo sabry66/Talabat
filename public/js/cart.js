@@ -1,6 +1,6 @@
 // السلة: محفوظة في المتصفح. الأسعار بتتحسب من المنيو الحالي للمطعم عشان لو السعر اتغير.
 import { isAvailable } from './ui.js';
-import { orderTotals } from './finance.js';
+import { orderTotals, deliversTo } from './finance.js';
 import { priceOf } from './offers.js';
 import { couponProblem } from './coupons.js';
 import { parseKey, resolveOptions } from './options.js';
@@ -122,7 +122,7 @@ export const Cart = {
   },
 
   totals(restaurant, settings) {
-    const zone = settings.zones[this.zoneId];
+    const zone = deliversTo(restaurant, this.zoneId) ? settings.zones[this.zoneId] : null;
     return orderTotals(this.subtotal(restaurant), { zone: zone && zone.active !== false ? zone : null, rates: settings.rates,
       coupons: this.usableCoupons(restaurant, settings) });
   },

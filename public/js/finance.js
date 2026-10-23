@@ -41,6 +41,9 @@ export function withDefaults(settings) {
   };
 }
 
+// المطعم بيوصّل للمنطقة دي؟ (من غير لستة = بيوصّل لكل المناطق)
+export const deliversTo = (r, zoneId) => !zoneId || !Array.isArray(r?.zones) || r.zones.includes(zoneId);
+
 export const activeZones = (settings) => Object.entries(settings.zones)
   .filter(([, z]) => z.active !== false)
   .map(([id, z]) => ({ id, ...z }))

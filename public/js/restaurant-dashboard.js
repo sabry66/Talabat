@@ -5,7 +5,7 @@ import { renderMenuEditor } from './menu-editor.js';
 import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
 import { BUSY_OPTIONS, BUSY_FOR, busyExtra } from './busy.js';
 import { renderOffersEditor } from './offers-editor.js';
-import { orderSplit, sum, missingItems, missingValue } from './finance.js';
+import { orderSplit, sum, missingItems, missingValue, activeZones } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import { ratingOf, stars } from './ratings.js';
@@ -18,6 +18,7 @@ const root = document.getElementById('app');
 const baseTitle = document.title;
 let user;
 let restaurant = null;
+let settings = null; // المناطق (عشان المطعم يختار بيوصّل لفين)
 let orders = [];
 let tab = 'orders';
 let unsubs = [];
@@ -71,6 +72,7 @@ function start() {
     return;
   }
   root.innerHTML = loader();
+  unsubs.push(backend.watchSettings((s) => { settings = s; }));
   unsubs.push(backend.watchRestaurant(user.restaurantId, (r) => {
     const first = !restaurant;
     restaurant = r;
@@ -232,6 +234,7 @@ function drawTab() {
   }
   renderMenuEditor(document.getElementById('tabBody'), restaurant, {
     showOpenToggle: false,
+    zones: () => (settings ? activeZones(settings) : []),
     onSave: async (data) => {
       try {
         await backend.updateRestaurant(restaurant.id, data);

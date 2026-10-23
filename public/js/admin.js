@@ -6,7 +6,7 @@ import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { drawCoupons } from './admin-coupons.js';
 import { matches, normalize } from './search.js';
-import { orderSplit, sum, withDefaults, rateLabel, applyRate, paidTotal } from './finance.js';
+import { orderSplit, sum, withDefaults, rateLabel, applyRate, paidTotal, activeZones } from './finance.js';
 import {
   esc, fmt, toast, errorMessage, loader, demoBanner, isToday, shortId,
   renderAuthForm, renderDashNav, renderCompleteProfile, renderAcceptTerms, needsTerms, renderAccountPanel, homeFor, statusBadge, restaurantLogo,
@@ -556,6 +556,7 @@ function drawEditor(body) {
   const close = () => { editing = null; drawTab(); };
   body.querySelector('#backBtn').addEventListener('click', close);
   renderMenuEditor(body.querySelector('#editor'), r, {
+    zones: () => activeZones(withDefaults(settings)),
     saveLabel: isNew ? 'إضافة المطعم' : 'حفظ التعديلات',
     onCancel: close,
     onSave: async (data) => {

@@ -1060,3 +1060,10 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 /* ---------- الطلبات المجدولة ---------- */
 .sched-tag { background: var(--brand-soft); color: var(--brand-dark); border-radius: 10px; padding: 6px 10px; margin: 6px 0; font-size: .88rem; }
 .when-later { margin: 8px 0 4px; }
+
+/* ---------- مناطق توصيل المطعم ---------- */
+.home-zone { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: #fff; font-weight: 700; font-size: .9rem; }
+.home-zone select { flex: 1; min-width: 0; margin: 0; padding: 8px 12px; border-radius: 12px; border: 0; background: rgba(255, 255, 255, .95); color: #1f1f1f; font: inherit; font-weight: 600; }
+.zone-pick { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; }
+.zone-pick legend { font-weight: 700; padding: 0 6px; }
+.zone-chips { margin: 6px 0; }
