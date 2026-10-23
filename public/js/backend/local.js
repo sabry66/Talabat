@@ -404,7 +404,7 @@ export function createBackend() {
     },
 
     watchAllTickets(cb) {
-      return watch(() => Object.values(db().tickets || {}).sort((a, b) => b.updatedAt - a.updatedAt), cb);
+      return watch(() => Object.values(db().tickets || {}).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 300), cb); // زي Firebase: آخر 300
     },
 
     // ---------- الحظر والحذف (للأدمن) ----------
@@ -461,6 +461,10 @@ export function createBackend() {
 
     watchOrder(id, cb) {
       return watch(() => db().orders[id] || null, cb);
+    },
+
+    async getTicketsBetween(from, to) {
+      return clone(Object.values(db().tickets || {}).filter((t) => t.createdAt >= from && t.createdAt < to).sort((a, b) => b.createdAt - a.createdAt));
     },
 
     async getOrdersBetween(from, to) {

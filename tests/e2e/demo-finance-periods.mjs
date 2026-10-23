@@ -29,6 +29,17 @@ const seed = (list) => a.evaluate((list) => {
   localStorage.setItem('arrivo_demo_db_v3', JSON.stringify(db));
 }, list);
 await seed([[+day(0), 100], [+day(0), 200], [+day(0), 999, 'cancelled'], [+day(1), 150], [+day(3), 50], [+day(40), 300]]);
+// شكاوي: اتنين النهارده (واحدة اتقفلت)، وواحدة من 3 أيام، وواحدة من 40 يوم
+const seedTickets = (list) => a.evaluate((list) => {
+  const db = JSON.parse(localStorage.getItem('arrivo_demo_db_v3'));
+  db.tickets ||= {};
+  for (const [i, [at, status]] of list.entries()) {
+    const id = `t${i}_${at}`;
+    db.tickets[id] = { id, uid: 'u-customer', name: 'عميل', role: 'customer', topic: 'order', subject: 'شكوى', status, lastBy: 'user', createdAt: at, updatedAt: at, messages: [{ by: 'u-customer', name: 'عميل', text: 'x', at }] };
+  }
+  localStorage.setItem('arrivo_demo_db_v3', JSON.stringify(db));
+}, list);
+await seedTickets([[+day(0), 'open'], [+day(0), 'closed'], [+day(3), 'open'], [+day(40), 'closed']]);
 await a.reload(); await a.waitForSelector('#tabs', { state: 'attached' });
 await a.$eval('[data-tab="finance"]', (e) => e.click()); await a.waitForSelector('.period-box');
 
@@ -41,7 +52,8 @@ const pick = async (k) => { await a.click(`[data-period="${k}"]`); await a.waitF
 await pick('today');
 ok(await stat('اللي دفعه العملاء') === 360 && await stat('عدد الأوردرات') === 2, 'النهارده: طلبين بـ 360 (الملغي مش محسوب)');
 ok(await stat('ربح المنصة') === 42, 'النهارده: ربح المنصة 42');
-ok(latin(await a.textContent('#tabBody')).includes('1 طلب تاني في الفترة دي'), 'بيقول إن فيه طلب ملغي مش محسوب');
+ok(await stat('اتلغى') === 1, 'النهارده: طلب واحد اتلغى (معدود لوحده)');
+ok(await stat('الشكاوي') === 2 && latin(await a.textContent('.stats')).includes('1 اتقفلت • 1 مفتوحة'), 'النهارده: شكوتين (واحدة اتقفلت وواحدة مفتوحة)');
 await pick('yesterday');
 ok(await stat('اللي دفعه العملاء') === 180, 'امبارح: 180');
 await pick('week');
@@ -49,6 +61,8 @@ ok(await stat('اللي دفعه العملاء') === 620, 'آخر 7 أيام: 3
 const days = await a.$$eval('.days-table tbody tr', (r) => r.length);
 ok(days === 3, `يوم بيوم: 3 أيام فيهم طلبات (${days})`);
 ok(latin(await a.textContent('.days-table tfoot')).includes('620'), 'يوم بيوم: سطر الإجمالي 620');
+const cols = await a.$$eval('.days-table tbody tr', (r) => r.map((x) => [...x.children].slice(-3).map((c) => c.textContent.trim())));
+ok(JSON.stringify(cols[0]) === JSON.stringify(['1', '—', '2']) && JSON.stringify(cols[2]) === JSON.stringify(['—', '—', '1']), `يوم بيوم: الملغي والناقص والشكاوي لكل يوم ${JSON.stringify(cols)}`);
 await a.screenshot({ path: new URL('../out/finance-periods.png', import.meta.url).pathname, fullPage: true });
 
 // تنزيل Excel
@@ -77,6 +91,15 @@ await a.fill('#rangeFrom', iso(41)); await a.dispatchEvent('#rangeFrom', 'change
 await a.fill('#rangeTo', iso(39)); await a.dispatchEvent('#rangeTo', 'change');
 await a.waitForSelector('.stats', { timeout: 8000 });
 ok(await stat('اللي دفعه العملاء') === 330 && await stat('عدد الأوردرات') === 1, 'فترة قديمة بعد 1000 طلب: الطلب اتجاب (330)');
+// نفس الكلام للشكاوي بعد 300 شكوى
+await seedTickets(Array.from({ length: 300 }, () => [+day(0) + Math.floor(Math.random() * 1000), 'closed']));
+await a.reload(); await a.waitForSelector('#tabs', { state: 'attached' });
+await a.$eval('[data-tab="finance"]', (e) => e.click()); await a.waitForSelector('.period-box');
+await pick('custom'); await a.waitForSelector('#rangeFrom');
+await a.fill('#rangeFrom', iso(41)); await a.dispatchEvent('#rangeFrom', 'change'); await a.waitForTimeout(150);
+await a.fill('#rangeTo', iso(39)); await a.dispatchEvent('#rangeTo', 'change');
+await a.waitForSelector('.stats', { timeout: 8000 });
+ok(await stat('الشكاوي') === 1, 'شكوى قديمة بعد 300 شكوى: اتجابت من قاعدة البيانات');
 
 console.log('errors', errs);
 await b.close();

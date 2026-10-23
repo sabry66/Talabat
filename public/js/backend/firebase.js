@@ -454,6 +454,12 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
         (s) => cb(s.docs.map(withId).sort((a, b) => b.updatedAt - a.updatedAt)), logError(cb, []));
     },
 
+    // الشكاوي اللي اتفتحت في فترة (للحسابات اليومية؛ الأدمن بيتابع آخر 300 بس)
+    async getTicketsBetween(from, to) {
+      const q = query(tickets, where('createdAt', '>=', from), where('createdAt', '<', to), orderBy('createdAt', 'desc'));
+      return (await getDocs(q)).docs.map(withId);
+    },
+
     watchAllTickets(cb) {
       return onSnapshot(query(tickets, orderBy('updatedAt', 'desc'), limit(300)), (s) => cb(s.docs.map(withId)), logError(cb, []));
     },

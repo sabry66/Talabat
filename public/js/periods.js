@@ -43,11 +43,18 @@ export function periodRange(key, custom = {}, now = new Date()) {
 export const inRange = (o, { from, to }) => o.createdAt >= from && o.createdAt < to;
 
 // تقسيم الحسابات يوم بيوم (الأحدث الأول). split = orderSplit(o)، paid = paidTotal(o)
-export function dailyRows(items) {
+// cancelled: الطلبات اللي اتلغت أو اترفضت، tickets: الشكاوي (بيتعدّوا في يوم ما اتعملوا)
+export function dailyRows(items, { cancelled = [], tickets = [] } = {}) {
   const days = {};
+  const dayOf = (ms) => days[dateInput(ms)] ??= {
+    key: dateInput(ms), label: dayLabel(startOfDay(new Date(ms)).getTime()),
+    count: 0, paid: 0, food: 0, discount: 0, restaurant: 0, driver: 0, platform: 0, cancelled: 0, missing: 0, complaints: 0,
+  };
+  cancelled.forEach((o) => { dayOf(o.createdAt).cancelled++; });
+  tickets.forEach((t) => { dayOf(t.createdAt).complaints++; });
   for (const { o, s, paid } of items) {
-    const key = dateInput(o.createdAt);
-    const d = days[key] ??= { key, label: dayLabel(startOfDay(new Date(o.createdAt)).getTime()), count: 0, paid: 0, food: 0, discount: 0, restaurant: 0, driver: 0, platform: 0 };
+    const d = dayOf(o.createdAt);
+    if (o.missing) d.missing++;
     d.count++;
     d.paid += paid;
     d.food += o.totals.subtotal - s.missing;

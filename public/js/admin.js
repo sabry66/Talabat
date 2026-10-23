@@ -223,21 +223,42 @@ const who = (name, username) => `${esc(name || '—')}${username ? ` <span class
 const LIVE_LIMIT = 1000; // الأدمن بيتابع آخر 1000 طلب لحظيًا (watchOrders)
 const currentRange = () => periodRange(period, customRange);
 
-// طلبات الفترة: من اللي متحمّل لو مغطيها، وإلا بنجيبها من قاعدة البيانات (null = لسه بتتحمل)
-function periodOrders() {
+const TICKETS_LIMIT = 300; // والشكاوي آخر 300 (watchAllTickets)
+
+// طلبات وشكاوي الفترة: من اللي متحمّل لو مغطيها، وإلا بنجيبها من قاعدة البيانات (null = لسه بتتحمل)
+function periodData() {
   const range = currentRange();
-  const oldest = orders.length ? Math.min(...orders.map((o) => o.createdAt)) : Infinity;
-  if (orders.length < LIVE_LIMIT || range.from >= oldest) return orders.filter((o) => inRange(o, range));
+  const covers = (list, max) => list.length < max || range.from >= Math.min(...list.map((x) => x.createdAt));
+  const liveOrders = covers(orders, LIVE_LIMIT);
+  const liveTickets = covers(tickets, TICKETS_LIMIT);
+  if (liveOrders && liveTickets) {
+    return { orders: orders.filter((o) => inRange(o, range)), tickets: tickets.filter((t) => inRange(t, range)) };
+  }
   const key = `${range.from}-${range.to}`;
-  if (rangeCache?.key === key) return rangeCache.list;
-  rangeCache = { key, list: null };
-  backend.getOrdersBetween(range.from, range.to).then((list) => {
+  if (rangeCache?.key === key) return rangeCache.data;
+  rangeCache = { key, data: null };
+  Promise.all([
+    liveOrders ? orders.filter((o) => inRange(o, range)) : backend.getOrdersBetween(range.from, range.to),
+    liveTickets ? tickets.filter((t) => inRange(t, range)) : backend.getTicketsBetween(range.from, range.to),
+  ]).then(([o, t]) => {
     if (rangeCache?.key !== key) return;
-    rangeCache.list = list;
+    rangeCache.data = { orders: o, tickets: t };
     if (tab === 'finance') drawTab();
   }).catch((e) => toast(errorMessage(e)));
   return null;
 }
+
+// اليوم الجديد بيبدأ من الصفر: الساعة 12 بالليل بنعيد رسم "النهارده" حتى لو مفيش بيانات جديدة وصلت
+function scheduleMidnight() {
+  const next = new Date();
+  next.setHours(24, 0, 2, 0);
+  setTimeout(() => {
+    rangeCache = null;
+    if (['overview', 'finance'].includes(tab) && !isEditing()) drawTab();
+    scheduleMidnight();
+  }, next - Date.now());
+}
+scheduleMidnight();
 
 const periodChips = () => `
   <div class="period-box">
@@ -279,7 +300,11 @@ function drawOverview(body) {
       <div class="stat ${waitingDriver.length ? 'warn-stat' : ''}"><span>مستنية مندوب</span><strong>${waitingDriver.length}</strong></div>
       <div class="stat"><span>مطاعم مفتوحة</span><strong>${open} / ${restaurants.length}</strong></div>
       <div class="stat"><span>المندوبين</span><strong>${drivers.length}</strong></div>
+      <div class="stat"><span>❌ اتلغى أو اترفض النهارده</span><strong>${today.filter((o) => ['cancelled', 'rejected'].includes(o.status)).length}</strong></div>
+      <div class="stat"><span>🎧 شكاوي النهارده</span><strong>${tickets.filter((t) => isToday(t.createdAt)).length}</strong></div>
     </div>
+    <p><button class="btn small" type="button" id="todayFinance">📊 حسابات النهارده بالتفصيل ←</button>
+      <span class="muted small">كل يوم بيبدأ من الصفر الساعة 12 بالليل، والأيام اللي فاتت موجودة في "الحسابات".</span></p>
     ${waitingTickets().length ? `<p class="warn">🎧 فيه ${waitingTickets().length} شكوى مستنية ردك. روح "الشكاوي".</p>` : ''}
     ${applications.length ? `<p class="warn">📥 فيه ${applications.length} طلب انضمام مستني موافقتك. روح "طلبات الانضمام".</p>` : ''}
     ${!Object.keys(settings.zones).length ? '<p class="warn">⚠️ مفيش مناطق توصيل لسه، فالعملاء مش هيقدروا يطلبوا. روح "المناطق والنسب" وضيف مناطق.</p>' : ''}
@@ -288,7 +313,7 @@ function drawOverview(body) {
       <h3>آخر الطلبات</h3>
       ${orders.slice(0, 8).map((o) => `
         <div class="mini-line"><span>#${shortId(o.id)} • ${esc(o.restaurantName)} ${o.driverName ? `• 🛵 ${who(o.driverName, o.driverUsername)}` : ''}</span>${statusBadge(o.status)}</div>`).join('') || '<p class="muted small">مفيش.</p>'}
-    </section>`;
+    </section>`;  body.querySelector('#todayFinance').addEventListener('click', () => { tab = 'finance'; period = 'today'; drawTabs(); drawTab(); });
 }
 
 // ---------- الشكاوي ----------
@@ -443,15 +468,18 @@ function drawRequests(body) {
 // ---------- الحسابات ----------
 
 function drawFinance(body) {
-  const all = periodOrders();
-  if (!all) {
+  const data = periodData();
+  if (!data) {
     body.innerHTML = `<div class="list-head"><h2>الحسابات</h2></div>${periodChips()}${loader()}`;
     bindPeriod(body);
     return;
   }
+  const all = data.orders;
   const list = all.filter((o) => o.status === 'delivered');
+  const cancelled = all.filter((o) => ['cancelled', 'rejected'].includes(o.status));
+  const complaints = data.tickets;
   const splits = list.map((o) => ({ o, s: orderSplit(o), paid: paidTotal(o) }));
-  const days = dailyRows(splits);
+  const days = dailyRows(splits, { cancelled, tickets: complaints });
   const range = currentRange();
   const total = (fn) => sum(splits, fn);
 
@@ -476,7 +504,8 @@ function drawFinance(body) {
     <div class="list-head"><h2>الحسابات</h2>
       ${list.length ? '<button class="btn small" type="button" id="exportCsv">⬇️ تنزيل Excel (CSV)</button>' : ''}</div>
     ${periodChips()}
-    <p class="muted small">الطلبات اللي اتوصلت بس، حسب تاريخ الطلب. ${all.length - list.length ? `(${all.length - list.length} طلب تاني في الفترة دي لسه شغال أو اتلغى، ومش محسوبين)` : ''}</p>
+    <p class="muted small">الفلوس محسوبة على الطلبات اللي اتوصلت بس، حسب تاريخ الطلب. كل يوم بيبدأ من الصفر الساعة 12 بالليل، والأيام اللي فاتت متسجلة زي ما هي.
+      ${all.length - list.length - cancelled.length ? `(${all.length - list.length - cancelled.length} طلب لسه شغال)` : ''}</p>
     <div class="stats">
       <div class="stat"><span>عدد الأوردرات</span><strong>${list.length}</strong></div>
       <div class="stat"><span>إجمالي اللي دفعه العملاء</span><strong>${fmt(total(({ o }) => paidTotal(o)))}</strong></div>
@@ -484,17 +513,22 @@ function drawFinance(body) {
       <div class="stat"><span>🏪 حق المطاعم</span><strong>${fmt(total(({ s }) => s.restaurant))}</strong></div>
       <div class="stat"><span>🛵 حق المندوبين</span><strong>${fmt(total(({ s }) => s.driver))}</strong></div>
       <div class="stat"><span>🏷️ الخصومات (على المنصة)</span><strong>${fmt(total(({ o }) => o.totals.discount || 0))}</strong></div>
+      <div class="stat"><span>❌ اتلغى أو اترفض</span><strong>${cancelled.length}</strong></div>
+      <div class="stat"><span>⚠️ بلاغات ناقص</span><strong>${list.filter((o) => o.missing).length}</strong></div>
+      <div class="stat ${complaints.some((t) => t.status !== 'closed') ? 'warn-stat' : ''}"><span>🎧 الشكاوي</span><strong>${complaints.length}</strong>
+        ${complaints.length ? `<small class="muted">${complaints.filter((t) => t.status === 'closed').length} اتقفلت • ${complaints.filter((t) => t.status !== 'closed').length} مفتوحة</small>` : ''}</div>
     </div>
 
     ${days.length > 1 ? `<section class="panel">
       <h3>📆 يوم بيوم</h3>
       <div class="table-wrap flat"><table class="table days-table">
-        <thead><tr><th>اليوم</th><th>الأوردرات</th><th>دفعه العملاء</th><th>الأكل</th><th>الخصومات</th><th>المطاعم</th><th>المندوبين</th><th>ربح المنصة</th></tr></thead>
+        <thead><tr><th>اليوم</th><th>اتوصل</th><th>دفعه العملاء</th><th>الأكل</th><th>الخصومات</th><th>المطاعم</th><th>المندوبين</th><th>ربح المنصة</th><th>اتلغى</th><th>ناقص</th><th>شكاوي</th></tr></thead>
         <tbody>${days.map((d) => `<tr><td>${esc(d.label)}</td><td>${d.count}</td><td>${fmt(d.paid)}</td><td>${fmt(d.food)}</td><td>${d.discount ? fmt(d.discount) : '—'}</td>
-          <td>${fmt(d.restaurant)}</td><td>${fmt(d.driver)}</td><td><b>${fmt(d.platform)}</b></td></tr>`).join('')}</tbody>
+          <td>${fmt(d.restaurant)}</td><td>${fmt(d.driver)}</td><td><b>${fmt(d.platform)}</b></td>
+          <td>${d.cancelled || '—'}</td><td>${d.missing || '—'}</td><td>${d.complaints || '—'}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td><b>الإجمالي</b></td><td><b>${list.length}</b></td><td><b>${fmt(total(({ paid }) => paid))}</b></td><td><b>${fmt(sum(days, (d) => d.food))}</b></td>
           <td><b>${fmt(sum(days, (d) => d.discount))}</b></td><td><b>${fmt(total(({ s }) => s.restaurant))}</b></td><td><b>${fmt(total(({ s }) => s.driver))}</b></td>
-          <td><b>${fmt(total(({ s }) => s.platform))}</b></td></tr></tfoot>
+          <td><b>${fmt(total(({ s }) => s.platform))}</b></td><td><b>${cancelled.length}</b></td><td><b>${sum(days, (d) => d.missing)}</b></td><td><b>${complaints.length}</b></td></tr></tfoot>
       </table></div>
     </section>` : ''}
 
