@@ -32,3 +32,7 @@ user-invocable: false
 - أي باسورد أو بيانات دخول بعتها صاحب المشروع في الشات.
 - الـ API Secret بتاع Cloudinary (بنستخدم preset unsigned بس).
 - نصوص التقييمات الخام في `replica/` (متعملها ignore).
+
+## توفير السياق
+- المخرجات الطويلة: `2>&1 | python3 .claude/tools/squeeze.py` (محلي، من غير نت، والأصل محفوظ في `tests/out/squeeze/`). متشغّلش أي proxy أو أداة بتحوّل محادثة Claude على برنامج تاني.
+- اقرا بـ `grep -n` + Read بـ offset/limit، والخريطة في `CLAUDE.md`.
