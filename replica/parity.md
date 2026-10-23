@@ -1,13 +1,13 @@
-## Parity: 82.7 / 100
+## Parity: 83.7 / 100
 
-features 82.7  (62 counted, must-haves 29 of 30 done)
+features 83.7  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
 ## By area, weakest first
 - growth                         0.0  (2 features)
-- tracking                      50.0  (5 features)
 - checkout                      53.8  (7 features)
+- tracking                      62.5  (5 features)
 - platform                      76.9  (5 features)
 - account                       78.6  (6 features)
 - discovery                     88.1  (9 features)
@@ -19,7 +19,7 @@ Not shippable yet: 1 must-have features are not done.
 - admin                        100.0  (4 features)
 
 ## Missing, in build order
-- [must] tracking: Push notifications when the app is closed, no  (only in-app updates today)
+- [must] tracking: Push notifications when the app is closed, partial  (built (FCM + Cloud Function + SW); works while the app is open; closed-app push turns on after Blaze + VAPID key (SETUP.md))
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] checkout: Schedule an order for later, no

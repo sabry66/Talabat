@@ -13,5 +13,9 @@ export const firebaseConfig = {
   appId: '1:827504796401:web:3f3dfbc6e0f64dc4893f50',
 };
 
+// 🔔 الإشعارات والتطبيق مقفول (Push). سيبه فاضي لحد ما تعمل الخطوات اللي في SETUP.md (محتاجة خطة Blaze):
+// Firebase Console ← Project settings ← Cloud Messaging ← Web Push certificates ← Generate key pair، وانسخ المفتاح هنا.
+export const pushVapidKey = '';
+
 // للمطورين: true لتشغيل التطبيق على Firebase Emulators على جهازك
 export const useEmulators = false;

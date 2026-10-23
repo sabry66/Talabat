@@ -21,7 +21,7 @@
 | `css/style.css` | كل الستايل؛ الأقسام بعناوين `/* ---------- ... ---------- */`، والموبايل تحت `@media (max-width: 900px/760px)` |
 | `terms.html` / `privacy.html` | الشروط والخصوصية (لو اتعدلوا تعديل مهم غيّر `LEGAL_VERSION`) |
 
-برّه public: `firestore.rules` (كل الصلاحيات)، `firebase.json` (لينكات `/join/*`)، `android/` (APK؛ ملف التوقيع ممنوع)، `tests/`، `replica/` (تحليل السوق وخطة البناء `replica/build-plan.md`).
+برّه public: `firestore.rules` (كل الصلاحيات)، `firebase.json` (لينكات `/join/*`)، `functions/` (إشعارات Push، بتتنشر لوحدها بـ `firebase.functions.json`)، `android/` (APK؛ ملف التوقيع ممنوع)، `tests/`، `replica/` (تحليل السوق وخطة البناء `replica/build-plan.md`).
 
 ## توفير السياق (زي Headroom بس محلي وآمن)
 - أي أمر مخرجاته طويلة (اختبارات، emulator، npm، JSON): `... 2>&1 | python3 .claude/tools/squeeze.py` — بيجمّع المتكرر ويحافظ على سطور الأخطاء، والأصل كامل في `tests/out/squeeze/`.

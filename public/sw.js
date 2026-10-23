@@ -1,6 +1,6 @@
 // Service worker: بيخلّي الموقع يتنزّل كتطبيق، ويفتح بسرعة من الكاش.
 // الشبكة الأول دايمًا (عشان أي تحديث يظهر على طول)، والكاش لو مفيش نت.
-const CACHE = 'arrivo-v1';
+const CACHE = 'arrivo-v2';
 const SHELL = [
   '/', '/index.html', '/restaurant.html', '/delivery.html', '/admin.html',
   '/css/style.css', '/fonts/Cairo-Variable.woff2', '/img/logo-icon.png', '/img/logo.png',
@@ -41,5 +41,30 @@ self.addEventListener('notificationclick', (e) => {
     const same = list.find((c) => c.url === url) || list.find((c) => new URL(c.url).pathname === new URL(url).pathname);
     if (same) return same.focus().then((c) => (c && c.url !== url ? c.navigate(url) : c));
     return self.clients.openWindow(url);
+  }));
+});
+
+// اللينكات اللي في الإشعار لازم تكون جوه الموقع بس
+const sameOrigin = (u) => {
+  try {
+    const url = new URL(u || '/', self.location.origin);
+    return url.origin === self.location.origin ? url.href : self.location.origin + '/';
+  } catch { return self.location.origin + '/'; }
+};
+
+// إشعار جاي من السيرفر والتطبيق مقفول (Firebase Cloud Messaging بيبعت data بس، وإحنا بنعرضه)
+self.addEventListener('push', (e) => {
+  let msg = {};
+  try { msg = e.data?.json() || {}; } catch { msg = { data: { body: e.data?.text() || '' } }; }
+  const d = msg.data || msg.notification || {};
+  e.waitUntil(self.registration.showNotification(d.title || 'أريفو', {
+    body: d.body || '',
+    tag: d.tag || undefined,
+    renotify: Boolean(d.tag),
+    requireInteraction: d.urgent === '1',
+    lang: 'ar', dir: 'rtl',
+    icon: '/img/logo-icon.png', badge: '/img/logo-icon.png',
+    vibrate: d.urgent === '1' ? [400, 150, 400, 150, 600] : [200, 100, 200],
+    data: { url: sameOrigin(d.url) },
   }));
 });

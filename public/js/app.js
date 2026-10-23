@@ -11,7 +11,7 @@ import {
   changePasswordForm, bindChangePassword, joinCards, JOIN_LINKS, lineOptions,
 } from './ui.js';
 import { renderSupport } from './support.js';
-import { alarm, notify } from './notify.js';
+import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
 import { hasOptions, resolveOptions, lineKey } from './options.js';
 import { ratingOf, ratingValue, ratingBadge, stars } from './ratings.js';
@@ -1152,6 +1152,7 @@ function drawOrder(o) {
             </li>`).join('')}
         </ol>
         ${driverNote(o)}
+        ${ENDED.includes(o.status) ? '' : notifyButton().replace('🔔 فعّل الإشعارات', '🔔 عرّفني لما حالة الطلب تتغير')}
         ${o.driverUid ? `<div class="driver-box">🛵 المندوب: <b>${esc(o.driverName)}</b> • <a href="tel:${esc(o.driverPhone)}" dir="ltr">📞 ${esc(o.driverPhone)}</a></div>` : ''}
         ${missingPanel(o)}
         ${reviewPanel(o)}
@@ -1183,6 +1184,7 @@ function drawOrder(o) {
   document.getElementById('reorder').addEventListener('click', () => reorder(o));
   bindMissing(o);
   bindReview(o);
+  bindNotifyButton(app, () => drawOrder(o));
   const cancel = document.getElementById('cancelOrder');
   if (cancel) cancel.addEventListener('click', async () => {
     if (!confirm('متأكد إنك عايز تلغي الطلب؟')) return;

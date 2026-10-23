@@ -306,6 +306,20 @@ const favChecks = [
   ['addressesNotList', await favPatch({ addresses: { stringValue: 'x' } }, ['addresses']), 403],
   ['favoritesPlusRole', await favPatch({ favorites: ids(1), role: { stringValue: 'admin' } }, ['favorites', 'role']), 403],
 ];
+// ---- أجهزة الإشعارات: كل واحد يسجل جهازه هو بس، ومحدش يقرا التوكنات
+const tokUrl = (t) => docUrl(`pushTokens/${t}`);
+const tokSet = (t, fields) => fetch(tokUrl(t), { method: 'PATCH', headers: asUser, body: JSON.stringify({ fields }) });
+const tokCommit = (t, uid) => fetch(`http://127.0.0.1:8080/v1/projects/${PROJECT}/databases/(default)/documents:commit`, { method: 'POST', headers: asUser, body: JSON.stringify({ writes: [{
+  update: { name: `projects/${PROJECT}/databases/(default)/documents/pushTokens/${t}`, fields: { uid: { stringValue: uid } } },
+  updateTransforms: [{ fieldPath: 'at', setToServerValue: 'REQUEST_TIME' }] }] }) });
+favChecks.push(
+  ['validPushToken', await tokCommit('tokA', su.localId), 200],
+  ['pushTokenForOtherUser', await tokCommit('tokB', 'someoneElse'), 403],
+  ['pushTokenOtherUid', await tokSet('tokA', { uid: { stringValue: 'someoneElse' }, at: { timestampValue: new Date().toISOString() } }), 403],
+  ['pushTokenExtraKey', await tokSet('tokA', { uid: { stringValue: su.localId }, role: { stringValue: 'admin' } }), 403],
+  ['pushTokenRead', await fetch(tokUrl('tokA'), { headers: asUser }), 403],
+  ['pushTokenList', await fetch(docUrl('pushTokens'), { headers: asUser }), 403],
+);
 const favBad = favChecks.filter(([, r, want]) => r.status !== want);
 favChecks.forEach(([n, r, want]) => console.log(`${n} -> ${r.status} (want ${want})`));
 if (favBad.length) errs.push('favorites rules: ' + favBad.map(x => x[0]).join(','));

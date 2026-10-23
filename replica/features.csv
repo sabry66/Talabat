@@ -31,7 +31,7 @@ Pick delivery location on a map,checkout,must,yes,yes,center pin + search + my l
 Schedule an order for later,checkout,should,yes,no,
 Tip the rider,checkout,could,yes,no,
 Live order status,tracking,must,yes,yes,realtime
-Push notifications when the app is closed,tracking,must,yes,no,only in-app updates today
+Push notifications when the app is closed,tracking,must,yes,partial,built (FCM + Cloud Function + SW); works while the app is open; closed-app push turns on after Blaze + VAPID key (SETUP.md)
 Rider location live on a map,tracking,should,yes,no,
 Call the rider,tracking,should,yes,yes,
 Accurate ETA that updates,tracking,should,yes,partial,fixed time range per restaurant

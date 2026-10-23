@@ -24,7 +24,7 @@ const toOrder = (snap) => {
 const withoutId = ({ id, ...rest }) => rest;
 const CLAIMABLE = ['preparing', 'ready'];
 
-export function createBackend(config, { useEmulators }) {
+export function createBackend(config, { useEmulators, pushVapidKey = '' }) {
   const app = initializeApp(config);
   const auth = getAuth(app);
   auth.languageCode = 'ar'; // إيميلات Firebase (زي استرجاع كلمة السر) بالعربي
@@ -50,6 +50,29 @@ export function createBackend(config, { useEmulators }) {
   // driverLoads/{uid}: الأوردرات اللي مع المندوب دلوقتي، والقواعد بتمنعه يزود عن الحد اللي الأدمن حدده
   const driverLoads = collection(db, 'driverLoads');
   const reviews = collection(db, 'reviews');
+  // pushTokens/{token} = { uid, at }: الأجهزة اللي هيوصلها إشعار والتطبيق مقفول (Cloud Function بتبعت عليها)
+  const pushTokens = collection(db, 'pushTokens');
+  let pushToken = null;
+
+  // بيسجّل الجهاز ده للإشعارات (لو فيه مفتاح VAPID والإشعارات مسموحة). من غير ما يوقف أي حاجة لو فشل
+  async function registerPush(uid) {
+    if (!pushVapidKey || useEmulators || !uid || !('Notification' in window) || Notification.permission !== 'granted') return null;
+    try {
+      const m = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js');
+      if (!(await m.isSupported())) return null;
+      const reg = await navigator.serviceWorker.ready;
+      const token = await m.getToken(m.getMessaging(app), { vapidKey: pushVapidKey, serviceWorkerRegistration: reg });
+      if (!token) return null;
+      await setDoc(doc(pushTokens, token), { uid, at: serverTimestamp() });
+      pushToken = token;
+      return token;
+    } catch (err) {
+      console.warn('push', err);
+      return null;
+    }
+  }
+  // لما المستخدم يسمح بالإشعارات من زرار "فعّل الإشعارات"
+  window.addEventListener('arrivo-notify-granted', () => registerPush(auth.currentUser?.uid));
   const toReview = (d) => ({ ...d.data(), id: d.id, createdAt: d.data().createdAt?.toMillis?.() ?? d.data().createdAt });
   const FINAL = ['delivered', 'cancelled', 'rejected'];
 
@@ -94,6 +117,7 @@ export function createBackend(config, { useEmulators }) {
         if (unsubUser) unsubUser();
         unsubUser = null;
         if (!user) return cb(null);
+        registerPush(user.uid);
         const base = {
           uid: user.uid, email: (user.email || '').toLowerCase(), name: user.displayName || '',
           phone: '', address: '', role: 'customer', restaurantId: null,
@@ -172,7 +196,12 @@ export function createBackend(config, { useEmulators }) {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     },
 
-    signOut: () => signOut(auth),
+    // الجهاز ميفضلش يستقبل إشعارات الحساب بعد الخروج
+    async signOut() {
+      if (pushToken) await deleteDoc(doc(pushTokens, pushToken)).catch(() => {});
+      pushToken = null;
+      await signOut(auth);
+    },
 
     // نسيت كلمة السر: Firebase بيبعت لينك على الإيميل
     resetPassword: (email) => sendPasswordResetEmail(auth, email.trim()),

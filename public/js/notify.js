@@ -38,7 +38,11 @@ export const notifyState = () => (canNotify() ? Notification.permission : 'unsup
 
 export async function askNotifications() {
   if (!canNotify()) return 'unsupported';
-  try { return await Notification.requestPermission(); } catch { return Notification.permission; }
+  let s;
+  try { s = await Notification.requestPermission(); } catch { s = Notification.permission; }
+  // الباك إند بيسجل الجهاز للإشعارات والتطبيق مقفول (لو متظبطة)
+  if (s === 'granted') window.dispatchEvent(new Event('arrivo-notify-granted'));
+  return s;
 }
 
 // إشعار بس لو الصفحة مش قدامه (لو قدامه، الصوت والرسالة كفاية)

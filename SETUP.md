@@ -125,6 +125,32 @@
 
 ---
 
+## 🔔 الإشعارات والتطبيق مقفول (اختياري، محتاج خطة Blaze)
+
+من غير الخطوات دي الإشعارات شغالة **والتطبيق مفتوح** بس (حتى لو في الخلفية): صوت عالي + اهتزاز + إشعار من المتصفح بعد ما المستخدم يدوس "🔔 فعّل الإشعارات".
+عشان توصل **والتطبيق مقفول خالص**:
+
+1. **حوّل المشروع لخطة Blaze:** Firebase Console ← ⚙️ ← Usage and billing ← Modify plan ← Blaze. بتدفع على قد الاستخدام، والحد المجاني كبير (مليونين تشغيل للـ Functions في الشهر). حط حد للميزانية (Budget alert) بـ 5 دولار مثلًا عشان تطمن.
+2. **مفتاح الإشعارات (VAPID):** Firebase Console ← ⚙️ Project settings ← Cloud Messaging ← Web Push certificates ← **Generate key pair**. انسخ المفتاح الطويل وحطه في `public/js/firebase-config.js` مكان:
+   ```js
+   export const pushVapidKey = '';
+   ```
+3. **انشر الـ Cloud Function** (مرة واحدة، وبعد أي تعديل في فولدر `functions/`):
+   ```
+   cd functions
+   npm install
+   cd ..
+   firebase deploy --only functions --config firebase.functions.json
+   ```
+   وبعدين `firebase deploy` العادي عشان الموقع ياخد المفتاح الجديد.
+
+الـ Function (`functions/index.js`) بتبعت:
+- **للمطعم:** طلب جديد، ومندوب مسك الطلب، والطلب اتلغى.
+- **للعميل:** كل تغيير في الحالة، والمندوب مسك الطلب أو اعتذر أو اتغير.
+- **للمناديب:** أوردر جديد متاح (لما المطعم يقبل، أو لما مندوب يرجّع أوردر).
+
+`firebase deploy` العادي **مش بينشر** الـ Functions (هي في ملف إعدادات لوحدها)، فمش هيبوّظ النشر وإنت على الخطة المجانية.
+
 ## الحسابات بتتحسب إزاي؟
 
 لكل أوردر اتوصّل:

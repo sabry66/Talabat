@@ -31,6 +31,7 @@ trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
 
 if [[ "$MODE" == default || "$MODE" == demo || "$MODE" == full ]]; then
+  run unit-push-messages node "$HERE/e2e/unit-push-messages.mjs"
   for t in demo-responsive-roles demo-mobile-tabs demo-item-options demo-order-problem demo-order-review demo-reviews demo-favorites demo-addresses demo-payments demo-no-hidden-fees demo-driver-change demo-offers-map demo-coupons-ui demo-join demo-terms-consent demo-admin-user-search; do
     run "$t" node "$HERE/e2e/$t.mjs"
   done

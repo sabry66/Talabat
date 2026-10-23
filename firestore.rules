@@ -125,6 +125,18 @@ service cloud.firestore {
     }
 
     // إعدادات المنصة: المناطق وأسعار التوصيل والنسب
+    // pushTokens/{token} = { uid, at }: جهاز بيستقبل إشعارات صاحبه. محدش يقدر يقرا التوكنات (الـ Cloud Function بس)،
+    // وكل واحد يسجل جهازه هو بس، ولو الجهاز اتنقل لحساب تاني بيتكتب باسمه الجديد
+    match /pushTokens/{token} {
+      allow read: if false;
+      allow create, update: if signedIn()
+        && token.size() < 400
+        && request.resource.data.keys().hasOnly(['uid', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.at == request.time;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     match /settings/{id} {
       allow read: if true;
       allow write: if isAdmin();
