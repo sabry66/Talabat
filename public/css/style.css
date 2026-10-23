@@ -35,25 +35,16 @@
   color-scheme: light;
 }
 
-/* الوضع الليلي: بيمشي مع إعداد الموبايل، أو اللي العميل اختاره من القايمة (data-theme) */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --brand: #7565ea; --brand-dark: #c4baff; --brand-soft: #2a2546;
-    --accent: #e9a548; --accent-dark: #d08a2e; --accent-soft: #3a2d1a;
-    --text: #ececf1; --muted: #a3a3b0; --line: #30303b; --bg: #121218; --card: #1c1c25;
-    --ok: #3ccf7f; --danger: #ff6b5f; --shadow: 0 2px 12px rgba(0, 0, 0, .45);
-    --warn-bg: #3a2f14; --warn-text: #f2c66b; --warn-border: #6b5520;
-    --ok-bg: #173325; --danger-bg: #3a1c1a; --surface-2: #24242f; --star-off: #4a4760; --topbar-bg: rgba(28, 28, 37, .92);
-    color-scheme: dark;
-  }
-}
+/* الوضع الليلي: theme.js بيحط data-theme="dark" (من إعداد الموبايل أو اختيار العميل من القايمة).
+   كحلي غامق قريب من لون اللوجو بدل الأسود، وكل الألوان التانية من نفس العيلة */
 :root[data-theme="dark"] {
-  --brand: #7565ea; --brand-dark: #c4baff; --brand-soft: #2a2546;
-  --accent: #e9a548; --accent-dark: #d08a2e; --accent-soft: #3a2d1a;
-  --text: #ececf1; --muted: #a3a3b0; --line: #30303b; --bg: #121218; --card: #1c1c25;
-  --ok: #3ccf7f; --danger: #ff6b5f; --shadow: 0 2px 12px rgba(0, 0, 0, .45);
-  --warn-bg: #3a2f14; --warn-text: #f2c66b; --warn-border: #6b5520;
-  --ok-bg: #173325; --danger-bg: #3a1c1a; --surface-2: #24242f; --star-off: #4a4760; --topbar-bg: rgba(28, 28, 37, .92);
+  --brand: #7a6bef; --brand-dark: #c9c0ff; --brand-soft: #262043;
+  --accent: #eaa94e; --accent-dark: #f0bc6e; --accent-soft: #33281a;
+  --text: #ecebf5; --muted: #a29fb8; --line: #2c2940; --bg: #0f0e17; --card: #1a1826;
+  --ok: #45d08a; --danger: #ff7a6e; --shadow: 0 2px 14px rgba(0, 0, 0, .5);
+  --warn-bg: #2f2616; --warn-text: #f3c977; --warn-border: #5e4a22;
+  --ok-bg: #142a20; --danger-bg: #351b1c; --surface-2: #221f31; --star-off: #45405e;
+  --topbar-bg: rgba(20, 18, 31, .9);
   color-scheme: dark;
 }
 
@@ -203,7 +194,7 @@ select { font: inherit; padding: 8px 12px; border-radius: 10px; border: 1px soli
   flex: 1; width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; outline: none;
 }
 .promo-form input:focus, label input:focus, label textarea:focus { border-color: var(--brand); }
-label input:invalid:not(:placeholder-shown) { border-color: var(--danger); }
+label input:user-invalid, label textarea:user-invalid { border-color: var(--danger); }
 .promo-applied { background: var(--ok-bg); color: var(--ok); padding: 10px 12px; border-radius: 10px; font-weight: 600; display: flex; justify-content: space-between; }
 .summary { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
 .summary div { display: flex; justify-content: space-between; padding: 4px 0; }
@@ -1034,23 +1025,10 @@ p.pay-note { background: var(--brand-soft); border-radius: 10px; padding: 8px 12
 .busy-bar .btn { min-height: 38px; }
 .busy-bar.on { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); }
 
-/* ---------- الوضع الليلي: حاجات مش بتاخد الألوان لوحدها ---------- */
+/* ---------- الحقول والهيدرات اللي بلون المطعم ---------- */
 input, select, textarea { color: inherit; }
 input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { background-color: var(--card); }
-:root[data-theme="dark"] img.logo-img, :root[data-theme="dark"] .rest-emoji { background: #fff; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .toast { background: #f1f1f5; color: #15151b; }
-}
-:root[data-theme="dark"] .toast { background: #f1f1f5; color: #15151b; }
-
-/* في الغامق: brand-dark بقى لون نص فاتح، والأرقام على البرتقالي بلون غامق عشان تتقري */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .btn.primary:hover { background: #5f4fd6; }
-  :root:not([data-theme="light"]) :is(.badge, .menu-badge, .bar-count) { color: #1f1400; }
-}
-:root[data-theme="dark"] .btn.primary:hover { background: #5f4fd6; }
-:root[data-theme="dark"] :is(.badge, .menu-badge, .bar-count) { color: #1f1400; }
-/* هيدر المطعم بلونه الفاتح: النص يفضل غامق في الوضعين */
+/* هيدر المطعم بلونه الفاتح: النص غامق (وفي الوضع الليلي بيتغطى بطبقة غامقة والنص بيرجع فاتح) */
 .rest-header, .dash-head { color: #1f1f1f; }
 .rest-header .muted, .dash-head .muted { color: #555; }
 .rest-header .meta { color: #444; }
@@ -1081,3 +1059,44 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 .auth-tabs button { min-width: 0; }
 .phone-form .code-input { letter-spacing: .5em; text-align: center; font-size: 1.3rem; font-weight: 800; }
 .recaptcha-box:empty { display: none; }
+
+/* ---------- الوضع الليلي: تظبيطات الشكل ---------- */
+/* ألوان المطاعم الفاتحة (الغلاف والهيدر) بتتغطى بطبقة غامقة عشان متزغللش */
+[data-theme="dark"] :is(.card-cover, .rest-header, .dash-head) { position: relative; isolation: isolate; }
+[data-theme="dark"] :is(.card-cover, .rest-header, .dash-head)::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: linear-gradient(180deg, rgba(15, 14, 23, .42), rgba(15, 14, 23, .66));
+}
+/* الهيدر عليه كلام، فالطبقة أغمق شوية عشان النص يتقري */
+[data-theme="dark"] :is(.rest-header, .dash-head)::before { background: linear-gradient(180deg, rgba(15, 14, 23, .66), rgba(15, 14, 23, .78)); }
+[data-theme="dark"] :is(.rest-header, .dash-head) { color: var(--text); }
+[data-theme="dark"] :is(.rest-header, .dash-head) .muted, [data-theme="dark"] .rest-header .meta { color: #d4d1e4; }
+[data-theme="dark"] .rest-emoji { background: var(--surface-2); }
+[data-theme="dark"] .card-cover .logo-img, [data-theme="dark"] .rest-emoji .logo-img { box-shadow: 0 4px 16px rgba(0, 0, 0, .5); }
+[data-theme="dark"] .card { border: 1px solid var(--line); }
+[data-theme="dark"] .card:hover { box-shadow: 0 8px 24px rgba(0, 0, 0, .55); }
+
+/* الهيرو والعروض بتدرّج أهدى */
+[data-theme="dark"] .hero { background: linear-gradient(135deg, #241d4d 0%, #34296f 60%, #5a3d1f 140%); border: 1px solid #332b5e; }
+[data-theme="dark"] .offers-hero { background: linear-gradient(135deg, #5b3a14, #4a2418); border: 1px solid #6b4520; }
+[data-theme="dark"] .home-zone select { background: rgba(15, 14, 23, .55); color: var(--text); border: 1px solid rgba(255, 255, 255, .14); }
+[data-theme="dark"] .filter-btn.active, [data-theme="dark"] .filter-btn:hover { background: var(--card); color: var(--text); }
+
+/* أزرار وحاجات كانت بيضا */
+[data-theme="dark"] .fav-btn { background: rgba(26, 24, 38, .82); box-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
+[data-theme="dark"] .btn.primary:hover { background: #6a5be0; }
+[data-theme="dark"] :is(.badge, .menu-badge, .bar-count) { color: #1f1400; }
+[data-theme="dark"] .toast { background: #29253a; color: var(--text); border: 1px solid #3a3552; box-shadow: 0 10px 30px rgba(0, 0, 0, .55); }
+[data-theme="dark"] .closed-tag { background: #000; }
+[data-theme="dark"] .photo-badge { background: var(--surface-2); }
+[data-theme="dark"] .item-img { background: var(--surface-2); }
+
+/* اللوجو اللي تحت كتابته غامقة، فبيبقى فاتح */
+[data-theme="dark"] .footer-logo { filter: brightness(0) invert(.92); opacity: .9; }
+[data-theme="dark"] .footer { border-top: 1px solid var(--line); }
+
+/* الخريطة: نفس ألوان الصفحة */
+[data-theme="dark"] .leaflet-container { background: var(--surface-2); }
+[data-theme="dark"] .leaflet-tile-pane { filter: brightness(.8) contrast(1.1) saturate(.85); }
+[data-theme="dark"] :is(.leaflet-bar a, .leaflet-control-attribution) { background: var(--card); color: var(--muted); border-color: var(--line); }
+.dash-head .status { display: inline-block; }

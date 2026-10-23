@@ -21,7 +21,12 @@ const audit = (p) => p.evaluate(() => {
       const cs = getComputedStyle(e);
       if (cs.backgroundImage !== 'none') return null; // تدرج أو صورة: منقدرش نحسب
       const c = rgb(cs.backgroundColor);
-      if (c.length >= 3 && (c[3] === undefined || c[3] > 0.5)) return c;
+      if (c.length >= 3 && (c[3] === undefined || c[3] > 0.5)) {
+        // طبقة غامقة فوق لون المطعم (::before): ناخد أفتح نقطة فيها
+        const ov = rgb(getComputedStyle(e, '::before').backgroundImage);
+        if (ov.length >= 4) { const a = ov[3]; return [0, 1, 2].map((i) => c[i] * (1 - a) + ov[i] * a); }
+        return c;
+      }
     }
     return rgb(getComputedStyle(document.body).backgroundColor);
   };
@@ -45,7 +50,7 @@ const audit = (p) => p.evaluate(() => {
 const c = await mk();
 await c.goto(B + '#/'); await c.waitForSelector('.card');
 let a = await audit(c);
-ok(a.bodyBg === 'rgb(18, 18, 24)', 'follows the phone setting (dark) by default');
+ok(a.bodyBg === 'rgb(15, 14, 23)', 'follows the phone setting (dark) by default');
 ok(!a.bad.length, 'home: readable text ' + a.bad.join(' | '));
 ok(!a.white, 'home: no big white panels');
 await c.screenshot({ path: `${SP}/dark-home.png` });
