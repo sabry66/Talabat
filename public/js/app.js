@@ -1,9 +1,9 @@
 // تطبيق العميل: المطاعم، المنيو، السلة، الطلب، والتتبع (hash routing)
 import { backend, isDemo } from './backend/index.js';
-import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW, PAYMENT_LABELS } from './data.js';
+import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW } from './data.js';
 import { Cart } from './cart.js';
 import { locationPicker } from './map.js';
-import { activeZones, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
+import { activeZones, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
 import {
   fmt, esc, toast, errorMessage, shortId, isAvailable, statusBadge, paymentLabel, timeAgo,
@@ -854,10 +854,7 @@ function renderCheckout() {
         </label>
 
         <h3>💳 طريقة الدفع</h3>
-        <div class="pay-options">
-          ${Object.entries(PAYMENT_LABELS).map(([k, l], i) =>
-            `<label class="pay"><input type="radio" name="payment" value="${k}" ${i === 0 ? 'checked' : ''}> ${l}</label>`).join('')}
-        </div>
+        <div class="pay-options" id="payOptions">${payOptions()}</div>
       </section>
 
       <section class="panel">
@@ -872,11 +869,17 @@ function renderCheckout() {
   refreshCheckout = () => {
     const rest = cartRestaurant();
     if (!rest) return;
+    // لو الأدمن غيّر طرق الدفع وإنت في الصفحة
+    const box = document.getElementById('payOptions');
+    const picked = box.querySelector('[name=payment]:checked')?.value;
+    const ids = enabledPayments(state.settings).map((m) => m.id).join();
+    if (box.dataset.ids !== ids) { box.innerHTML = payOptions(picked); bindPayOptions(); }
     const tt = cartTotals(rest);
     document.getElementById('checkoutSummary').innerHTML = summary(tt, currentZone(), Cart.usableCoupons(rest, state.settings).map((c) => c.code));
     document.getElementById('placeBtn').textContent = `تأكيد الطلب • ${fmt(tt.total)}`;
   };
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
+  bindPayOptions();
 
   // اختيار عنوان محفوظ بيملا العنوان والمنطقة والخريطة
   let picker = null;
@@ -946,6 +949,8 @@ function renderCheckout() {
     if (!rest || rest.isOpen === false || rest.blocked) return toast('المطعم مش متاح دلوقتي');
     const zone = currentZone();
     if (!zone) return toast('اختار منطقة التوصيل الأول');
+    const method = enabledPayments(state.settings).find((m) => m.id === d.payment);
+    if (!method) return toast('اختار طريقة الدفع');
     btn.disabled = true;
     const problems = await refreshCoupons(rest);
     btn.disabled = false;
@@ -984,7 +989,8 @@ function renderCheckout() {
       address: d.address.trim(),
       location: location_,
       notes: d.notes.trim(),
-      payment: d.payment,
+      payment: method.id,
+      ...(method.note ? { paymentNote: method.note.slice(0, 200) } : {}),
       status: 'placed',
       statusHistory: [{ status: 'placed', at: Date.now() }],
     };
@@ -1006,6 +1012,23 @@ function renderCheckout() {
       btn.textContent = `تأكيد الطلب • ${fmt(totals.total)}`;
     }
   });
+}
+
+// طرق الدفع اللي الأدمن مفعّلها، وتحت المختارة ملاحظتها (زي رقم إنستاباي)
+function payOptions(picked) {
+  const list = enabledPayments(state.settings);
+  if (!list.length) return '<p class="warn">مفيش طرق دفع متاحة دلوقتي. كلم خدمة العملاء.</p>';
+  const sel = list.some((m) => m.id === picked) ? picked : list[0].id;
+  return list.map((m) => `
+    <label class="pay">
+      <input type="radio" name="payment" value="${m.id}" ${m.id === sel ? 'checked' : ''} required> ${m.label}
+      <span class="pay-hint muted small">${esc(m.hint)}${m.note ? `<b class="pay-note">${esc(m.note)}</b>` : ''}</span>
+    </label>`).join('');
+}
+
+function bindPayOptions() {
+  const box = document.getElementById('payOptions');
+  box.dataset.ids = enabledPayments(state.settings).map((m) => m.id).join();
 }
 
 // بعد الطلب: نحدث العنوان المختار، أو نضيف الجديد لو طلب يحفظه. null = مفيش تغيير
@@ -1080,6 +1103,7 @@ function drawOrder(o) {
         <p>📍 ${o.zoneName ? `${esc(o.zoneName)} — ` : ''}${esc(o.address)}</p>
         <p>📞 <span dir="ltr">${esc(o.customerPhone)}</span></p>
         <p>${paymentLabel(o.payment)}</p>
+        ${o.paymentNote && !['delivered', 'cancelled', 'rejected'].includes(o.status) ? `<p class="pay-note">💡 ${esc(o.paymentNote)}</p>` : ''}
         ${o.notes ? `<p>📝 ${esc(o.notes)}</p>` : ''}
         ${o.status === 'placed' ? '<button class="btn block danger-outline" id="cancelOrder" type="button">إلغاء الطلب</button>' : ''}
         <button class="btn block" id="reorder" type="button">🔁 اطلب نفس الطلب تاني</button>

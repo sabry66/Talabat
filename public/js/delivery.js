@@ -1,7 +1,7 @@
 // صفحة المندوب: الأوردرات المتاحة، استلامها من المطعم وتوصيلها، وحساب أرباحه
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
-import { orderSplit, sum, missingItems, missingRefund } from './finance.js';
+import { orderSplit, sum, missingItems, missingRefund, paidTotal } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
 import {
@@ -172,7 +172,9 @@ function tripCard(o, actions) {
       ${o.notes ? `<p class="note small">📝 ${esc(o.notes)}</p>` : ''}
       ${claimed && o.missing ? missingBox(o) : ''}
       <div class="money">
-        <div><span>تحصّل من العميل</span><b>${s.cash ? fmt(s.cash) : 'مدفوع (' + paymentLabel(o.payment) + ')'}</b></div>
+        <div><span>تحصّل من العميل</span><b>${s.cash ? fmt(s.cash) : o.payment === 'card' ? `💳 ${fmt(paidTotal(o))} بالماكينة`
+          : o.payment === 'wallet' ? `📱 ${fmt(paidTotal(o))} تحويل` : `مدفوع (${paymentLabel(o.payment)})`}</b></div>
+        ${o.payment === 'wallet' && o.status !== 'delivered' ? '<p class="note small">📱 العميل هيحوّل على حساب المنصة. اتأكد من رسالة التحويل على موبايله (المبلغ والوقت) قبل ما تسلّم.</p>' : ''}
         ${s.payRestaurant ? `<div><span>تدفع للمطعم</span><b>${fmt(s.payRestaurant)}</b></div>` : ''}
         <div class="earn"><span>مكسبك</span><b>${fmt(s.driver)}</b></div>
       </div>

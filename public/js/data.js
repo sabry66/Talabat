@@ -188,6 +188,14 @@ export const FINAL_STATUSES = ['delivered', 'cancelled', 'rejected'];
 export const PAYMENT_LABELS = {
   cash: '💵 كاش عند الاستلام',
   card: '💳 بطاقة عند الاستلام (ماكينة مع المندوب)',
+  wallet: '📱 إنستاباي / محفظة (تحويل عند الاستلام)',
+};
+
+// طرق الدفع اللي الأدمن بيفعّلها ويكتب لكل واحدة ملاحظة للعميل (settings.payments)
+export const PAYMENT_METHODS = {
+  cash: { on: true, hint: 'ادفع للمندوب كاش لما الطلب يوصلك.' },
+  card: { on: true, hint: 'المندوب معاه ماكينة، ادفع بالفيزا أو الميزة لما الطلب يوصلك.' },
+  wallet: { on: false, hint: 'حوّل المبلغ لما الطلب يوصلك، ووري المندوب رسالة التحويل.' },
 };
 
 export const NEW_RESTAURANT = {
@@ -213,6 +221,7 @@ export const DEFAULT_SETTINGS = {
   },
   couponsPerOrder: 1, // عدد كوبونات الخصم المسموح بيها في الطلب (0 = الكوبونات مقفولة)
   maxDriverOrders: 3, // أقصى عدد أوردرات مع المندوب في نفس الوقت (0 = من غير حد)
+  payments: { cash: { on: true, note: '' }, card: { on: true, note: '' }, wallet: { on: false, note: '' } },
 };
 
 export const SAMPLE_ZONES = {

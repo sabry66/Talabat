@@ -337,6 +337,12 @@ service cloud.firestore {
           && (codes.size() < 2 || couponOk(codes[1]));
       }
 
+      // طريقة الدفع لازم تكون من اللي الأدمن مفعّلها (الكاش والبطاقة مفعّلين لو لسه متظبطوش)
+      function paymentOk(p) {
+        return p in ['cash', 'card', 'wallet']
+          && settings().get('payments', {}).get(p, {}).get('on', p != 'wallet') == true;
+      }
+
       function driverFields() {
         return ['driverUid', 'driverName', 'driverPhone', 'driverUsername', 'claimedAt'];
       }
@@ -365,7 +371,8 @@ service cloud.firestore {
         && request.resource.data.zoneId in settings().zones
         && settings().zones[request.resource.data.zoneId].get('active', true) == true
         && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee
-        && couponsOk(request.resource.data.get('promos', []));
+        && couponsOk(request.resource.data.get('promos', []))
+        && paymentOk(request.resource.data.get('payment', ''));
 
       allow update: if isAdmin()
         // صاحب المطعم: يقبل أو يرفض، وبعدين "جاهز للتسليم"

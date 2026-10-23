@@ -46,6 +46,7 @@ Not shippable yet: 1 must-have features are not done.
 - Wallet credit instead of refunds: deliberately not: users hate refunds as credit
 
 ## Yours, not in the original (not scored)
+- InstaPay or wallet transfer on delivery (admin-controlled methods)
 - Dark mode
 - Human support reply promise
 - Check order before paying + rider-confirmed refund

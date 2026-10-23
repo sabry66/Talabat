@@ -99,7 +99,7 @@ console.log('order with FREE1 placed ✔');
 // ---- محاولات تحايل مباشرة على Firestore
 const res = await api(c, `(F, db, me, arg) => {
   const base = (st, promos, extra = {}) => ({ customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh1', name: 'x', price: 100, qty: 1 }],
-    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 200, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 200 }, promos, ...extra });
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 200, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 200 }, promos, payment: 'cash', ...extra });
   const order = async (promos, bump = [], uses = [], extra) => {
     const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
     const ref = F.doc(F.collection(db, 'orders')); const b = F.writeBatch(db);
@@ -123,6 +123,9 @@ const res = await api(c, `(F, db, me, arg) => {
     duplicateCode: () => order(['SAVE10', 'SAVE10'], ['SAVE10']),
     tooMany: () => order(['SAVE10', 'FREE1', 'ONCE50'], ['SAVE10']),
     deleteMyUse: () => F.deleteDoc(F.doc(db, 'couponUses', me, 'codes', 'ONCE50')),
+    payFakeMethod: () => order([], [], [], { payment: 'free' }),
+    payWalletWhileOff: () => order([], [], [], { payment: 'wallet' }),
+    payMissing: () => order([], [], [], { payment: null }),
     validControl: () => order(['SAVE10'], ['SAVE10']),
   };
 }`);
@@ -219,7 +222,7 @@ const selfId = await d.evaluate(async () => {
   const db = F.getFirestore(getApp()); const me = getAuth(getApp()).currentUser.uid;
   const st = (await F.getDoc(F.doc(db, 'settings', 'app'))).data();
   const ref = await F.addDoc(F.collection(db, 'orders'), { customerUid: me, status: 'placed', createdAt: F.serverTimestamp(), lines: [{ id: 'bh2', name: 'x', price: 100, qty: 1 }],
-    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 100, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 100 }, promos: [] });
+    restaurantId: 'burger-house', ownerUid: null, driverUid: null, rates: st.rates, zoneId: 'maadi', totals: { subtotal: 100, delivery: st.zones.maadi.fee, service: 0, discount: 0, total: 100 }, promos: [], payment: 'cash' });
   return ref.id;
 });
 await fetch(docUrl(`orders/${selfId}?updateMask.fieldPaths=status`), { method: 'PATCH', headers: H, body: JSON.stringify({ fields: { status: { stringValue: 'preparing' } } }) });

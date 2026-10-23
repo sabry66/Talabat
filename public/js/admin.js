@@ -1,6 +1,6 @@
 // لوحة الأدمن: الإحصائيات، الحسابات، المطاعم، المناطق والنسب، المندوبين، والطلبات
 import { backend, isDemo } from './backend/index.js';
-import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES, CATEGORIES } from './data.js';
+import { SEED_RESTAURANTS, NEW_RESTAURANT, ORDER_STATUSES, FINAL_STATUSES, SAMPLE_ZONES, CATEGORIES, PAYMENT_LABELS, PAYMENT_METHODS } from './data.js';
 import { VEHICLES } from './join.js';
 import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
@@ -673,6 +673,22 @@ function drawZones(body) {
         </section>
 
         <section class="panel">
+          <h3>💳 طرق الدفع</h3>
+          <p class="muted small">العميل بيشوف الطرق المفعّلة بس وقت الطلب. لازم طريقة واحدة على الأقل.</p>
+          <div class="pay-admin">
+            ${Object.keys(PAYMENT_METHODS).map((id) => `
+              <div class="pay-admin-row ${draft.payments[id].on ? 'on' : ''}">
+                <label class="check"><input type="checkbox" data-pay="${id}" ${draft.payments[id].on ? 'checked' : ''}> <b>${PAYMENT_LABELS[id]}</b></label>
+                <span class="muted small">${PAYMENT_METHODS[id].hint}</span>
+                <label>${id === 'wallet' ? 'رقم التحويل وبيانات الحساب (لازم)' : 'ملاحظة للعميل (اختياري)'}
+                  <input data-pay-note="${id}" maxlength="200" value="${esc(draft.payments[id].note)}"
+                    placeholder="${id === 'wallet' ? 'مثلًا: إنستاباي arrivo@instapay أو فودافون كاش 010xxxxxxxx' : id === 'card' ? 'مثلًا: فيزا وميزة بس' : 'مثلًا: جهّز فكة لو تقدر'}">
+                </label>
+              </div>`).join('')}
+          </div>
+        </section>
+
+        <section class="panel">
           <h3>🎧 خدمة العملاء</h3>
           <label>رقم واتساب خدمة العملاء (اختياري، بيظهر في صفحة الدعم)
             <input id="supportPhone" type="tel" pattern="01[0-9]{9}" value="${esc(draft.supportPhone)}" placeholder="01xxxxxxxxx" inputmode="numeric" dir="ltr">
@@ -696,6 +712,8 @@ function drawZones(body) {
       draft.rates.driverPaysRestaurant = body.querySelector('#driverPays').checked;
       draft.supportPhone = body.querySelector('#supportPhone').value.trim();
       draft.maxDriverOrders = Math.max(0, Math.floor(Number(body.querySelector('#maxDriverOrders').value) || 0));
+      body.querySelectorAll('[data-pay]').forEach((inp) => { draft.payments[inp.dataset.pay].on = inp.checked; });
+      body.querySelectorAll('[data-pay-note]').forEach((inp) => { draft.payments[inp.dataset.payNote].note = inp.value.trim().slice(0, 200); });
     };
     const redraw = (fn) => () => { sync(); fn(); draw(); };
 
@@ -708,6 +726,9 @@ function drawZones(body) {
     body.querySelectorAll('[data-del-zone]').forEach((b) => b.addEventListener('click', redraw(() => {
       delete draft.zones[b.dataset.delZone];
     })));
+    body.querySelectorAll('[data-pay]').forEach((inp) => inp.addEventListener('change', () => {
+      inp.closest('.pay-admin-row').classList.toggle('on', inp.checked);
+    }));
     body.querySelectorAll('[data-rate]').forEach((inp) => inp.addEventListener('input', () => {
       sync();
       body.querySelector('#example').textContent = example();
@@ -719,6 +740,11 @@ function drawZones(body) {
       if (!e.target.checkValidity()) return e.target.reportValidity();
       const pct = ['driverShare', 'commission', 'serviceFee'].find((k) => draft.rates[k].type === 'percent' && draft.rates[k].value > 100);
       if (pct) return toast('النسبة مينفعش تزيد عن 100%');
+      if (!Object.values(draft.payments).some((x) => x.on)) return toast('لازم تفعّل طريقة دفع واحدة على الأقل');
+      if (draft.payments.wallet.on && !draft.payments.wallet.note) {
+        body.querySelector('[data-pay-note="wallet"]').focus();
+        return toast('اكتب رقم التحويل عشان العميل يعرف يحوّل على فين');
+      }
       try {
         await backend.saveSettings(draft);
         toast('تم حفظ الإعدادات ✅');

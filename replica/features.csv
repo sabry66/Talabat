@@ -25,6 +25,7 @@ Cart from one restaurant with minimum order,cart,must,yes,yes,
 Cash on delivery,checkout,must,yes,yes,
 Card on delivery (POS with rider),checkout,could,unknown,yes,
 Online card payment,checkout,should,yes,no,needs payment gateway (Paymob/Fawry) and fees
+InstaPay or wallet transfer on delivery (admin-controlled methods),checkout,should,no,yes,Arrivo addition: admin turns cash/card/wallet on or off with a note
 Save card for next time,checkout,could,yes,no,
 Pick delivery location on a map,checkout,must,yes,yes,center pin + search + my location
 Schedule an order for later,checkout,should,yes,no,

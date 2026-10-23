@@ -1,7 +1,7 @@
 // حسابات الفلوس: إجمالي الطلب، وتقسيمه بين المطعم والمندوب والمنصة.
 // كل طلب بيتحفظ معاه النسب اللي كانت شغالة وقت ما اتعمل (order.rates)،
 // فلو الأدمن غيّر النسب بعدين، حسابات الطلبات القديمة متتغيرش.
-import { DEFAULT_SETTINGS } from './data.js';
+import { DEFAULT_SETTINGS, PAYMENT_METHODS, PAYMENT_LABELS } from './data.js';
 import { couponDiscount, MAX_COUPONS_PER_ORDER } from './coupons.js';
 
 export const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -15,6 +15,20 @@ export function applyRate(rate, base) {
 
 export const rateLabel = (rate) => (rate.type === 'fixed' ? `${rate.value} ج.م ثابت` : `${rate.value}%`);
 
+// إعدادات طرق الدفع (الكاش والبطاقة شغالين لو الأدمن لسه مظبطش حاجة، زي قواعد Firestore)
+export function paymentSettings(settings) {
+  const saved = settings?.payments || {};
+  return Object.fromEntries(Object.entries(PAYMENT_METHODS).map(([id, m]) => [id, {
+    on: typeof saved[id]?.on === 'boolean' ? saved[id].on : m.on,
+    note: String(saved[id]?.note || ''),
+  }]));
+}
+
+// الطرق المتاحة للعميل دلوقتي
+export const enabledPayments = (settings) => Object.entries(paymentSettings(settings))
+  .filter(([, p]) => p.on)
+  .map(([id, p]) => ({ id, label: PAYMENT_LABELS[id], hint: PAYMENT_METHODS[id].hint, note: p.note }));
+
 export function withDefaults(settings) {
   const s = settings || {};
   return {
@@ -22,6 +36,7 @@ export function withDefaults(settings) {
     rates: { ...DEFAULT_SETTINGS.rates, ...(s.rates || {}) },
     supportPhone: s.supportPhone || '',
     maxDriverOrders: Math.max(0, Math.floor(Number(s.maxDriverOrders ?? DEFAULT_SETTINGS.maxDriverOrders) || 0)),
+    payments: paymentSettings(s),
     couponsPerOrder: Math.min(MAX_COUPONS_PER_ORDER, Math.max(0, Number(s.couponsPerOrder ?? DEFAULT_SETTINGS.couponsPerOrder) || 0)),
   };
 }

@@ -1,7 +1,7 @@
 // باك إند Firebase: تسجيل الدخول (Authentication) وقاعدة البيانات اللحظية (Firestore).
 // الحماية (مين يقرا/يكتب إيه) موجودة في firestore.rules.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import { withDefaults } from '../finance.js';
+import { withDefaults, paymentSettings } from '../finance.js';
 import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
@@ -259,7 +259,8 @@ export function createBackend(config, { useEmulators }) {
     saveSettings: (settings) => setDoc(settingsDoc, {
       zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
       couponsPerOrder: Number(settings.couponsPerOrder) || 0,
-        maxDriverOrders: Number(settings.maxDriverOrders) || 0,
+      maxDriverOrders: Number(settings.maxDriverOrders) || 0,
+      payments: paymentSettings(settings),
     }),
 
     // ---------- الكوبونات ----------

@@ -2,7 +2,7 @@
 // البيانات بتتزامن بين التابات، والدخول لكل تاب لوحده: تقدر تفتح التطبيق كعميل في تاب
 // ولوحة المطعم كصاحب مطعم في تاب تاني.
 import { SEED_RESTAURANTS, DEFAULT_SETTINGS, SAMPLE_ZONES, SAMPLE_COUPONS, LEGAL_VERSION } from '../data.js';
-import { withDefaults } from '../finance.js';
+import { withDefaults, paymentSettings } from '../finance.js';
 import { normalizeUsername, normalizePhone, checkUsername, checkPhone, idError } from '../identity.js';
 
 const DB_KEY = 'arrivo_demo_db_v3';
@@ -250,6 +250,7 @@ export function createBackend() {
         zones: settings.zones, rates: settings.rates, supportPhone: settings.supportPhone || '',
         couponsPerOrder: Number(settings.couponsPerOrder) || 0,
         maxDriverOrders: Number(settings.maxDriverOrders) || 0,
+        payments: paymentSettings(settings),
       });
       commit();
     },
@@ -406,6 +407,8 @@ export function createBackend() {
 
     async createOrder(order, usedCoupons = []) {
       const id = newId();
+      // زي قواعد Firestore: طريقة الدفع لازم تكون مفعّلة
+      if (!paymentSettings(db().settings)[order.payment]?.on) throw authError('permission-denied');
       for (const c of usedCoupons) {
         const cur = db().coupons[c.code];
         const key = `${order.customerUid}/${c.code}`;
