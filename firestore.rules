@@ -88,7 +88,10 @@ service cloud.firestore {
             && request.resource.data.role in ['driver', 'restaurant'])
         || (signedIn() && request.auth.uid == uid
             && resource.data.get('deleted', false) == false
-            && changedOnly(['name', 'phone', 'address', 'location', 'username', 'terms', 'favorites'])
+            && changedOnly(['name', 'phone', 'address', 'location', 'username', 'terms', 'favorites', 'addresses'])
+            // العناوين المحفوظة: لستة بحد أقصى 10
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['addresses'])
+                || (request.resource.data.addresses is list && request.resource.data.addresses.size() <= 10))
             // المفضلة: لستة أرقام مطاعم بحد أقصى 50
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['favorites'])
                 || (request.resource.data.favorites is list && request.resource.data.favorites.size() <= 50))

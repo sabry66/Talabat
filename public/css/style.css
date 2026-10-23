@@ -928,3 +928,38 @@ body.sheet-open { overflow: hidden; }
 .fav-chip.closed { opacity: .6; }
 .fav-logo { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 1.8rem; overflow: hidden; }
 .fav-logo .logo-img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; box-shadow: none; }
+
+/* ---------- العناوين المحفوظة ---------- */
+.addr-pick { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; margin-bottom: 6px; scrollbar-width: none; }
+.addr-pick::-webkit-scrollbar { display: none; }
+.addr-chip {
+  flex: 0 0 auto; max-width: 180px; min-height: 44px; display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center;
+  text-align: start; background: var(--card); border: 2px solid var(--border, #e5e5ea); border-radius: 12px; padding: 8px 10px;
+  font: inherit; color: inherit; cursor: pointer;
+}
+.addr-chip span { grid-row: span 2; font-size: 1.3rem; }
+.addr-chip small { color: var(--muted, #777); font-size: .75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.addr-chip.new { grid-template-columns: auto auto; }
+.addr-chip.new span { grid-row: auto; }
+.addr-chip.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--card)); }
+.addr-save { margin: -4px 0 10px; }
+.addr-save .check-line { display: flex; align-items: center; gap: 8px; font-weight: 600; margin: 0 0 8px; min-height: 44px; }
+.addr-save .check-line input { width: 20px; height: 20px; accent-color: var(--brand); margin: 0; }
+.addr-kinds { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.addr-kinds .chip { min-height: 40px; }
+.addr-kinds input[name=addrName] { flex: 1 1 100%; }
+.addr-book .addr-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border, #eee); }
+.addr-book .addr-row .grow { min-width: 0; }
+.addr-book .addr-row .small { overflow-wrap: anywhere; }
+.addr-book .addr-row .btn { min-height: 40px; flex: 0 0 auto; }
+.addr-ico { font-size: 1.5rem; }
+.addr-book #addAddr { margin-top: 12px; }
+.addr-form { margin-top: 14px; padding-top: 12px; border-top: 2px dashed var(--border, #e5e5ea); }
+.addr-form h4 { margin: 0 0 10px; }
+.addr-form .row-btns { display: flex; gap: 8px; }
+.addr-form .row-btns .btn { flex: 1; min-height: 44px; }
+@media (max-width: 760px) {
+  .addr-book .addr-row { flex-wrap: wrap; }
+  .addr-book .addr-row .grow { flex: 1 1 calc(100% - 50px); }
+  .addr-book .addr-row .btn { flex: 1; }
+}

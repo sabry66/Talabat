@@ -7,14 +7,14 @@
 ## فين إيه (public/)
 | الملف | فيه |
 |---|---|
-| `index.html` + `js/app.js` | تطبيق العميل (hash routing): `router`, `renderHome/drawResults`, `renderRestaurant/drawMenu`, `openItemSheet` (الحجم والإضافات), `renderCart/couponBox`, `renderCheckout`, `renderOrder/drawOrder/reorder`, `renderOffers`, `renderFavorites/toggleFavorite`, `renderAccount`, `renderSupportPage` |
+| `index.html` + `js/app.js` | تطبيق العميل (hash routing): `router`, `renderHome/drawResults`, `renderRestaurant/drawMenu`, `openItemSheet` (الحجم والإضافات), `renderCart/couponBox`, `renderCheckout`, `renderOrder/drawOrder/reorder`, `renderOffers`, `renderFavorites/toggleFavorite`, `renderAccount/drawAddressBook`, `renderSupportPage` |
 | `restaurant.html` + `js/restaurant-dashboard.js` | لوحة المطعم: الطلبات، `menu-editor.js` (المنيو + محرر الاختيارات)، `offers-editor.js` (الخصومات) |
 | `delivery.html` + `js/delivery.js` | المندوب: المتاح (حد الأوردرات `maxOrders`)، الحالي، حسابي |
 | `admin.html` + `js/admin.js` | الأدمن والموظف: `drawOverview/Requests/Support/Finance/Restaurants/Zones/Drivers/Users/Orders` + `admin-coupons.js` |
 | `js/backend/firebase.js` و`local.js` | نفس الواجهة بالظبط (Firebase أو الوضع التجريبي في localStorage). `index.js` بيختار (فيه top-level await) |
 | `js/ui.js` | مشترك: `renderAuthForm` (موافقة الشروط)، `renderAcceptTerms`، `orderCard`، `lineOptions`، `errorMessage`، `homeFor` |
 | `js/data.js` | ثوابت + بيانات تجريبية + `DEFAULT_SETTINGS` + `LEGAL_VERSION` |
-| `js/finance.js` / `coupons.js` / `offers.js` / `options.js` / `cart.js` | الحسابات / الكوبونات / الخصومات / اختيارات الصنف (مفتاح السطر `itemId\|g:c`) / السلة |
+| `js/addresses.js` / `finance.js` / `coupons.js` / `offers.js` / `options.js` / `cart.js` | العناوين / الحسابات / الكوبونات / الخصومات / اختيارات الصنف (مفتاح السطر `itemId\|g:c`) / السلة |
 | `js/support.js` | الشكاوى + الصور + أسباب "مشكلة في الطلب" |
 | `js/map.js` `drawer.js` `pwa.js` `upload.js` `search.js` `join.js` `identity.js` | الخريطة، القايمة الجانبية، التنزيل كتطبيق، رفع الصور (Cloudinary `qrp8inik`)، البحث، طلبات الانضمام، اسم المستخدم والموبايل |
 | `css/style.css` | كل الستايل؛ الأقسام بعناوين `/* ---------- ... ---------- */`، والموبايل تحت `@media (max-width: 900px/760px)` |

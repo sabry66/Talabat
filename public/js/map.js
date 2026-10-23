@@ -178,6 +178,18 @@ export async function locationPicker(el, initial, onChange, { hint = '' } = {}) 
   return {
     locate,
     refresh: () => showStatus(lastName),
+    // نقل الدبوس لمكان محفوظ (أو مسحه) من غير ما صاحبه يحرّك الخريطة
+    setLocation: (ll) => {
+      touched = false;
+      clearTimeout(nameTimer);
+      current = ll ? { lat: round6(ll.lat), lng: round6(ll.lng) } : null;
+      if (current) map.setView([current.lat, current.lng], 17);
+      showStatus('');
+      if (current) {
+        const at = current;
+        placeName(at).then((n) => { if (n && at === current) showStatus(n); });
+      }
+    },
     destroy: () => {
       clearTimeout(nameTimer);
       document.body.classList.remove('picker-open');

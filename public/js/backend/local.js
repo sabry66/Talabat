@@ -171,6 +171,12 @@ export function createBackend() {
       commit();
     },
 
+    async saveAddresses(uid, addresses) {
+      if (addresses.length > 10) throw new Error('permission-denied');
+      db().users[uid].addresses = clone(addresses);
+      commit();
+    },
+
     async setFavorite(uid, restaurantId, on) {
       const u = db().users[uid];
       const list = (u.favorites || []).filter((x) => x !== restaurantId);

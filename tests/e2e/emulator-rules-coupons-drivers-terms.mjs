@@ -292,11 +292,15 @@ console.log('update own terms ->', r3.status);
 // ---- المفضلة: لستة بحد أقصى 50، ومينفعش تتلزق في تعديل دور أو حاجة تانية
 const favPatch = (fields, mask) => fetch(docUrl(`users/${su.localId}?${mask.map(m => 'updateMask.fieldPaths=' + m).join('&')}`), { method: 'PATCH', headers: asUser, body: JSON.stringify({ fields }) });
 const ids = (n) => ({ arrayValue: { values: Array.from({ length: n }, (_, i) => ({ stringValue: 'r' + i })) } });
+const addrList = (n) => ({ arrayValue: { values: Array.from({ length: n }, (_, i) => ({ mapValue: { fields: { id: { stringValue: 'a' + i }, kind: { stringValue: 'home' }, address: { stringValue: 'x' } } } })) } });
 const favChecks = [
   ['validFavorites', await favPatch({ favorites: ids(3) }, ['favorites']), 200],
   ['favorites50', await favPatch({ favorites: ids(50) }, ['favorites']), 200],
   ['favorites51', await favPatch({ favorites: ids(51) }, ['favorites']), 403],
   ['favoritesNotList', await favPatch({ favorites: { stringValue: 'x' } }, ['favorites']), 403],
+  ['addresses10', await favPatch({ addresses: addrList(10) }, ['addresses']), 200],
+  ['addresses11', await favPatch({ addresses: addrList(11) }, ['addresses']), 403],
+  ['addressesNotList', await favPatch({ addresses: { stringValue: 'x' } }, ['addresses']), 403],
   ['favoritesPlusRole', await favPatch({ favorites: ids(1), role: { stringValue: 'admin' } }, ['favorites', 'role']), 403],
 ];
 const favBad = favChecks.filter(([, r, want]) => r.status !== want);

@@ -1,6 +1,6 @@
-## Parity: 80.6 / 100
+## Parity: 82.0 / 100
 
-features 80.6  (62 counted, must-haves 29 of 30 done)
+features 82.0  (62 counted, must-haves 29 of 30 done)
 
 Not shippable yet: 1 must-have features are not done.
 
@@ -8,8 +8,8 @@ Not shippable yet: 1 must-have features are not done.
 - growth                         0.0  (2 features)
 - tracking                      50.0  (5 features)
 - checkout                      53.8  (7 features)
-- account                       64.3  (6 features)
 - platform                      76.9  (5 features)
+- account                       78.6  (6 features)
 - discovery                     88.1  (9 features)
 - menu                          90.9  (4 features)
 - partners                      91.3  (9 features)
@@ -20,7 +20,6 @@ Not shippable yet: 1 must-have features are not done.
 
 ## Missing, in build order
 - [must] tracking: Push notifications when the app is closed, no  (only in-app updates today)
-- [should] account: Several saved addresses (home work...), no  (Arrivo keeps one address + map pin)
 - [should] account: Sign in with phone number + SMS code, no  (Arrivo uses email; SMS costs money)
 - [should] checkout: Online card payment, no  (needs payment gateway (Paymob/Fawry) and fees)
 - [should] checkout: Schedule an order for later, no

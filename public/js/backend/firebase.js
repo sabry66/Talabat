@@ -189,6 +189,9 @@ export function createBackend(config, { useEmulators }) {
       await updateDoc(doc(users, uid), { name, address, location: location ?? null });
     },
 
+    // العناوين المحفوظة (اللستة كلها بتتكتب مرة واحدة)
+    saveAddresses: (uid, addresses) => updateDoc(doc(users, uid), { addresses }),
+
     // المفضلة: لستة أرقام المطاعم في مستند العميل
     setFavorite: (uid, restaurantId, on) => updateDoc(doc(users, uid), { favorites: on ? arrayUnion(restaurantId) : arrayRemove(restaurantId) }),
 

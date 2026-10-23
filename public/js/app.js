@@ -14,6 +14,7 @@ import { renderSupport } from './support.js';
 import { normalizeCode, couponProblem, couponLabel, couponConditions, couponDiscount } from './coupons.js';
 import { hasOptions, resolveOptions, lineKey } from './options.js';
 import { ratingOf, ratingValue, ratingBadge, stars } from './ratings.js';
+import { MAX_ADDRESSES, ADDRESS_KINDS, addressIcon, addressTitle, newAddressId, savedAddresses, nextKind, cleanAddress } from './addresses.js';
 import { activeOffer, priceOf, priceHtml, offerItems, hasOffers, promoText, untilLabel } from './offers.js';
 
 const app = document.getElementById('app');
@@ -818,20 +819,30 @@ function renderCheckout() {
   if (!lines.length || r.isOpen === false || r.blocked || cartTotals(r).subtotal < r.minOrder) { location.hash = '#/cart'; return; }
   const t = cartTotals(r);
   const u = state.user;
-  let location_ = u.location || null;
+  const saved = savedAddresses(u);
+  // أول مرة: آخر عنوان استخدمه، ولو مفيش محفوظ نبدأ بعنوانه القديم كعنوان جديد
+  let chosen = saved[0] || null;
+  let location_ = chosen ? chosen.location : (u.location || null);
 
   app.innerHTML = `
     <h1 class="page-title">إتمام الطلب</h1>
     <form class="two-col" id="checkoutForm">
       <section class="panel">
         <h3>📍 عنوان التوصيل</h3>
+        ${saved.length ? `
+          <div class="addr-pick" role="radiogroup" aria-label="عناوينك المحفوظة">
+            ${saved.map((a) => `<button type="button" class="addr-chip" role="radio" data-addr="${esc(a.id)}">
+              <span>${addressIcon(a)}</span><b>${esc(addressTitle(a))}</b><small>${esc(a.address)}</small></button>`).join('')}
+            <button type="button" class="addr-chip new" role="radio" data-addr="new"><span>➕</span><b>عنوان جديد</b></button>
+          </div>` : ''}
         ${zoneSelect()}
         <p class="muted small">حدد مكانك على الخريطة (اختياري بس بيسهّل على المندوب يوصلك):</p>
         <div class="map-box" id="map"><span class="muted small">جاري تحميل الخريطة...</span></div>
 
         <label>العنوان بالتفصيل
-          <textarea name="address" required rows="2" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(u.address)}</textarea>
+          <textarea name="address" required rows="2" maxlength="300" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(chosen ? chosen.address : u.address)}</textarea>
         </label>
+        <div id="addrSave" class="addr-save"></div>
         <div class="form-grid">
           <label>الاسم<input name="name" required maxlength="60" value="${esc(u.name)}" autocomplete="name"></label>
           <label>رقم الموبايل
@@ -867,9 +878,61 @@ function renderCheckout() {
   };
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
 
+  // اختيار عنوان محفوظ بيملا العنوان والمنطقة والخريطة
+  let picker = null;
+  const addrBox = app.querySelector('textarea[name=address]');
+  const drawAddrSave = () => {
+    const box = document.getElementById('addrSave');
+    if (chosen) {
+      box.innerHTML = `<p class="muted small">أي تعديل في العنوان أو المكان هيتحفظ في «${esc(addressTitle(chosen))}».</p>`;
+      return;
+    }
+    if (saved.length >= MAX_ADDRESSES) {
+      box.innerHTML = `<p class="muted small">عندك ${MAX_ADDRESSES} عناوين محفوظة (الحد الأقصى). تقدر تمسح منهم من حسابي.</p>`;
+      return;
+    }
+    const kind = nextKind(saved);
+    box.innerHTML = `
+      <label class="check-line"><input type="checkbox" name="saveAddr" checked> 💾 احفظ العنوان ده عشان المرة الجاية</label>
+      <div class="addr-kinds" role="radiogroup" aria-label="اسم العنوان">
+        ${Object.entries(ADDRESS_KINDS).map(([k, x]) => `<label class="chip check-chip"><input type="radio" name="addrKind" value="${k}" ${k === kind ? 'checked' : ''}> ${x.icon} ${x.name}</label>`).join('')}
+        <input name="addrName" maxlength="30" placeholder="اسم العنوان (مثلًا: بيت ماما)" ${kind === 'other' ? '' : 'hidden'}>
+      </div>`;
+    const name = box.querySelector('[name=addrName]');
+    box.querySelectorAll('[name=addrKind]').forEach((r) => r.addEventListener('change', () => { name.hidden = r.value !== 'other'; }));
+    box.querySelector('[name=saveAddr]').addEventListener('change', (e) => { box.querySelector('.addr-kinds').hidden = !e.target.checked; });
+  };
+  const choose = (id) => {
+    chosen = saved.find((a) => a.id === id) || null;
+    app.querySelectorAll('[data-addr]').forEach((b) => {
+      const on = b.dataset.addr === (chosen ? chosen.id : 'new');
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-checked', on);
+    });
+    addrBox.value = chosen ? chosen.address : '';
+    location_ = chosen ? chosen.location : null;
+    picker?.setLocation(location_);
+    const zoneSel = document.getElementById('zoneSelect');
+    if (chosen?.zoneId && zoneSel && [...zoneSel.options].some((o) => o.value === chosen.zoneId)) {
+      zoneSel.value = chosen.zoneId;
+      Cart.setZone(chosen.zoneId);
+      refreshCheckout();
+    }
+    drawAddrSave();
+  };
+  app.querySelectorAll('[data-addr]').forEach((b) => b.addEventListener('click', () => {
+    choose(b.dataset.addr);
+    if (b.dataset.addr === 'new') addrBox.focus();
+  }));
+  if (saved.length) choose(chosen.id); else drawAddrSave();
+
+  const initial = location_;
   locationPicker(document.getElementById('map'), location_, (ll) => { location_ = ll; },
     { hint: 'هيتبعت للمندوب مع الطلب' }).then((p) => {
     if (page !== 'checkout') return p.destroy();
+    picker = p;
+    // لو اختار عنوان تاني قبل ما الخريطة تحمل
+    if (location_ !== initial) p.setLocation(location_);
     setCleanup(() => p.destroy());
   }).catch(() => {
     document.getElementById('map')?.replaceChildren('تعذر تحميل الخريطة. اكتب العنوان بالتفصيل.');
@@ -931,6 +994,8 @@ function renderCheckout() {
       const id = await backend.createOrder(order, usedCoupons);
       backend.updateProfile(u.uid, { name: order.customerName, phone: order.customerPhone, address: order.address, location: location_ })
         .catch(console.error);
+      const addresses = rememberAddress(savedAddresses(state.user), chosen, d, { address: order.address, location: location_, zoneId: zone.id });
+      if (addresses) backend.saveAddresses(u.uid, addresses).catch(console.error);
       Cart.clear();
       toast('تم إرسال طلبك بنجاح 🎉');
       location.hash = `#/order/${id}`;
@@ -941,6 +1006,19 @@ function renderCheckout() {
       btn.textContent = `تأكيد الطلب • ${fmt(totals.total)}`;
     }
   });
+}
+
+// بعد الطلب: نحدث العنوان المختار، أو نضيف الجديد لو طلب يحفظه. null = مفيش تغيير
+function rememberAddress(list, chosen, form, { address, location, zoneId }) {
+  const now = Date.now();
+  if (chosen) {
+    return list.map((a) => (a.id === chosen.id ? cleanAddress({ ...a, address, location, zoneId, usedAt: now }) : cleanAddress(a)));
+  }
+  if (!form.saveAddr || list.length >= MAX_ADDRESSES) return null;
+  const kind = ADDRESS_KINDS[form.addrKind] ? form.addrKind : 'other';
+  return [...list.map(cleanAddress), cleanAddress({
+    id: newAddressId(), kind, name: kind === 'other' ? form.addrName : '', address, location, zoneId, usedAt: now,
+  })];
 }
 
 // ---------- تتبع الطلب ----------
@@ -1230,17 +1308,18 @@ function renderAccount() {
       ${usernameField(u.username, true)}
       <label>الاسم<input name="name" required maxlength="60" value="${esc(u.name)}"></label>
       <label>رقم الموبايل<input name="phone" type="tel" required pattern="01[0-9]{9}" value="${esc(u.phone)}" inputmode="numeric" dir="ltr"></label>
-      <label>العنوان<textarea name="address" rows="2">${esc(u.address)}</textarea></label>
       <button class="btn primary block" type="submit">حفظ</button>
       <button class="btn block" type="button" id="logout">تسجيل الخروج</button>
     </form>
+    <section class="panel narrow addr-book" id="addrBook"></section>
     ${changePasswordForm()}`;
+  drawAddressBook();
   bindChangePassword(app, backend);
   document.getElementById('profileForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const d = Object.fromEntries(new FormData(e.target));
     try {
-      await backend.updateProfile(u.uid, { name: d.name.trim(), address: d.address.trim(), location: u.location });
+      await backend.updateProfile(u.uid, { name: d.name.trim(), address: u.address || '', location: u.location });
       // تغيير الرقم بيتأكد إنه مش مسجل بحساب تاني
       if (d.phone.trim() !== u.phone) await backend.claimIdentity(u, { username: u.username, phone: d.phone });
       toast('تم الحفظ ✅');
@@ -1254,6 +1333,104 @@ function renderAccount() {
     updateHeader();
     location.hash = '#/';
   });
+}
+
+// ---------- عناويني ----------
+
+let addrPicker = null;
+const closeAddrPicker = () => { addrPicker?.destroy(); addrPicker = null; };
+
+function drawAddressBook() {
+  const box = document.getElementById('addrBook');
+  if (!box) return;
+  closeAddrPicker();
+  const list = savedAddresses(state.user);
+  const zones = state.settings ? state.settings.zones : {};
+  box.innerHTML = `
+    <div class="list-head"><h3>📍 عناويني</h3><span class="muted small">${list.length} من ${MAX_ADDRESSES}</span></div>
+    ${list.length ? list.map((a) => `
+      <div class="addr-row">
+        <span class="addr-ico">${addressIcon(a)}</span>
+        <div class="grow">
+          <b>${esc(addressTitle(a))}</b>
+          <div class="small">${esc(a.address)}</div>
+          <div class="muted small">${a.zoneId && zones[a.zoneId] ? `🛵 ${esc(zones[a.zoneId].name)}` : ''}${a.location ? ' • 📌 متحدد على الخريطة' : ''}</div>
+        </div>
+        <button class="btn small" type="button" data-edit-addr="${esc(a.id)}">✏️ تعديل</button>
+        <button class="btn small danger-outline" type="button" data-del-addr="${esc(a.id)}" aria-label="امسح ${esc(addressTitle(a))}">🗑️</button>
+      </div>`).join('') : '<p class="muted small">لسه مفيش عناوين محفوظة. ضيف البيت أو الشغل عشان تطلب أسرع.</p>'}
+    ${list.length < MAX_ADDRESSES ? '<button class="btn block" type="button" id="addAddr">➕ ضيف عنوان</button>' : ''}
+    <div id="addrEditor"></div>`;
+  box.querySelector('#addAddr')?.addEventListener('click', () => openAddressEditor(null));
+  box.querySelectorAll('[data-edit-addr]').forEach((b) => b.addEventListener('click', () => openAddressEditor(list.find((a) => a.id === b.dataset.editAddr))));
+  box.querySelectorAll('[data-del-addr]').forEach((b) => b.addEventListener('click', async () => {
+    const a = list.find((x) => x.id === b.dataset.delAddr);
+    if (!confirm(`تمسح عنوان «${addressTitle(a)}»؟`)) return;
+    await storeAddresses(list.filter((x) => x.id !== a.id).map(cleanAddress), 'اتمسح العنوان');
+  }));
+}
+
+async function storeAddresses(addresses, done) {
+  try {
+    await backend.saveAddresses(state.user.uid, addresses);
+    state.user = { ...state.user, addresses };
+    toast(done);
+    drawAddressBook();
+    return true;
+  } catch (err) {
+    toast(errorMessage(err));
+    return false;
+  }
+}
+
+function openAddressEditor(a) {
+  const ed = document.getElementById('addrEditor');
+  const list = savedAddresses(state.user);
+  const kind = a ? a.kind : nextKind(list);
+  const zones = state.settings ? activeZones(state.settings) : [];
+  let loc = a?.location || null;
+  closeAddrPicker();
+  document.getElementById('addAddr')?.setAttribute('hidden', '');
+  ed.innerHTML = `
+    <form class="addr-form" id="addrForm">
+      <h4>${a ? `✏️ تعديل «${esc(addressTitle(a))}»` : '➕ عنوان جديد'}</h4>
+      <div class="addr-kinds" role="radiogroup" aria-label="نوع العنوان">
+        ${Object.entries(ADDRESS_KINDS).map(([k, x]) => `<label class="chip check-chip"><input type="radio" name="kind" value="${k}" ${k === kind ? 'checked' : ''}> ${x.icon} ${x.name}</label>`).join('')}
+      </div>
+      <label ${kind === 'other' ? '' : 'hidden'} id="addrNameLbl">اسم العنوان<input name="name" maxlength="30" value="${esc(a?.name || '')}" placeholder="مثلًا: بيت ماما"></label>
+      ${zones.length ? `<label>📍 منطقة التوصيل
+        <select name="zoneId"><option value="">اختار المنطقة</option>
+          ${zones.map((z) => `<option value="${z.id}" ${a?.zoneId === z.id ? 'selected' : ''}>${esc(z.name)}</option>`).join('')}
+        </select></label>` : ''}
+      <div class="map-box" id="addrMap"><span class="muted small">جاري تحميل الخريطة...</span></div>
+      <label>العنوان بالتفصيل
+        <textarea name="address" required rows="2" maxlength="300" placeholder="المنطقة، الشارع، رقم العمارة، الدور، الشقة">${esc(a?.address || '')}</textarea>
+      </label>
+      <div class="row-btns">
+        <button class="btn primary" type="submit">💾 حفظ العنوان</button>
+        <button class="btn" type="button" id="addrCancel">إلغاء</button>
+      </div>
+    </form>`;
+  const form = ed.querySelector('#addrForm');
+  form.querySelectorAll('[name=kind]').forEach((r) => r.addEventListener('change', () => { form.querySelector('#addrNameLbl').hidden = r.value !== 'other'; }));
+  form.querySelector('#addrCancel').addEventListener('click', drawAddressBook);
+  locationPicker(form.querySelector('#addrMap'), loc, (ll) => { loc = ll; }).then((p) => {
+    if (!form.isConnected) return p.destroy();
+    addrPicker = p;
+  }).catch(() => form.querySelector('#addrMap')?.replaceChildren('تعذر تحميل الخريطة. اكتب العنوان بالتفصيل.'));
+  setCleanup(closeAddrPicker);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = Object.fromEntries(new FormData(form));
+    const entry = cleanAddress({
+      id: a?.id || newAddressId(), kind: d.kind, name: d.kind === 'other' ? d.name : '',
+      address: d.address, location: loc, zoneId: d.zoneId || null, usedAt: a?.usedAt || Date.now(),
+    });
+    const next = a ? list.map((x) => (x.id === a.id ? entry : cleanAddress(x))) : [...list.map(cleanAddress), entry];
+    form.querySelector('[type=submit]').disabled = true;
+    if (!await storeAddresses(next, 'اتحفظ العنوان ✅')) form.querySelector('[type=submit]').disabled = false;
+  });
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ---------- خدمة العملاء ----------
