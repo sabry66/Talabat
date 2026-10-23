@@ -6,6 +6,7 @@ import { TICKET_TOPICS, ROLE_NAMES, thread, ticketStatus } from './support.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { drawCoupons } from './admin-coupons.js';
 import { orderDetail, orderSearchText } from './order-detail.js';
+import { PERIODS, periodRange, inRange, dailyRows, toCSV, dateInput } from './periods.js';
 import { matches, normalize } from './search.js';
 import { orderSplit, sum, withDefaults, rateLabel, applyRate, paidTotal, activeZones } from './finance.js';
 import {
@@ -34,6 +35,8 @@ let openOrder = null; // id الطلب اللي مفتوح بالتفاصيل
 let ordersRedraw = null;
 const reviewsCache = {};
 let period = 'today';
+let customRange = { from: dateInput(Date.now()), to: dateInput(Date.now()) };
+let rangeCache = null; // { key, list } طلبات فترة قديمة اتجابت من قاعدة البيانات
 let unsubs = [];
 let settingsCreated = false;
 let couponsUnsub = null;
@@ -53,7 +56,7 @@ const TABS = [
 ];
 
 // الصفحات اللي فيها فورم، مش بنعيد رسمها لما البيانات تتغير عشان منمسحش اللي الأدمن بيكتبه
-const isEditing = () => editing || tab === 'zones' || tab === 'coupons' || tab === 'account' || (tab === 'support' && openTicket);
+const isEditing = () => editing || (tab === 'finance' && period === 'custom') || tab === 'zones' || tab === 'coupons' || tab === 'account' || (tab === 'support' && openTicket);
 
 function stop() {
   if (couponsUnsub) couponsUnsub();
@@ -217,21 +220,46 @@ function drawTab() {
 // الاسم وجنبه اسم المستخدم
 const who = (name, username) => `${esc(name || '—')}${username ? ` <span class="uname">@${esc(username)}</span>` : ''}`;
 
-const inPeriod = (o) => {
-  if (period === 'all') return true;
-  if (period === 'today') return isToday(o.createdAt);
-  const days = period === 'week' ? 7 : 30;
-  return o.createdAt >= Date.now() - days * 86400000;
-};
+const LIVE_LIMIT = 1000; // الأدمن بيتابع آخر 1000 طلب لحظيًا (watchOrders)
+const currentRange = () => periodRange(period, customRange);
+
+// طلبات الفترة: من اللي متحمّل لو مغطيها، وإلا بنجيبها من قاعدة البيانات (null = لسه بتتحمل)
+function periodOrders() {
+  const range = currentRange();
+  const oldest = orders.length ? Math.min(...orders.map((o) => o.createdAt)) : Infinity;
+  if (orders.length < LIVE_LIMIT || range.from >= oldest) return orders.filter((o) => inRange(o, range));
+  const key = `${range.from}-${range.to}`;
+  if (rangeCache?.key === key) return rangeCache.list;
+  rangeCache = { key, list: null };
+  backend.getOrdersBetween(range.from, range.to).then((list) => {
+    if (rangeCache?.key !== key) return;
+    rangeCache.list = list;
+    if (tab === 'finance') drawTab();
+  }).catch((e) => toast(errorMessage(e)));
+  return null;
+}
 
 const periodChips = () => `
-  <div class="chips">
-    ${[['today', 'النهارده'], ['week', 'آخر 7 أيام'], ['month', 'آخر 30 يوم'], ['all', 'الكل']]
-      .map(([k, l]) => `<button type="button" class="chip ${period === k ? 'active' : ''}" data-period="${k}">${l}</button>`).join('')}
+  <div class="period-box">
+    <div class="chips">
+      ${PERIODS.map(([k, l]) => `<button type="button" class="chip ${period === k ? 'active' : ''}" data-period="${k}">${l}</button>`).join('')}
+    </div>
+    ${period === 'custom' ? `
+      <div class="range-row">
+        <label>من<input type="date" id="rangeFrom" value="${customRange.from}" max="${dateInput(Date.now())}"></label>
+        <label>لـ<input type="date" id="rangeTo" value="${customRange.to}" max="${dateInput(Date.now())}"></label>
+      </div>
+      <p class="muted small">عايز يوم واحد؟ اختار نفس اليوم في الاتنين.</p>` : ''}
+    <p class="range-label">📅 ${esc(currentRange().label)}</p>
   </div>`;
 
-const bindPeriod = (body) => body.querySelectorAll('[data-period]').forEach((b) =>
-  b.addEventListener('click', () => { period = b.dataset.period; drawTab(); }));
+const bindPeriod = (body) => {
+  body.querySelectorAll('[data-period]').forEach((b) => b.addEventListener('click', () => { period = b.dataset.period; drawTab(); }));
+  body.querySelectorAll('#rangeFrom, #rangeTo').forEach((inp) => inp.addEventListener('change', () => {
+    customRange = { from: body.querySelector('#rangeFrom').value, to: body.querySelector('#rangeTo').value };
+    drawTab();
+  }));
+};
 
 // ---------- نظرة عامة ----------
 
@@ -415,8 +443,16 @@ function drawRequests(body) {
 // ---------- الحسابات ----------
 
 function drawFinance(body) {
-  const list = orders.filter((o) => o.status === 'delivered' && inPeriod(o));
-  const splits = list.map((o) => ({ o, s: orderSplit(o) }));
+  const all = periodOrders();
+  if (!all) {
+    body.innerHTML = `<div class="list-head"><h2>الحسابات</h2></div>${periodChips()}${loader()}`;
+    bindPeriod(body);
+    return;
+  }
+  const list = all.filter((o) => o.status === 'delivered');
+  const splits = list.map((o) => ({ o, s: orderSplit(o), paid: paidTotal(o) }));
+  const days = dailyRows(splits);
+  const range = currentRange();
   const total = (fn) => sum(splits, fn);
 
   const byRestaurant = {};
@@ -437,14 +473,30 @@ function drawFinance(body) {
   const r = settings.rates;
 
   body.innerHTML = `
-    <div class="list-head"><h2>الحسابات (الطلبات اللي اتوصلت بس)</h2>${periodChips()}</div>
+    <div class="list-head"><h2>الحسابات</h2>
+      ${list.length ? '<button class="btn small" type="button" id="exportCsv">⬇️ تنزيل Excel (CSV)</button>' : ''}</div>
+    ${periodChips()}
+    <p class="muted small">الطلبات اللي اتوصلت بس، حسب تاريخ الطلب. ${all.length - list.length ? `(${all.length - list.length} طلب تاني في الفترة دي لسه شغال أو اتلغى، ومش محسوبين)` : ''}</p>
     <div class="stats">
       <div class="stat"><span>عدد الأوردرات</span><strong>${list.length}</strong></div>
       <div class="stat"><span>إجمالي اللي دفعه العملاء</span><strong>${fmt(total(({ o }) => paidTotal(o)))}</strong></div>
       <div class="stat accent"><span>💰 ربح المنصة</span><strong>${fmt(total(({ s }) => s.platform))}</strong></div>
       <div class="stat"><span>🏪 حق المطاعم</span><strong>${fmt(total(({ s }) => s.restaurant))}</strong></div>
       <div class="stat"><span>🛵 حق المندوبين</span><strong>${fmt(total(({ s }) => s.driver))}</strong></div>
+      <div class="stat"><span>🏷️ الخصومات (على المنصة)</span><strong>${fmt(total(({ o }) => o.totals.discount || 0))}</strong></div>
     </div>
+
+    ${days.length > 1 ? `<section class="panel">
+      <h3>📆 يوم بيوم</h3>
+      <div class="table-wrap flat"><table class="table days-table">
+        <thead><tr><th>اليوم</th><th>الأوردرات</th><th>دفعه العملاء</th><th>الأكل</th><th>الخصومات</th><th>المطاعم</th><th>المندوبين</th><th>ربح المنصة</th></tr></thead>
+        <tbody>${days.map((d) => `<tr><td>${esc(d.label)}</td><td>${d.count}</td><td>${fmt(d.paid)}</td><td>${fmt(d.food)}</td><td>${d.discount ? fmt(d.discount) : '—'}</td>
+          <td>${fmt(d.restaurant)}</td><td>${fmt(d.driver)}</td><td><b>${fmt(d.platform)}</b></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td><b>الإجمالي</b></td><td><b>${list.length}</b></td><td><b>${fmt(total(({ paid }) => paid))}</b></td><td><b>${fmt(sum(days, (d) => d.food))}</b></td>
+          <td><b>${fmt(sum(days, (d) => d.discount))}</b></td><td><b>${fmt(total(({ s }) => s.restaurant))}</b></td><td><b>${fmt(total(({ s }) => s.driver))}</b></td>
+          <td><b>${fmt(total(({ s }) => s.platform))}</b></td></tr></tfoot>
+      </table></div>
+    </section>` : ''}
 
     <section class="panel">
       <h3>🏪 المطاعم</h3>
@@ -492,6 +544,17 @@ function drawFinance(body) {
       <p class="muted small">كل أوردر بيتحسب بالنسب اللي كانت شغالة وقت ما اتطلب. غيّر النسب من "المناطق والنسب".</p>
     </section>`;
   bindPeriod(body);
+  body.querySelector('#exportCsv')?.addEventListener('click', () => {
+    const rows = [['التاريخ', 'الطلب', 'المطعم', 'المندوب', 'المنطقة', 'الدفع', 'الأكل', 'التوصيل', 'رسوم الخدمة', 'الخصم', 'الناقص', 'العميل دفع', 'حق المطعم', 'حق المندوب', 'ربح المنصة', 'المطعم عليه/ليه', 'المندوب عليه/ليه']]
+      .concat(splits.map(({ o, s, paid }) => [
+        new Date(o.createdAt).toLocaleString('en-GB'), shortId(o.id), o.restaurantName, o.driverName || '', o.zoneName || '', o.payment,
+        o.totals.subtotal, o.totals.delivery, o.totals.service || 0, o.totals.discount || 0, s.missing, paid, s.restaurant, s.driver, s.platform, s.restaurantDue, s.driverOwes,
+      ]));
+    const url = URL.createObjectURL(new Blob([toCSV(rows)], { type: 'text/csv;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `arrivo-${dateInput(range.from)}_${dateInput(range.to - 1)}.csv` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
 }
 
 // ---------- المطاعم ----------

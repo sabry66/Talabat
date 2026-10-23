@@ -1120,3 +1120,11 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 .od-log, .od-timeline { margin: 6px 0 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: .92rem; }
 .od-log li.released b { color: var(--warn-text); }
 .od-timeline li .small { margin-inline-start: 4px; }
+
+/* ---------- فترات الحسابات ---------- */
+.period-box { margin-bottom: 12px; }
+.range-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.range-row label { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
+.range-row input { margin: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; }
+.range-label { margin: 8px 0 0; font-weight: 700; color: var(--brand-dark); }
+.days-table tfoot td { border-top: 2px solid var(--line); background: var(--surface-2); }

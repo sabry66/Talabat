@@ -463,6 +463,10 @@ export function createBackend() {
       return watch(() => db().orders[id] || null, cb);
     },
 
+    async getOrdersBetween(from, to) {
+      return clone(sortByNewest(Object.values(db().orders).filter((o) => o.createdAt >= from && o.createdAt < to)));
+    },
+
     async shareRiderLocation(orderId, { lat, lng }) {
       const o = db().orders[orderId];
       if (!o || o.driverUid !== session.get() || !['ready', 'on_way'].includes(o.status)) throw authError('permission-denied');
@@ -476,10 +480,11 @@ export function createBackend() {
 
     // filter: { customerUid } أو { ownerUid } أو { driverUid } أو {} لكل الطلبات (للأدمن)
     watchOrders(filter, cb) {
+      const everyone = !filter.customerUid && !filter.ownerUid && !filter.driverUid;
       return watch(() => sortByNewest(Object.values(db().orders).filter((o) =>
         (!filter.customerUid || o.customerUid === filter.customerUid) &&
         (!filter.ownerUid || o.ownerUid === filter.ownerUid) &&
-        (!filter.driverUid || o.driverUid === filter.driverUid))), cb);
+        (!filter.driverUid || o.driverUid === filter.driverUid))).slice(0, everyone ? 1000 : undefined), cb); // زي Firebase: الأدمن آخر 1000
     },
 
     // الأوردرات اللي مستنية مندوب (بتتجهز أو جاهزة ومحدش أخدها)

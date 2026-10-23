@@ -12,7 +12,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache, connectFirestoreEmulator, collection, doc, getDoc, getDocs, setDoc, addDoc,
   updateDoc, deleteDoc, onSnapshot, query, where, orderBy, limit, writeBatch, arrayUnion, arrayRemove, serverTimestamp,
-  runTransaction, increment,
+  runTransaction, increment, Timestamp,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const toMillis = (t) => (t && typeof t.toMillis === 'function' ? t.toMillis() : typeof t === 'number' ? t : Date.now());
@@ -520,6 +520,12 @@ export function createBackend(config, { useEmulators, pushVapidKey = '', phoneLo
           : filter.driverUid ? query(orders, where('driverUid', '==', filter.driverUid))
             : query(orders, orderBy('createdAt', 'desc'), limit(1000));
       return onSnapshot(q, (s) => cb(s.docs.map(toOrder).sort((a, b) => b.createdAt - a.createdAt)), logError(cb, []));
+    },
+
+    // كل الطلبات في فترة (للحسابات: الأدمن بيتابع آخر 1000 بس، فالفترات القديمة بتتجاب من هنا)
+    async getOrdersBetween(from, to) {
+      const q = query(orders, where('createdAt', '>=', Timestamp.fromMillis(from)), where('createdAt', '<', Timestamp.fromMillis(to)), orderBy('createdAt', 'desc'));
+      return (await getDocs(q)).docs.map(toOrder);
     },
 
     // الأوردرات اللي مستنية مندوب (بتتجهز أو جاهزة ومحدش أخدها)
