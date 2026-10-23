@@ -3,6 +3,7 @@ import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { renderMenuEditor } from './menu-editor.js';
 import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
+import { BUSY_OPTIONS, BUSY_FOR, busyExtra } from './busy.js';
 import { renderOffersEditor } from './offers-editor.js';
 import { orderSplit, sum, missingItems, missingValue } from './finance.js';
 import { renderJoin } from './join.js';
@@ -114,6 +115,20 @@ function render() {
   drawTab();
 }
 
+let busyTimer = null;
+
+// وضع الزحمة بضغطة: يزوّد الوقت اللي العملاء بيشوفوه لمدة ساعة
+function busyBar(r) {
+  const extra = busyExtra(r);
+  if (extra) {
+    const until = new Date(Number(r.busy.until)).toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit' });
+    return `<div class="busy-bar on">🐢 <b>وضع الزحمة شغال:</b> الوقت زايد ${extra} دقيقة لحد ${until}
+      <button class="btn small" data-busy="0" type="button">✅ رجّع الوقت العادي</button></div>`;
+  }
+  return `<div class="busy-bar">🐢 عليك زحمة؟ زوّد الوقت ساعة:
+    ${BUSY_OPTIONS.map((m) => `<button class="btn small" data-busy="${m}" type="button">+${m} د</button>`).join('')}</div>`;
+}
+
 function drawHead() {
   const r = restaurant;
   const open = r.isOpen !== false;
@@ -127,8 +142,23 @@ function drawHead() {
       </div>
       ${r.blocked ? '' : `<button class="btn ${open ? '' : 'primary'}" id="toggleOpen" type="button">${open ? 'اقفل المطعم' : 'افتح المطعم'}</button>`}
     </section>
-    ${r.blocked ? '<p class="warn">⛔ المطعم موقوف من إدارة أريفو ومش ظاهر للعملاء. كلّم خدمة العملاء من تبويب "🎧 الدعم".</p>' : notifyButton()}`;
+    ${r.blocked ? '<p class="warn">⛔ المطعم موقوف من إدارة أريفو ومش ظاهر للعملاء. كلّم خدمة العملاء من تبويب "🎧 الدعم".</p>' : `${open ? busyBar(r) : ''}${notifyButton()}`}`;
   bindNotifyButton(document.getElementById('dashHead'), drawHead);
+  document.querySelectorAll('[data-busy]').forEach((b) => b.addEventListener('click', async () => {
+    const extra = Number(b.dataset.busy);
+    b.disabled = true;
+    try {
+      await backend.updateRestaurant(r.id, { busy: extra ? { extra, until: Date.now() + BUSY_FOR } : null });
+      toast(extra ? `🐢 العملاء هيشوفوا الوقت زايد ${extra} دقيقة لمدة ساعة` : 'رجعت للوقت العادي ✅');
+    } catch (err) {
+      toast(errorMessage(err));
+      b.disabled = false;
+    }
+  }));
+  // لما وقت الزحمة يخلص، الشريط يرجع لوحده
+  clearTimeout(busyTimer);
+  const left = busyExtra(r) ? Number(r.busy.until) - Date.now() : 0;
+  if (left > 0) busyTimer = setTimeout(drawHead, Math.min(left + 500, 2 ** 31 - 1));
   document.getElementById('toggleOpen')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     try {

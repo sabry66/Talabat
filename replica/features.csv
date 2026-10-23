@@ -16,7 +16,7 @@ Only show restaurants that deliver to my area,discovery,should,yes,no,zones are 
 Groceries and other shops,discovery,could,yes,partial,grocery category exists; no dedicated store flow
 Menu with sections photos and prices,menu,must,yes,yes,
 Item options and add-ons (size extras sauces),menu,must,yes,yes,required or optional groups - multi-select with max - extra price per choice
-Note per item,menu,should,yes,partial,one note per order only
+Note per item,menu,should,yes,yes,note per cart line shown to restaurant and rider (plus order note)
 Mark items unavailable,menu,must,yes,yes,
 Discounts on items,offers,should,yes,yes,
 Offers and deals section,offers,should,yes,yes,
@@ -47,7 +47,7 @@ Notifications about deals and new restaurants,growth,could,yes,no,
 Restaurant dashboard with live orders and sound,partners,must,yes,yes,
 Menu editor with photos and availability,partners,must,yes,yes,
 Open / close the restaurant,partners,must,yes,yes,
-Busy mode / change prep time quickly,partners,should,yes,partial,prep time editable in settings only
+Busy mode / change prep time quickly,partners,should,yes,yes,one tap +15/+30/+45 min for an hour; customers see the real time
 Restaurant earnings report,partners,should,yes,yes,
 Rider app: available orders claim and statuses,partners,must,yes,yes,
 Rider sees drop-off location before accepting,partners,should,yes,yes,riders ask for this in reviews

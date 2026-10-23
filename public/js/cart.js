@@ -7,13 +7,15 @@ import { parseKey, resolveOptions } from './options.js';
 
 const KEY = 'talabaty_cart_v2';
 const ZONE_KEY = 'arrivo_zone'; // منطقة التوصيل اللي العميل اختارها آخر مرة
-const empty = () => ({ restaurantId: null, items: {}, coupons: [] });
+const empty = () => ({ restaurantId: null, items: {}, coupons: [], notes: {} });
+export const MAX_LINE_NOTE = 100;
 
 function load() {
   try {
     const c = { ...empty(), ...JSON.parse(localStorage.getItem(KEY)) };
     delete c.promo; // الأكواد القديمة كانت ثابتة في الكود
     if (!Array.isArray(c.coupons)) c.coupons = [];
+    if (!c.notes || typeof c.notes !== 'object') c.notes = {};
     return c;
   } catch { return empty(); }
 }
@@ -55,8 +57,19 @@ export const Cart = {
   },
 
   setQty(key, qty) {
-    if (qty <= 0) delete cart.items[key];
-    else cart.items[key] = qty;
+    if (qty <= 0) {
+      delete cart.items[key];
+      delete cart.notes[key];
+    } else cart.items[key] = qty;
+    save();
+  },
+
+  // ملاحظة للصنف ده بس (مثلًا: من غير بصل)
+  note: (key) => cart.notes[key] || '',
+  setNote(key, text) {
+    const t = String(text || '').trim().slice(0, MAX_LINE_NOTE);
+    if (t) cart.notes[key] = t;
+    else delete cart.notes[key];
     save();
   },
 
@@ -91,7 +104,7 @@ export const Cart = {
       const opt = resolveOptions(item, sel);
       if (!opt.ok) return null; // المطعم غيّر الاختيارات: السطر ده مبقاش صالح
       return {
-        key, qty, options: opt.labels,
+        key, qty, options: opt.labels, note: cart.notes[key] || '',
         item: { ...item, price: priceOf(item) + opt.extra, fullPrice: Number(item.price) + opt.extra },
       };
     }).filter(Boolean);

@@ -444,7 +444,9 @@ export function renderDashNav(user, backend, onAccount) {
 
 // بطاقة طلب في لوحات التحكم، actions = [{ status, label, cls }]
 // اختيارات الصنف (الحجم والإضافات) تحت اسمه
-export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '');
+// اختيارات الصنف (الحجم والإضافات) وملاحظة العميل عليه
+export const lineOptions = (l) => (l.options?.length ? `<div class="line-opts">${l.options.map(esc).join(' • ')}</div>` : '')
+  + (l.note ? `<div class="line-note">📝 ${esc(l.note)}</div>` : '');
 
 // فلوس الطلب من ناحية المطعم: تمن الأكل بس (التوصيل وإجمالي العميل ملوش دعوة بيهم)، وصافيه بعد العمولة، وهيقبضها من مين
 function restaurantMoney(o) {

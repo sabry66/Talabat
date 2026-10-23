@@ -1,7 +1,8 @@
 // تطبيق العميل: المطاعم، المنيو، السلة، الطلب، والتتبع (hash routing)
 import { backend, isDemo } from './backend/index.js';
 import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW } from './data.js';
-import { Cart } from './cart.js';
+import { Cart, MAX_LINE_NOTE } from './cart.js';
+import { busyExtra, restTime } from './busy.js';
 import { locationPicker } from './map.js';
 import { activeZones, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
@@ -196,7 +197,7 @@ function drawResults() {
 
   const byOpen = (a, b) => (b.isOpen !== false) - (a.isOpen !== false);
   if (ui.sort === 'rating') { list.sort((a, b) => ratingValue(b) - ratingValue(a)); items.sort((a, b) => ratingValue(b.r) - ratingValue(a.r)); }
-  if (ui.sort === 'time') { list.sort((a, b) => a.time[0] - b.time[0]); items.sort((a, b) => a.r.time[0] - b.r.time[0]); }
+  if (ui.sort === 'time') { list.sort((a, b) => restTime(a)[0] - restTime(b)[0]); items.sort((a, b) => restTime(a.r)[0] - restTime(b.r)[0]); }
   if (ui.sort === 'price_low') { list.sort((a, b) => minPrice(a) - minPrice(b)); items.sort((a, b) => priceOf(a.it) - priceOf(b.it)); }
   if (ui.sort === 'price_high') { list.sort((a, b) => minPrice(b) - minPrice(a)); items.sort((a, b) => priceOf(b.it) - priceOf(a.it)); }
   list.sort(byOpen);
@@ -215,7 +216,7 @@ function drawResults() {
         <a class="fav-chip ${r.isOpen === false ? 'closed' : ''}" href="#/restaurant/${r.id}">
           <span class="fav-logo" style="background:${esc(r.color)}">${restaurantLogo(r, 56)}</span>
           <b>${esc(r.name)}</b>
-          <small class="muted">${r.isOpen === false ? 'مغلق' : `🕒 ${r.time[0]}-${r.time[1]} د`}</small>
+          <small class="muted">${r.isOpen === false ? 'مغلق' : `🕒 ${restTime(r)[0]}-${restTime(r)[1]} د`}</small>
         </a>`).join('')}</section>` : ''}
     ${deals.length ? `
       <div class="list-head"><h2>🔥 عروض وخصومات</h2><a href="#/offers" class="link">عرض الكل ←</a></div>
@@ -501,7 +502,7 @@ function restaurantCard(r) {
           <span class="rating">${ratingBadge(r)}</span>
         </div>
         <p class="muted">${esc((r.tags || []).join(' • '))}</p>
-        <p class="meta">🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()}</p>
+        <p class="meta">🕒 ${restTime(r)[0]}-${restTime(r)[1]} دقيقة${busyExtra(r) ? ' • <span class="busy-tag">🐢 زحمة</span>' : ''}${deliveryMeta()}</p>
       </div>
     </a>`;
 }
@@ -522,11 +523,12 @@ function renderRestaurant(id) {
       <div>
         <h1>${esc(r.name)} ${favBtn(r.id, true)}</h1>
         <p>${esc((r.tags || []).join(' • '))}</p>
-        <p class="meta">${ratingOf(r).avg ? `⭐ ${ratingOf(r).avg.toLocaleString('ar-EG')} (${ratingOf(r).count.toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${r.time[0]}-${r.time[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
+        <p class="meta">${ratingOf(r).avg ? `⭐ ${ratingOf(r).avg.toLocaleString('ar-EG')} (${ratingOf(r).count.toLocaleString('ar-EG')} تقييم) • ` : ''}🕒 ${restTime(r)[0]}-${restTime(r)[1]} دقيقة${deliveryMeta()} • الحد الأدنى ${fmt(r.minOrder)}</p>
         ${hasOffers(r) ? `<span class="promo static">🏷️ ${promoText(r)}</span>` : ''}
       </div>
     </section>
-    ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>' : ''}
+    ${closed ? '<p class="warn">🔒 المطعم مغلق حاليًا ومش بيستقبل طلبات. تقدر تتفرج على المنيو.</p>'
+      : busyExtra(r) ? `<p class="busy-note">🐢 المطعم عليه زحمة دلوقتي، فالطلب ممكن ياخد ${restTime(r)[0]}-${restTime(r)[1]} دقيقة. بنقولك الوقت الحقيقي من الأول.</p>` : ''}
 
     <div class="menu-tools">
       <input id="menuSearch" type="search" placeholder="🔍 دوّر في منيو ${esc(r.name)}..." value="${esc(menuUi.query)}" autocomplete="off">
@@ -688,7 +690,10 @@ function renderCart() {
           <div class="cart-line">
             <div class="item-img sm">${itemImage(l.item, 52)}</div>
             <div class="grow">
-              <strong>${esc(l.item.name)}</strong>${lineOptions(l)}
+              <strong>${esc(l.item.name)}</strong>${lineOptions({ ...l, note: '' })}
+              <div class="line-note-box" data-note-box="${esc(l.key)}">${l.note
+                ? `<span class="line-note">📝 ${esc(l.note)}</span> <button class="link small" data-note="${esc(l.key)}" type="button">تعديل</button>`
+                : `<button class="link small" data-note="${esc(l.key)}" type="button">📝 ضيف ملاحظة للصنف ده</button>`}</div>
               <div class="muted">${fmt(l.item.price)}${l.item.fullPrice > l.item.price ? ` <s class="old-price">${fmt(l.item.fullPrice)}</s>` : ''}</div>
             </div>
             <div class="qty">
@@ -715,6 +720,21 @@ function renderCart() {
   app.querySelectorAll('[data-inc]').forEach((b) => b.addEventListener('click', () => {
     Cart.setQty(b.dataset.inc, Cart.lineQty(b.dataset.inc) + 1);
     renderCart();
+  }));
+  // ملاحظة لكل صنف: بتتكتب في نفس مكانها من غير ما الصفحة تتعاد
+  app.querySelectorAll('[data-note]').forEach((b) => b.addEventListener('click', () => {
+    const key = b.dataset.note;
+    const box = b.closest('[data-note-box]');
+    box.innerHTML = `
+      <div class="note-edit">
+        <input maxlength="${MAX_LINE_NOTE}" placeholder="مثلًا: من غير بصل، صوص زيادة" aria-label="ملاحظة للصنف" value="${esc(Cart.note(key))}">
+        <button class="btn small primary" type="button">حفظ</button>
+      </div>`;
+    const input = box.querySelector('input');
+    const done = () => { Cart.setNote(key, input.value); renderCart(); };
+    box.querySelector('button').addEventListener('click', done);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(); } });
+    input.focus();
   }));
   app.querySelectorAll('[data-dec]').forEach((b) => b.addEventListener('click', () => {
     Cart.setQty(b.dataset.dec, Cart.lineQty(b.dataset.dec) - 1);
@@ -993,6 +1013,7 @@ function renderCheckout() {
       driverPhone: null,
       lines: Cart.lines(rest).map((l) => ({
         id: l.item.id, key: l.key, name: l.item.name, price: l.item.price, qty: l.qty,
+        ...(l.note ? { note: l.note } : {}),
         ...(l.options.length ? { options: l.options } : {}),
         ...(l.item.fullPrice > l.item.price ? { fullPrice: l.item.fullPrice } : {}),
       })),
@@ -1332,7 +1353,10 @@ function reorder(o) {
   if (Cart.count() && Cart.restaurantId !== o.restaurantId && !confirm('السلة الحالية فيها أصناف من مطعم تاني. تحب تستبدلها؟')) return;
   Cart.clear();
   const available = new Set(r.menu.flatMap((s) => s.items).filter(isAvailable).map((i) => i.id));
-  o.lines.filter((l) => available.has(l.id)).forEach((l) => Cart.add(o.restaurantId, l.key || l.id, true, l.qty));
+  o.lines.filter((l) => available.has(l.id)).forEach((l) => {
+    Cart.add(o.restaurantId, l.key || l.id, true, l.qty);
+    if (l.note) Cart.setNote(l.key || l.id, l.note);
+  });
   // سطر اختياراته اتغيرت أو خلصت مبيظهرش في السلة
   if (!Cart.lines(r).length) { Cart.clear(); return toast('الأصناف دي مش متاحة دلوقتي'); }
   if (Cart.lines(r).length < o.lines.length) toast('بعض الأصناف أو الاختيارات مبقتش متاحة، راجع السلة');

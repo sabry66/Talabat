@@ -989,3 +989,16 @@ p.pay-note { background: var(--brand-soft); border-radius: 10px; padding: 8px 12
 .notify-btn { margin: 0 0 10px; min-height: 40px; }
 .dash-head + .notify-btn { margin-top: 10px; }
 .notify-hint { margin: 0 0 10px; }
+
+/* ---------- ملاحظة الصنف + وضع الزحمة ---------- */
+.line-note { display: block; font-size: .82rem; color: #7a4a00; font-weight: 600; }
+.line-note-box { margin: 2px 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.line-note-box .line-note { display: inline; }
+.line-note-box .link.small { min-height: 32px; font-size: .8rem; }
+.note-edit { display: flex; gap: 6px; width: 100%; }
+.note-edit input { flex: 1; min-width: 0; margin: 0; }
+.busy-tag { color: #b25b00; font-weight: 700; }
+.busy-note { background: #fff4e0; border: 1px solid #f0c27a; color: #7a4a00; border-radius: 12px; padding: 10px 12px; font-weight: 600; }
+.busy-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow); font-size: .9rem; }
+.busy-bar .btn { min-height: 38px; }
+.busy-bar.on { background: #fff4e0; border: 1px solid #f0c27a; color: #7a4a00; }

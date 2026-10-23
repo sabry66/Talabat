@@ -15,6 +15,7 @@
 | `js/ui.js` | مشترك: `renderAuthForm` (موافقة الشروط)، `renderAcceptTerms`، `orderCard`، `lineOptions`، `errorMessage`، `homeFor` |
 | `js/data.js` | ثوابت + بيانات تجريبية + `DEFAULT_SETTINGS` + `LEGAL_VERSION` + `PAYMENT_METHODS` (طرق الدفع؛ الأدمن بيفعّلها في `settings.payments`) |
 | `js/addresses.js` / `finance.js` / `coupons.js` / `offers.js` / `options.js` / `cart.js` | العناوين / الحسابات / الكوبونات / الخصومات / اختيارات الصنف (مفتاح السطر `itemId\|g:c`) / السلة |
+| `js/busy.js` | وضع الزحمة (`restTime` = وقت المطعم بعد الزيادة) |
 | `js/notify.js` | التنبيه العالي `alarm` + الاهتزاز + إشعارات المتصفح `notify` (والتطبيق مفتوح) |
 | `js/support.js` | الشكاوى + الصور + أسباب "مشكلة في الطلب" |
 | `js/map.js` `drawer.js` `pwa.js` `upload.js` `search.js` `join.js` `identity.js` | الخريطة، القايمة الجانبية، التنزيل كتطبيق، رفع الصور (Cloudinary `qrp8inik`)، البحث، طلبات الانضمام، اسم المستخدم والموبايل |
