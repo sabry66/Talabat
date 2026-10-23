@@ -61,7 +61,7 @@ Arabic right-to-left,platform,must,yes,yes,
 English language,platform,should,yes,no,
 Android app,platform,must,yes,yes,APK + installable web app
 iPhone app in the App Store,platform,should,yes,partial,installable web app on iPhone; not in App Store
-Dark mode,platform,could,no,no,users ask for it
+Dark mode,platform,could,no,yes,follows the phone + auto/dark/light switch in the menu; contrast checked by test
 Terms and privacy consent,platform,must,yes,yes,
 Thousands of partner restaurants,network,must,yes,skip,the restaurant network is theirs; Arrivo signs its own
 Dark stores / own grocery warehouses,network,could,yes,skip,needs warehouses and stock

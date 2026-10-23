@@ -96,6 +96,16 @@
         body.append(section('اشتغل معانا'), link('🏪 سجّل مطعمك', 'restaurant.html?join=1'), link('🛵 اشتغل مندوب', 'delivery.html?join=1'));
       }
       body.append(section('عن أريفو'), link('📄 الشروط والأحكام', 'terms.html'), link('🔒 سياسة الخصوصية', 'privacy.html'));
+      if (window.arrivoTheme) {
+        const t = document.createElement('button');
+        t.type = 'button';
+        t.className = 'drawer-item';
+        t.dataset.themeSwitch = '';
+        t.textContent = window.arrivoTheme.label();
+        // بيلف بين تلقائي وغامق وفاتح من غير ما القايمة تتقفل
+        t.addEventListener('click', () => { window.arrivoTheme.next(); t.textContent = window.arrivoTheme.label(); });
+        body.append(t);
+      }
       const who = document.querySelector('.topbar .nav .muted');
       if (who) {
         const w = document.createElement('div');

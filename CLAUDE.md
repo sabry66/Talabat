@@ -19,7 +19,7 @@
 | `js/notify.js` | التنبيه العالي `alarm` + الاهتزاز + إشعارات المتصفح `notify` (والتطبيق مفتوح) |
 | `js/support.js` | الشكاوى + الصور + أسباب "مشكلة في الطلب" |
 | `js/map.js` `drawer.js` `pwa.js` `upload.js` `search.js` `join.js` `identity.js` | الخريطة، القايمة الجانبية، التنزيل كتطبيق، رفع الصور (Cloudinary `qrp8inik`)، البحث، طلبات الانضمام، اسم المستخدم والموبايل |
-| `css/style.css` | كل الستايل؛ الأقسام بعناوين `/* ---------- ... ---------- */`، والموبايل تحت `@media (max-width: 900px/760px)` |
+| `css/style.css` | كل الستايل (الألوان متغيرات في `:root`، والوضع الليلي تحتها؛ متكتبش ألوان ثابتة)؛ الأقسام بعناوين `/* ---------- ... ---------- */`، والموبايل تحت `@media (max-width: 900px/760px)` |
 | `terms.html` / `privacy.html` | الشروط والخصوصية (لو اتعدلوا تعديل مهم غيّر `LEGAL_VERSION`) |
 
 برّه public: `firestore.rules` (كل الصلاحيات)، `firebase.json` (لينكات `/join/*`)، `functions/` (إشعارات Push، بتتنشر لوحدها بـ `firebase.functions.json`)، `android/` (APK؛ ملف التوقيع ممنوع)، `tests/`، `replica/` (تحليل السوق وخطة البناء `replica/build-plan.md`).
