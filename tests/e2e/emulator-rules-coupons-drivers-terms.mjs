@@ -126,6 +126,10 @@ const res = await api(c, `(F, db, me, arg) => {
     payFakeMethod: () => order([], [], [], { payment: 'free' }),
     payWalletWhileOff: () => order([], [], [], { payment: 'wallet' }),
     payMissing: () => order([], [], [], { payment: null }),
+    validScheduled: () => order([], [], [], { scheduledFor: Date.now() + 2 * 3600000 }),
+    scheduledTooSoon: () => order([], [], [], { scheduledFor: Date.now() + 5 * 60000 }),
+    scheduledTooFar: () => order([], [], [], { scheduledFor: Date.now() + 5 * 86400000 }),
+    scheduledNotNumber: () => order([], [], [], { scheduledFor: 'tomorrow' }),
     validControl: () => order(['SAVE10'], ['SAVE10']),
   };
 }`);

@@ -28,7 +28,7 @@ Online card payment,checkout,should,yes,no,needs payment gateway (Paymob/Fawry) 
 InstaPay or wallet transfer on delivery (admin-controlled methods),checkout,should,no,yes,Arrivo addition: admin turns cash/card/wallet on or off with a note
 Save card for next time,checkout,could,yes,no,
 Pick delivery location on a map,checkout,must,yes,yes,center pin + search + my location
-Schedule an order for later,checkout,should,yes,no,
+Schedule an order for later,checkout,should,yes,yes,today or tomorrow in 30-min slots; restaurant and rider see the time; rules bound it
 Tip the rider,checkout,could,yes,no,
 Live order status,tracking,must,yes,yes,realtime
 Push notifications when the app is closed,tracking,must,yes,partial,built (FCM + Cloud Function + SW); works while the app is open; closed-app push turns on after Blaze + VAPID key (SETUP.md)

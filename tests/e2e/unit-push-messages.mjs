@@ -8,6 +8,9 @@ const to = (list) => list.map((m) => m.to.drivers ? 'drivers' : m.to.uid).sort()
 let m = orderMessages(null, base, 'abc123');
 ok(to(m) === 'o1' && m[0].urgent && m[0].url === '/restaurant.html', 'new order -> restaurant owner only (urgent)');
 
+m = orderMessages(null, { ...base, scheduledFor: Date.now() + 7200000 }, 'abc123');
+ok(m[0].body.includes('مجدول'), 'scheduled order -> owner told it is scheduled');
+
 m = orderMessages(base, { ...base, status: 'preparing' }, 'abc123');
 ok(to(m) === 'c1,drivers', 'accepted -> customer + drivers: ' + to(m));
 ok(m.find((x) => x.to.uid === 'c1').url === '/#/order/abc123', 'customer link opens the order');

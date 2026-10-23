@@ -384,7 +384,12 @@ service cloud.firestore {
         && settings().zones[request.resource.data.zoneId].get('active', true) == true
         && request.resource.data.totals.delivery == settings().zones[request.resource.data.zoneId].fee
         && couponsOk(request.resource.data.get('promos', []))
-        && paymentOk(request.resource.data.get('payment', ''));
+        && paymentOk(request.resource.data.get('payment', ''))
+        // طلب مجدول: بعد نص ساعة على الأقل وفي خلال 3 أيام
+        && (!('scheduledFor' in request.resource.data)
+            || (request.resource.data.scheduledFor is int
+                && request.resource.data.scheduledFor >= request.time.toMillis() + 1800000
+                && request.resource.data.scheduledFor <= request.time.toMillis() + 259200000));
 
       allow update: if isAdmin()
         // صاحب المطعم: يقبل أو يرفض، وبعدين "جاهز للتسليم"

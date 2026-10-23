@@ -26,7 +26,10 @@ export function orderMessages(before, after, id) {
     if (after.ownerUid) {
       out.push({
         to: { uid: after.ownerUid }, title: '🔔 طلب جديد', urgent: true, tag: `new-${id}`,
-        body: `طلب #${short(id)} بـ ${money(after.totals?.subtotal)}، اقبله بسرعة`, url: '/restaurant.html',
+        body: after.scheduledFor
+          ? `طلب مجدول #${short(id)} بـ ${money(after.totals?.subtotal)}، شوف ميعاده واقبله`
+          : `طلب #${short(id)} بـ ${money(after.totals?.subtotal)}، اقبله بسرعة`,
+        url: '/restaurant.html',
       });
     }
     return out;

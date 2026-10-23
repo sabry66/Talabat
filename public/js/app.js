@@ -3,6 +3,7 @@ import { backend, isDemo } from './backend/index.js';
 import { CATEGORIES, ORDER_STATUSES, ORDER_FLOW } from './data.js';
 import { Cart, MAX_LINE_NOTE } from './cart.js';
 import { busyExtra, restTime } from './busy.js';
+import { slots, whenLabel, isScheduled } from './schedule.js';
 import { locationPicker } from './map.js';
 import { activeZones, enabledPayments, missingDeduction, missingItems, missingRefund, paidTotal } from './finance.js';
 import { matches, minPrice, inPriceRange, SORTS } from './search.js';
@@ -886,6 +887,16 @@ function renderCheckout() {
           <input name="notes" placeholder="مثال: من غير بصل">
         </label>
 
+        <h3>⏰ وقت التوصيل</h3>
+        <div class="pay-options when-options">
+          <label class="pay"><input type="radio" name="when" value="now" checked> 🛵 دلوقتي <span class="muted small">(${restTime(r)[0]}-${restTime(r)[1]} دقيقة)</span></label>
+          <label class="pay"><input type="radio" name="when" value="later"> 📅 حدد ميعاد (النهارده أو بكرة)</label>
+        </div>
+        <div class="form-grid when-later" id="whenLater" hidden>
+          <label>اليوم<select name="day"><option value="0">النهارده</option><option value="1">بكرة</option></select></label>
+          <label>الساعة<select name="slot"></select></label>
+        </div>
+
         <h3>💳 طريقة الدفع</h3>
         <div class="pay-options" id="payOptions">${payOptions()}</div>
       </section>
@@ -913,6 +924,20 @@ function renderCheckout() {
   };
   document.getElementById('zoneSelect')?.addEventListener('change', (e) => { Cart.setZone(e.target.value); refreshCheckout(); });
   bindPayOptions();
+
+  // ميعاد التوصيل: لو "بعدين" نعرض المواعيد المتاحة (كل نص ساعة)
+  const later = document.getElementById('whenLater');
+  const fillSlots = () => {
+    const day = Number(later.querySelector('[name=day]').value);
+    let list = slots(day, restTime(r)[1]);
+    if (!list.length && day === 0) { later.querySelector('[name=day]').value = '1'; list = slots(1, restTime(r)[1]); }
+    later.querySelector('[name=slot]').innerHTML = list.map((x) => `<option value="${x.value}">${x.label}</option>`).join('');
+  };
+  app.querySelectorAll('[name=when]').forEach((x) => x.addEventListener('change', () => {
+    later.hidden = app.querySelector('[name=when]:checked').value !== 'later';
+    if (!later.hidden) fillSlots();
+  }));
+  later.querySelector('[name=day]').addEventListener('change', fillSlots);
 
   // اختيار عنوان محفوظ بيملا العنوان والمنطقة والخريطة
   let picker = null;
@@ -984,6 +1009,11 @@ function renderCheckout() {
     if (!zone) return toast('اختار منطقة التوصيل الأول');
     const method = enabledPayments(state.settings).find((m) => m.id === d.payment);
     if (!method) return toast('اختار طريقة الدفع');
+    const scheduledFor = d.when === 'later' ? Number(d.slot) : null;
+    if (d.when === 'later' && !(scheduledFor > Date.now() + 25 * 60 * 1000)) {
+      fillSlots();
+      return toast('الميعاد ده عدّى، اختار ميعاد تاني');
+    }
     btn.disabled = true;
     const problems = await refreshCoupons(rest);
     btn.disabled = false;
@@ -1024,6 +1054,7 @@ function renderCheckout() {
       location: location_,
       notes: d.notes.trim(),
       payment: method.id,
+      ...(scheduledFor ? { scheduledFor } : {}),
       ...(method.note ? { paymentNote: method.note.slice(0, 200) } : {}),
       status: 'placed',
       statusHistory: [{ status: 'placed', at: Date.now() }],
@@ -1037,7 +1068,7 @@ function renderCheckout() {
       const addresses = rememberAddress(savedAddresses(state.user), chosen, d, { address: order.address, location: location_, zoneId: zone.id });
       if (addresses) backend.saveAddresses(u.uid, addresses).catch(console.error);
       Cart.clear();
-      toast('تم إرسال طلبك بنجاح 🎉');
+      toast(scheduledFor ? `تم حجز طلبك ${whenLabel(scheduledFor)} 🎉` : 'تم إرسال طلبك بنجاح 🎉');
       location.hash = `#/order/${id}`;
     } catch (err) {
       console.error(err);
@@ -1159,7 +1190,7 @@ function drawOrder(o) {
           <p class="muted">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)} • ${new Date(o.createdAt).toLocaleString('ar-EG')}</p>
         </div>
         ${stopped ? statusBadge(o.status)
-          : `<div class="eta">${done ? 'وصل! بالهنا والشفا 😋' : `الوصول خلال ${remaining}`}</div>`}
+          : `<div class="eta">${done ? 'وصل! بالهنا والشفا 😋' : isScheduled(o) && o.status !== 'on_way' ? `⏰ هيوصلك ${whenLabel(o.scheduledFor)}` : `الوصول خلال ${remaining}`}</div>`}
       </div>
       ${stopped ? `
         <p class="warn">${o.status === 'rejected' ? 'للأسف المطعم مقدرش يقبل طلبك دلوقتي. جرّب تطلب من مطعم تاني.' : 'تم إلغاء الطلب.'}</p>` : `

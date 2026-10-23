@@ -2,6 +2,7 @@
 import { backend, isDemo } from './backend/index.js';
 import { ORDER_STATUSES, FINAL_STATUSES } from './data.js';
 import { alarm, notify, notifyButton, bindNotifyButton } from './notify.js';
+import { isScheduled, whenLabel } from './schedule.js';
 import { orderSplit, sum, missingItems, missingRefund, paidTotal } from './finance.js';
 import { renderJoin } from './join.js';
 import { renderSupport } from './support.js';
@@ -148,6 +149,7 @@ function tripCard(o, actions) {
         <strong>أوردر #${shortId(o.id)}</strong>
         <span class="status ${o.status}">${ORDER_STATUSES[o.status].icon} ${ORDER_STATUSES[o.status].label}</span>
       </header>
+      ${isScheduled(o) ? `<p class="sched-tag">⏰ <b>مجدول:</b> سلّمه للعميل ${whenLabel(o.scheduledFor)}</p>` : ''}
       <div class="trip-stop">
         <span class="stop-dot pickup">استلام</span>
         <div>

@@ -1056,3 +1056,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea { backg
 .rest-header .meta { color: #444; }
 /* النص على البرتقالي غامق عشان يتقري (الأبيض عليه ضعيف) */
 .promo { color: #2a1800; }
+
+/* ---------- الطلبات المجدولة ---------- */
+.sched-tag { background: var(--brand-soft); color: var(--brand-dark); border-radius: 10px; padding: 6px 10px; margin: 6px 0; font-size: .88rem; }
+.when-later { margin: 8px 0 4px; }

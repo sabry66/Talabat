@@ -2,6 +2,7 @@
 import { ORDER_STATUSES, PAYMENT_LABELS, LEGAL_VERSION } from './data.js';
 import { thumb } from './upload.js';
 import { missingItems, missingValue, orderSplit } from './finance.js';
+import { scheduleTag } from './schedule.js';
 
 export const fmt = (n) => `${Number(n || 0).toLocaleString('ar-EG')} ج.م`;
 
@@ -471,6 +472,7 @@ export function orderCard(o, actions = [], { showRestaurant = false, checklist =
         <strong>#${shortId(o.id)}</strong>
         <span class="muted small">${timeAgo(o.createdAt)}</span>
       </header>
+      ${scheduleTag(o)}
       ${showRestaurant ? `<div class="small">${esc(o.restaurantEmoji)} ${esc(o.restaurantName)}</div>` : ''}
       ${checklist ? `
         <p class="small muted">✔️ علّم على كل صنف وإنت بتحطه في الشنطة:</p>
