@@ -51,11 +51,18 @@ ok(latin(await c.textContent('.summary')).includes('705'), 'السلة: 480 + 22
 await c.selectOption('#zoneSelect', { index: 1 });
 await c.goto(B + '#/checkout'); await c.waitForSelector('#placeBtn'); await c.fill('textarea[name=address]', 'عنوان'); await c.click('#placeBtn'); await c.waitForSelector('.track');
 const order = await c.evaluate(() => Object.values(JSON.parse(localStorage.getItem('arrivo_demo_db_v3')).orders).at(-1));
+const kbLine = order.lines.find((l) => l.id === 'kb'); const kfLine = order.lines.find((l) => l.id === 'kf');
+ok(kbLine.options?.includes('الحجم: كيلو') && kbLine.options.includes('إضافات: عيش') && kfLine.options?.includes('الحجم: نص كيلو'),
+  `الأوردر متسجل فيه الحجم والإضافات (${JSON.stringify([kbLine.options, kfLine.options])})`);
+const track = await c.textContent('#app');
+ok(track.includes('الحجم: كيلو') && track.includes('عيش') && track.includes('الحجم: نص كيلو'), 'صفحة متابعة الطلب عند العميل بتكتب الحجم والإضافات');
 ok(order.totals.subtotal === 705 && order.lines.find((l) => l.id === 'kb').price === 480, `الطلب اتسجل بـ 705 (${order.totals.subtotal})`);
 
 // المطعم: مفيش تحذير أسعار، ومحرر المنيو بيعرف إن الحجم هو السعر
 const o = await mk();
 await o.goto(B + 'restaurant.html'); await login(o, 'owner@demo.com'); await o.waitForSelector('.order-card');
+const oc = await o.textContent('.order-card');
+ok(oc.includes('الحجم: كيلو') && oc.includes('عيش') && oc.includes('الحجم: نص كيلو'), 'المطعم شايف في الأوردر: كباب كيلو + عيش، وكفتة نص كيلو');
 ok(!(await o.textContent('.order-card')).includes('المنيو بـ'), 'المطعم مشافش تحذير أسعار على الطلب');
 await o.$eval('[data-tab="menu"]', (e) => e.click()); await o.waitForSelector('[data-toggle-opt]');
 const key = await o.$$eval('[data-toggle-opt]', (x) => x[0].dataset.toggleOpt);
@@ -69,6 +76,21 @@ await o.check(`[data-o="gsets"][data-k="${key}:0"]`); await o.waitForTimeout(200
 await o.$eval('#editorForm button[type=submit]', (e) => e.click()); await o.waitForTimeout(600);
 const kb = await o.evaluate(() => JSON.parse(localStorage.getItem('arrivo_demo_db_v3')).restaurants['burger-house'].menu[0].items[0]);
 ok(kb.options[0].sets === true && kb.price === 130, 'الحفظ: الحجم هو السعر، وسعر الصنف = أرخص حجم');
+
+// المندوب بعد ما المطعم يجهّز الطلب، والأدمن في صفحة الطلب
+await o.$eval('[data-tab="orders"]', (e) => e.click()).catch(() => {});
+await o.waitForSelector(`[data-id="${order.id}"][data-status="preparing"]`); await o.click(`[data-id="${order.id}"][data-status="preparing"]`); await o.waitForTimeout(300);
+const d = await mk();
+await d.goto(B + 'delivery.html'); await login(d, 'driver@demo.com'); await d.waitForSelector(`[data-claim="${order.id}"]`);
+const dc = await d.textContent('#app');
+ok(dc.includes('الحجم: كيلو') && dc.includes('الحجم: نص كيلو'), 'المندوب شايف الحجم في الأوردر');
+const a = await mk();
+await a.goto(B + 'admin.html'); await login(a, 'admin@demo.com'); await a.waitForSelector('#tabs', { state: 'attached' });
+await a.$eval('[data-tab="orders"]', (e) => e.click()); await a.waitForSelector('[data-filter="all"]');
+await a.$eval('[data-filter="all"]', (e) => e.click()); await a.waitForSelector(`tr[data-open-order="${order.id}"]`);
+await a.$eval(`tr[data-open-order="${order.id}"]`, (e) => e.click()); await a.waitForSelector('.od-head');
+const ad = await a.textContent('#app');
+ok(ad.includes('الحجم: كيلو') && ad.includes('عيش') && ad.includes('الحجم: نص كيلو'), 'الأدمن وخدمة العملاء شايفين الحجم والإضافات في صفحة الطلب');
 
 console.log('errors', errs);
 await b.close();
